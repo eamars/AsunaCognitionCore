@@ -31,7 +31,7 @@ The 0.2.2 move (2026-11-04) left the fix out; it was ported on 2026-11-08 (DSH `
    compaction through the agent loop with the provider counting twice DSH's estimate: on 0.2.2's own code it compacts
    twice in one turn (the storm's shape); with the fix once, and the next request is below its threshold.
 2. **The same code on her real data:** the port is the 11-01 commit with no code conflict; from 11-01 01:00 to 11-04
-   21:10, under it, her action brain compacted 16 times, kept 81,251 to 108,990 (median 91,836; its unit is being confirmed by her), and none
+   21:10, under it, her action brain compacted 16 times, kept 81,251 to 108,990 (median 91,836.5, in tokens: the prompt side of the first request after each compaction, input plus cache reads, the engine's own pressure measure, so they compare with `thresholdRatio` directly; her definition, 11-09), and none
    compacted again within 5 steps (her reading of 11-08).
 3. **In place:** the installed engine holds the fix (her count, 11-08: 0 hits in the 0.2.2 builds, 2 in `06bde178`).
 

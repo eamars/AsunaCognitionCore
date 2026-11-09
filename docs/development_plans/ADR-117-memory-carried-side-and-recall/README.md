@@ -684,3 +684,21 @@ The reviewer read L4 against main before the install: ready after four fixes (a 
 scaffolding, the history cache keeping whole revisions, the narrowing recorded above); one more stale test (a note
 budget expecting a corrected section to be hidden) was caught by the landing's suite. **L4 → Built is judged on
 2026-11-16** (her reading at 14:00, §19's rule), on her two `work_log` items and the other §20 items.
+
+### L4 → Built (2026-11-09)
+
+Read on the day of the install instead of on 11-16 (the owner's rule of 2026-11-09):
+- **Her two corrected items through recall's history.** B came back for its query word, with its old wording and
+  `（改于 10/22：…）`. C did not for `分两格`, and not because anything was lost: recall only looks up words it can cross
+  (two characters or more, and ASCII or outside the segmenter's dictionary), and jieba splits 分两格 into 分 and 两格, a
+  dictionary word, so the query held no word to look up and recall returned at once. With words it can cross, C came
+  back (`一格报`: C's section; `分两`: C's section and one more), run live on the installed code. A limit worth knowing,
+  not a defect of L4: a Chinese query made only of dictionary words finds no past version.
+- **No night list:** the code that built one is gone (no `night_list` path left in `context.py` or `block_guide.py`);
+  no turn since the install carried one.
+- **No refusal for `correction` or a gist:** 29 `write_document` calls since 12:16, 0 tried `correction`, 0 refused for
+  a gist (the op is gone from the schema; the gist refusal is gone from the code).
+- **A gisted item rewritten anew shows no old verbatim:** `tests/test_adr117_l4.py`, and at the install the one row in
+  her data that had it was cleared.
+
+Built. Left as its own ADR, not owed here: the person layer as items (§11).

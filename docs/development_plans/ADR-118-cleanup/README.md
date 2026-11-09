@@ -1,6 +1,8 @@
 # ADR-118: A cleanup: dead code out, one rule in one place
 
-Status: **Decided** 2026-11-09 by the lead (Claude Code, big sis) under the owner's ask below; the census by three
+Status: **Built** 2026-11-09: L1 to L5 landed (`62dd8d21`, `436f25fc`, `1bb71246`, `6476cf54`, `a092ca73`), L3 to
+L5 each installed with its own restart in the window she gave; the evidence of each is in `progress.md`. Decided
+2026-11-09 by the lead (Claude Code, big sis) under the owner's ask below; the census by three
 read-only subagents, every finding in a landing checked by the lead against the code (commands in §3 and in
 `progress.md`); read by a fresh reviewer (§9). Nothing here is architectural: the four proposals that are go to the
 owner (§7) and are not built.
@@ -166,7 +168,16 @@ server).
   checked; `--personal` without `--strict` is report-only by design, yet the core skill calls it the push gate.
 - **The identity resolver's leftovers.** After K1 the history and digest tools always have their identity resolver,
   so `identity_status`, `IDENTITY_CONTRACT` and the "身份解析没接上" texts can no longer be reached; removing them
-  changes the shape of a tool result she reads, so it is hers to see first.
+  changes the shape of a tool result she reads, so it is hers to see first. What she reads when identity really
+  fails, and asks to keep in this shape and in these fields (her line, 2026-11-09): the row's `who`,
+  "记录作者 X（身份块没通过校验：<reason>）" (`history_query.py:517-522`); the digest's batch note on speakers
+  without a verified identity block (`discussion_digest.py:609-611`); the `identity_fallback` count and "身份未校验"
+  (`discussion_digest.py:592`, `:729`). `identity.complete` is always true now and is no evidence. The docstring of
+  `identity_status` ("降级要看得见，不能静默少信息") promises more than the code now does.
+- **A query whose data child cannot start reads as temporary.** `QUERY_UNAVAILABLE` says "过一会儿再试" for a
+  child that failed to start as well as for one that died (`data_children.py:88-89`); an import break that stays
+  until a fix reads as a passing fault. Recommendation: one sentence for a child that cannot start ("重试也一样"),
+  the present one for busy, a deadline or a death. Her wording; not silent today (she reads a tool failure).
 - **Needs a reading of her data first:** persona revisions without `sections` (the two legacy branches in
   `render.py` and `carried.py`); plans whose `native_scheduler_session` is not the current one
   (`schedule._migrate_native_links`); `self_development.every_seconds` in a saved deployment

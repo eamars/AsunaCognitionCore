@@ -100,10 +100,9 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
     # ADR-099: where her 心里话 come from: her think call, or the model's own thinking.
     if value.get('thoughts', 'tool') not in THOUGHTS:
         raise ValueError('INVALID_THOUGHTS: tool or thinking')
-    for key in ('provider_idle_timeout_seconds', 'workflow_timeout_seconds'):
-        value.setdefault(key, 1800)
-        if type(value[key]) not in (int, float) or not 1 <= value[key] <= 86400:
-            raise ValueError('INVALID_TIMEOUT: ' + key)
+    value.setdefault('workflow_timeout_seconds', 1800)
+    if type(value['workflow_timeout_seconds']) not in (int, float) or not 1 <= value['workflow_timeout_seconds'] <= 86400:
+        raise ValueError('INVALID_TIMEOUT: workflow_timeout_seconds')
     if create_dirs:
         local_workspace().mkdir(parents=True, exist_ok=True)
     from . import sandbox_backend
@@ -113,8 +112,7 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
     # The DSH catalog owns model capability validation. Legacy provider
     # endpoints and their separate model-settings file are not loaded here.
     for lane, key in (('character', 'character'), ('action', 'executor')):
-        value[key] = {**models[lane], 'transport_read_timeout_seconds': value['provider_idle_timeout_seconds'],
-                      'token_counter': 'native-host'}
+        value[key] = {**models[lane], 'token_counter': 'native-host'}
     for channel_id, channel in value.get('channels', {}).items():
         kind = channel_kinds.of_channel(channel_id)
         channel['admission'] = admission

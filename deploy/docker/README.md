@@ -135,7 +135,6 @@ character may use it:
     "api_key": "<key, or empty>"
   },
   "workflow_timeout_seconds": 1800,
-  "provider_idle_timeout_seconds": 1800,
   "timezone": "<IANA zone>",
   "self_development": {"enabled": false},
   "chat": {"scene_id": "local-dm", "person_id": "local-user", "persona": "<persona-id>",

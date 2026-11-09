@@ -103,7 +103,6 @@ def load(path: str | Path = 'config/local.json', *, dsh_home: str | Path | None 
                 value[key] = channels[key]
     validate_database(value, value['database'])
     validate_endpoint(value['embedding']['base_url'])
-    value.setdefault('provider_idle_timeout_seconds',1800)
     value.setdefault('workflow_timeout_seconds',1800)
     for key in ('dsh_home',):
         p = Path(value[key]).resolve()

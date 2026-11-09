@@ -49,6 +49,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
   - `give_up_handback` — Nothing more is tried: the result stays stored, she sees it could not be handed over, the developer is told.
   - `close_orphan` — A run whose lease expired while no one runs it (ADR-030 D2): closed as not finished, handed back as such.
 - def `capability_refusal` — The one sentence for a tool this task was not given: who gets it, where this task came from, retrying won't help.
+- def `lease_until`
 - def `given_text`
 - class `ToolBroker` — Trusted host process; no DB/publication credentials enter model or child tools.
   - `specs`

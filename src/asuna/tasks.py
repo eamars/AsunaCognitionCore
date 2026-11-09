@@ -518,7 +518,7 @@ class TaskService:
         with self.lock:
             task=task_records.get(self.store, task_id)
             if task['state']!='READY':raise Conflict('TASK_NOT_READY')
-            task=task_records.save(self.store, {**task,'state':'RUNNING','lease_owner':str(uuid.uuid4()),'fencing_token':task['fencing_token']+1,'lease_expires_at':__import__('time').time()+600,
+            task=task_records.save(self.store, {**task,'state':'RUNNING','lease_owner':str(uuid.uuid4()),'fencing_token':task['fencing_token']+1,'lease_expires_at':lease_until(),
                 'started_at':now()},expected=task['revision'],stream=task_id)
             return task
 
@@ -528,7 +528,7 @@ class TaskService:
         if not current or current['state']!=state or current['intent_revision']!=task['intent_revision'] or current['fencing_token']!=task['fencing_token'] or scene['policy_epoch']!=task['policy_epoch']:
             raise Denied('STALE_TASK_FENCE: '+stale_reason(task,current,scene)+'，这次调用不算数，也没有执行；不是你出错，重试也一样：'
                          '停下，不再调工具，在报告里写做到了哪里')
-        if state=='RUNNING' and current.get('lease_expires_at',0)<=__import__('time').time():
+        if state=='RUNNING' and current.get('lease_expires_at',0)<=clock.now().timestamp():
             raise Denied('TASK_LEASE_EXPIRED: 这个任务的执行租约过期了（10 分钟没有续上），这次调用没有执行；不是参数的问题，'
                          '重试也一样：停下，在报告里写做到了哪里')
         return current
@@ -598,7 +598,7 @@ class TaskService:
                 try:
                     with self.lock:
                         current=self.valid(task)
-                        task_records.save(self.store, {**current,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
+                        task_records.save(self.store, {**current,'lease_expires_at':lease_until()},expected=current['revision'],stream=task['_id'])
                 except Exception as exc:errors.append(exc);return
         worker=threading.Thread(target=renew,daemon=True);worker.start()
         def check():
@@ -774,6 +774,14 @@ def capability_refusal(store, task, tool):
             '要用它就在报告里写明，让说话的那一半在给它的地方另交一件。' % (str(tool)[:60], given, place_words(store, task['scene_id'])))
 
 
+# How long a running task keeps its lease after its last step; the stored lease_expires_at is epoch seconds.
+LEASE_SECONDS = 600
+
+
+def lease_until():
+    return clock.now().timestamp() + LEASE_SECONDS
+
+
 UNAVAILABLE='不是参数的问题，重试也一样：不用它能做的先做，没做成的写进报告'
 
 
@@ -856,7 +864,7 @@ class ToolBroker:
                     raise Denied('TOOL_DELIVERY_UNKNOWN: 同一个调用之前开始过但还没有回执（可能还在进行，或中途断过），不知道做没做成；'
                                  '不要盲目重做：先查看它该留下的结果（list_files、读文件等）再决定')
                 return old['result']
-            task_records.save(self.store, {**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
+            task_records.save(self.store, {**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':lease_until()},expected=current['revision'],stream=task['_id'])
             artifact=artifact_records.save(self.store,{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
             self.service.crash('before_tool')
         # Integration callbacks, role consultations, commands and persona jobs can wait on things outside this

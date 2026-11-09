@@ -16,7 +16,8 @@ export class NativeChildren {
       return this.open(stage);
     }).catch(async error => {
       this.core.ctx.logger.warn(String(error));
-      await this.core.worker.call('result', { token: stage.token, error: String(error) }).catch(() => {});
+      await this.core.worker.call('result', { token: stage.token, error: String(error) })
+        .catch(failed => this.core.ctx.logger.warn(`result: ${failed}`));
     });
     const settled = running.finally(() => {
       if (this.admissions.get(stage.session_id) === settled) this.admissions.delete(stage.session_id);

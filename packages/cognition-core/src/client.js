@@ -146,11 +146,11 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.activated': '已应用到业务 worker 与后续模型请求。',
       'settings.selfSource': '自我来源：{source}', 'settings.waiting': '等待连接', 'settings.channelsFallback': '外部渠道',
       'settings.deployment.database': "数据库名", 'settings.deployment.allowed_databases': "允许的数据库",
-      'settings.deployment.legacy_database': "旧数据库", 'settings.deployment.mongo_uri': "Mongo 连接",
+      'settings.deployment.mongo_uri': "Mongo 连接",
       'settings.deployment.embedding': "向量模型",
       'settings.deployment.workflow_timeout_seconds': "阶段超时（秒）",
-      'settings.deployment.provider_idle_timeout_seconds': "模型空闲超时（秒）",
-      'settings.deployment.publish_adapter': "发布适配器", 'settings.deployment.prompts_dir': "提示词目录",
+      'settings.deployment.sandbox': "沙箱", 'settings.deployment.character_git': "她提交用的 git 名字",
+      'settings.deployment.persona_sources': "人格来源目录",
       'settings.deployment.chat': "本机对话", 'settings.deployment.self_development': "自我改进",
       'settings.deployment.timezone': "时区", 'settings.deployment.home_groups': "算家里的群", 'settings.deployment.persona_runtime': "人格运行参数",
       'settings.deployment.integration': "设备集成", 'settings.deployment.channels': "外部渠道",
@@ -318,11 +318,11 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.activated': 'Applied to the business worker and later model requests.',
       'settings.selfSource': 'Self from: {source}', 'settings.waiting': 'waiting for connection', 'settings.channelsFallback': 'Channels',
       'settings.deployment.database': "Database name", 'settings.deployment.allowed_databases': "Allowed databases",
-      'settings.deployment.legacy_database': "Legacy database", 'settings.deployment.mongo_uri': "Mongo connection",
+      'settings.deployment.mongo_uri': "Mongo connection",
       'settings.deployment.embedding': "Embedding model",
       'settings.deployment.workflow_timeout_seconds': "Stage timeout (seconds)",
-      'settings.deployment.provider_idle_timeout_seconds': "Model idle timeout (seconds)",
-      'settings.deployment.publish_adapter': "Publish adapter", 'settings.deployment.prompts_dir': "Prompts folder",
+      'settings.deployment.sandbox': "Sandbox", 'settings.deployment.character_git': "Her git name on commits",
+      'settings.deployment.persona_sources': "Persona source folders",
       'settings.deployment.chat': "Local chat", 'settings.deployment.self_development': "Self-improvement",
       'settings.deployment.timezone': "Time zone", 'settings.deployment.home_groups': "Groups trusted as home", 'settings.deployment.persona_runtime': "Persona runtime",
       'settings.deployment.integration': "Device integration", 'settings.deployment.channels': "Channels",
@@ -391,7 +391,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
 
   // A program value (a state, a code) in the viewer's words; one this version has no words for is shown as it is.
   const EFFORTS = ['reasoningEffort', 'attendEffort', 'groupEffort'];
-  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'legacy_database', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'provider_idle_timeout_seconds', 'publish_adapter', 'prompts_dir', 'chat', 'self_development', 'timezone', 'home_groups', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search', 'active_groups', 'thoughts']);
+  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'chat', 'self_development', 'timezone', 'home_groups', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search', 'active_groups', 'thoughts', 'sandbox', 'character_git', 'persona_sources']);
   const word = (t, prefix, value) => { const key = prefix + value, text = t(key); return text && text !== key ? text : String(value); };
   const deploymentLabel = key => DEPLOYMENT_KEYS.has(key) ? { key: 'settings.deployment.' + key } : key;
 

@@ -547,12 +547,13 @@ export class CognitionCore {
   }
 
   /** Per-stage effort on the character route, as chosen on the settings card from the levels its model offers:
-   * the relevance gate (attendEffort) and her group turns (groupEffort). Empty is the route's own effort. */
-  async stageEfforts() {
+   * the relevance gate (attendEffort), her group turns (groupEffort) and the action route's summaries (summaryEffort).
+   * Empty is the route's own effort. For the routes in force (the worker's start) or a draft's (a save is checked). */
+  async stageEfforts(routes = this.config.routes) {
     const efforts = {};
     for (const [name, stages] of [['character', [['attend', 'attendEffort'], ['group', 'groupEffort']]],
                                   ['action', [['summary', 'summaryEffort']]]]) {
-      const route = this.routeFor(name);
+      const route = this.routeFor(name, routes);
       if (!route || !stages.some(([, key]) => route[key])) continue;
       const model = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
       const offered = new Set((model.reasoning?.efforts ?? []).map(effort => effort.id));
@@ -759,6 +760,7 @@ export class CognitionCore {
   async validateSettings(next, pythonPath) {
     if (!this.personas.has(next.persona)) throw new Error('PERSONA_NOT_INSTALLED');
     const models = await this.resolveRoutes(next.routes ?? {});
+    await this.stageEfforts(next.routes ?? {});
     if (!next.deployment) throw new Error('NATIVE_DEPLOYMENT_REQUIRED: fill in the deployment settings');
     // ADR-099: her thoughts taken from the model's thinking need a character route that thinks, in groups too.
     if (next.deployment.thoughts === 'thinking') {
@@ -1322,7 +1324,8 @@ export class CognitionCore {
       if (message.source.kind === 'user' && !message.source.channel) this.state(agent.session.id).claimed.push(message);
       // Her message reached the running action session at a step: no extra round for it (tasks.py).
       if (lane === 'executor' && message.source.kind === 'asuna' && message.source.message_id)
-        this.worker?.call('action_message.delivered', { message_id: message.source.message_id }).catch(() => {});
+        this.worker?.call('action_message.delivered', { message_id: message.source.message_id })
+          .catch(error => this.ctx.logger.warn(`action_message.delivered: ${error}`));
     });
     // DSH assembles BEFORE pre-step, and resolves the step's tools before it assembles (each tool's `when`, which
     // attachRole gives her role tools). Claimed input is admitted at whichever comes first (admit), so the first
@@ -1428,7 +1431,7 @@ export class CognitionCore {
       const carry = lane === 'character' && overflowed(error)
         ? { summary: lastSummary(agent.session.snapshotEvents()) } : undefined;
       if (stage) this.worker?.call('result', { token: stage.token, error: String(error), ...(carry ? { carry } : {}) })
-        .catch(() => {});
+        .catch(error => this.ctx.logger.warn(`result: ${error}`));
     });
     scope.on('agent/status', ({ agent, status }) => {
       if (this.retired.has(agent)) return;
@@ -1438,7 +1441,8 @@ export class CognitionCore {
       const state = this.states.get(agent.session.id);
       if (state && status === 'idle' && state.current) {
         const stage = state.current; state.current = null;
-        this.worker?.call('result', { token: stage.token, error: 'Native turn stopped before stage completion' }).catch(() => {});
+        this.worker?.call('result', { token: stage.token, error: 'Native turn stopped before stage completion' })
+          .catch(error => this.ctx.logger.warn(`result: ${error}`));
       }
       // ADR-094: her conversation is compacted at the end of its turn, once it is large enough.
       if (lane === 'character' && status === 'idle')

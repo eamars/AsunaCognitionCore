@@ -112,7 +112,6 @@ Checked when the worker starts or a proposal is validated (`src/asuna/native_set
 | `channel_port` | `8766` | channel server port, 1024–65535 (`INVALID_CHANNEL_PORT`) |
 | `active_groups` | `4` | the usual number of active groups, 1–100 (`INVALID_ACTIVE_GROUPS`) |
 | `thoughts` | `tool` | where her 心里话 come from: `tool`, her `think` call, first in every turn; `thinking`, the summary of the character model's own first thinking in the turn, recorded by the program, shown cut at 120 characters and marked as another model's summary (`INVALID_THOUGHTS`). `thinking` needs a character route and group effort with a thinking level (`THOUGHTS_NEED_THINKING`); a conversation opened in the other mode continues in a new session at its next turn. In either mode, a turn that does not ask for her thought leaves one audit row once its first stage ends: `thought.taken`, or `thought.none` with its `why` (`no_thinking`, `redacted`, `capture_failed`, or `not_carried` when no call carried the model's thinking); her week's `thoughts` reading shows them whenever there are some, as the program's capture |
-| `provider_idle_timeout_seconds` | `1800` | read timeout of a model request, 1–86,400 (`INVALID_TIMEOUT`) |
 | `workflow_timeout_seconds` | `1800` | how long one native stage may run, 1–86,400 (`INVALID_TIMEOUT`): her own turn's stage is fenced then; an action stage is asked about ([A stage at its limit](#an-action-stage-at-its-limit)) |
 | `sandbox.backend` | `auto` | `auto` or `none` ([Sandbox](#sandbox)) |
 | `home_groups` | none | group scene ids that read as home (owner-private) and are still groups (`visibility.home_group`) |
@@ -124,6 +123,7 @@ Checked when the worker starts or a proposal is validated (`src/asuna/native_set
 | `persona_runtime.<persona>.export_dir` | none | where the Web UI's document export writes her documents (`EXPORT_DIR_NOT_CONFIGURED`) |
 | `self_development.enabled` | `false` | her self-improvement turns and the development grant ([Self-development](#self-development)) |
 | `character_git` | none | `{name, email}` on the commits her commands and publications make |
+| `persona_sources.<persona>.<root id>` | none | a source root a persona job may import from: `{path, state, exclude}`; `state` `cohabiting` (imports allowed) or `cutover` (refused, `SOURCE_CUTOVER`); a malformed root is refused at start (`PERSONA_SOURCE_INVALID`) |
 | `vision` | — | image fetching ([Media and images](#media-and-images)) |
 | `search` | — | the web search order ([Action capabilities](#action-capabilities)) |
 | `integration` | off | the managed integration ([Integration and self-development](#integration-and-self-development)) |

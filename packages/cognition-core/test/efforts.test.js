@@ -48,7 +48,7 @@ test('a brain without its own route uses DSH default model', () => {
 
 test('thinking-mode thoughts need a character route that thinks, in groups too (ADR-099)', async () => {
   const check = async (effort, routes = { character: route }, thoughts = 'thinking') => {
-    const core = new CognitionCore({}, {});
+    const core = new CognitionCore(offering('off', 'low', 'high'), {});
     core.personas = new Set(['p']);
     core.resolveRoutes = async () => ({ character: { reasoning_effort: effort } });
     // Past the check the proposed worker would start; reaching it is passing the check.
@@ -61,4 +61,16 @@ test('thinking-mode thoughts need a character route that thinks, in groups too (
   await assert.rejects(check('high'), /PAST_THE_CHECK/);
   await assert.rejects(check('high', { character: { ...route, groupEffort: 'low' } }), /PAST_THE_CHECK/);
   await assert.rejects(check('off', { character: route }, 'tool'), /PAST_THE_CHECK/, 'tool mode asks nothing of the route');
+});
+
+test('a save checks the stage efforts of its draft as the start does: refused at save, not at the next start', async () => {
+  const core = new CognitionCore(offering('high'), { routes: { character: route }, deployment: {} });
+  core.personas = new Set(['p']);
+  core.resolveRoutes = async () => ({ character: { reasoning_effort: 'high' } });
+  core.workerPython = async () => { throw new Error('PAST_THE_CHECK'); };
+  const save = routes => core.validateSettings({ persona: 'p', routes, deployment: { thoughts: 'tool' } }, 'path');
+  await assert.rejects(save({ character: { ...route, groupEffort: 'low' } }), /INVALID_REASONING_EFFORT: character groupEffort/);
+  await assert.rejects(save({ character: route, action: { ...route, summaryEffort: 'low' } }),
+    /INVALID_REASONING_EFFORT: action summaryEffort/);
+  await assert.rejects(save({ character: { ...route, attendEffort: 'high' } }), /PAST_THE_CHECK/);
 });

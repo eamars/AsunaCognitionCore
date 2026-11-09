@@ -198,6 +198,10 @@ server).
 4. `routes.appraiser` and `routes.action.summaryEffort` are settings with no field on the card. Recommendation:
    show them (B7 then covers them); otherwise the owner cannot repair one that is wrong.
 
+Owner's decisions (2026-11-09 evening): 1 remove the switch; 2 leave the four clients; 3 **move the test off the real
+server** (not the recommendation: the rule stays absolute, and the data child's deadline is then no longer covered
+by a real server); 4 show both settings on the card. Built in ADR-119 with the §6 findings.
+
 ## 8. For her (her files; listed, not changed)
 
 Her answers on her line (2026-11-09, after reading the page and the built branch):

@@ -22,3 +22,22 @@ Built; installed 2026-11-01 01:00 as `ec9211cc`; DSH `d9d52adae4` on `asuna/0.2.
 - **换版后那 87 条 ≥150k 不算本版回归**：`estimatedTailBudget` 只存在于 `d9d52adae4`（`asuna/0.2.1-rc.2-realtail`），`merge-base --is-ancestor d9d52adae4 4a4f9f1d77` 返回 1，装机 lib 里 `estimatedTail` 命中 0——修复没跟到 0.2.2 那条线。合入与重建归 Claude 与主人，不写进本判词结论。
 - **状态建议：不算 `Built`**（Claude 11-08 定：等修复回到 0.2.2 那条线、重读过再说）。本版在跑窗内那两格（行动脑落点、无 5 步内二次压缩）**判合格**，那三天半不算白装。
 - 顺带两处字面：本节以下那句"装后（11-02 01:00:12 起）"比 `history.jsonl` 晚一天（真装机本地 11-01 01:00:12），按它切窗会漏掉 11-01 的样本；README 的 §9 验收句在 **205–206 行**、落点表在 150–152 行（此前被引成 183–184，那是 §8 测试段）。我 11-01 装机前逐字读过 README 那 191 行，上面这些行号是 11-08 现读；**这不等于我 11-08 又逐字重读过整页**。
+
+## Closed on evidence (2026-11-09)
+
+The 0.2.2 move (2026-11-04) left the fix out; it was ported on 2026-11-08 (DSH `asuna/0.2.2-alpha.3-realtail`,
+`f2afea05f9`; Asuna `ad284b77`, compaction engine `06bde178edeb`). Closed on three proofs:
+1. **The mechanism, staged:** the ICD's CMP-6 (`scripts/asuna-icd/cmp.spec.ts`, DSH `ef6a4702b4`) runs a pressure
+   compaction through the agent loop with the provider counting twice DSH's estimate: on 0.2.2's own code it compacts
+   twice in one turn (the storm's shape); with the fix once, and the next request is below its threshold.
+2. **The same code on her real data:** the port is the 11-01 commit with no code conflict; from 11-01 01:00 to 11-04
+   21:10, under it, her action brain compacted 16 times, kept 81,251 to 108,990 (median 91,836; its unit is being confirmed by her), and none
+   compacted again within 5 steps (her reading of 11-08).
+3. **In place:** the installed engine holds the fix (her count, 11-08: 0 hits in the 0.2.2 builds, 2 in `06bde178`).
+
+Not measured, and closed so: **her character brain's own in-turn compaction**, no sample (her private chat had none in
+the window) and not staged; it runs the same engine, which proof 1 covers. **Her two probes of 11-09 are staged, not
+natural:** the first crossed the threshold (757,335 tokens at step 21; `thresholdRatio` is 0.75 on a 1M window) and was
+taken by the tool-result pruner, not a summary (21 prunes, 248,137 tokens shadowed, 124,517 at the next step, no
+second compaction within 5 steps): it shows only that pruning keeps the task's shape; the second, to force a summary,
+was stopped as not needed. Neither enters a comparison window.

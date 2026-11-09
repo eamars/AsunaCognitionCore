@@ -31,10 +31,15 @@ description: 沈小满在核心技能 asuna-self-improvement 的离线自检之�
   ——只用标准库，pytest 默认收集也收它。
 - pytest 盲区（这一族的根）：`*_cases.py` 这种文件名 pytest 默认不收——`pyproject.toml` 只写了
   `testpaths = ["tests"]`，没有 `python_files` 覆盖。凡是「用例只有 `tools/` 那个入口跑、而 pytest
-  从不跑 `tools/`」的结构，红了没人知道。同样的结构还有
-  `p2_summary_loop_cases.py`、`p5_proactive_cases.py`、`discussion_digest_cases.py`、
-  `outbound_image_cases.py`、`integration_import_cases.py` 五套：各有 `run_all()`，
-  但没有一个 `test_*.py` 去调它（p2、p5、讨论整理的 `test_*.py` 只 import 里面的夹具函数，不跑那套 PASS/FAIL）。
+  从不跑 `tools/`」的结构，红了没人知道——但这一族今天不等于「没人跑」：`tests/test_offline_checks.py`
+  把 `tools/` 下每个 `*_offline_check.py` 收成一条 pytest 用例（11-09 现场 `pytest --collect-only` 收出 5 条）。
+  所以 `p2_summary_loop_cases.py`、`p5_proactive_cases.py`、`discussion_digest_cases.py`、
+  `outbound_image_cases.py`、`integration_import_cases.py` 这五套是被那条 pytest 间接跑着的：`tests/test_*.py`
+  里没有一个直接 import 它们，链条是 cases → `tools/` 入口 → pytest。判「这一套有没有人跑」去看那条
+  pytest 收几条，别只看有没有哪个 `test_*.py` 提到它。
+- 报「某套用例过没过」要同时写清**跑的是哪条入口、哪台解释器**：同一套 `tests/discussion_digest_cases.py`，
+  11-09 现读，直接跑那个文件（`asuna.people` 装得上）4/20 通过、rc 1；`tools/p1c_offline_check.py` 那条入口
+  现读还带着 `sys.modules["asuna.people"] = None` 的隔离，同一套 20/20 通过、rc 0。一条道的绿不代表这套用例绿。
 
 ### 退役与「没收录」怎么读
 

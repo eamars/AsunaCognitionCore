@@ -141,7 +141,7 @@ def main():
         return 1
     placed = {slug: (memory_tiers.placed(store, persona, slug, content) if content else content)
               for slug, content in raw.items()}
-    print("memory_tiers.ENABLED = %s%s" % (memory_tiers.ENABLED, "" if memory_tiers.ENABLED else "（关着：两份口径应当相等）"))
+    print("分层：常开（2026-11-09 定案删掉 memory_tiers.ENABLED 那个开关，这一行不再读它）")
 
     common = render.common_text({})            # prompt_path 不看 config
     places = list(visibility.PLACE_CLASS.items())

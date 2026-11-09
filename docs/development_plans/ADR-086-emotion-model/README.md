@@ -1,6 +1,6 @@
 # ADR-086: A psychological emotion model for her agentic loop
 
-Status: **Stage 1 built and installed** 2026-10-21 13:18:51 NZDT (main 5fff9161, reviewed by Claude; her persona
+Status: **Built**, closed 2026-11-09 on a staged probe (progress.md, §9 staged probe). Stage 1 built and installed 2026-10-21 13:18:51 NZDT (main 5fff9161, reviewed by Claude; her persona
 values published by her, 72830d0a); the 7-day reading is §9, stage 2 waits for it. §16 (2026-10-22): the lines she lets pass at the gate are listed
 once in her next turn there. Written by the research agent
 (Claude Fable 5.1) at the owner's request, from the brief Claude prepared; the owner's decisions are in §11, her

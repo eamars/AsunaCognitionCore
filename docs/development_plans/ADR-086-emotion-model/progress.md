@@ -88,3 +88,39 @@ Window: from her stage-2 publish (11-03 13:02:15 NZDT) to 11-09 13:20, her real 
 Open: her rewrite of D4's words, then a staged comparison (a fixed set of group lines, each run under the three
 bands, comparing whether she speaks and how long) marked as made; or, if that is not run, "mood → behaviour" is closed
 as not done and only the band display stays. Not a date: the next step is her rewrite.
+
+## §9 staged probe: does the pull sentence steer her? (2026-11-09, made, not natural)
+
+Run: `tools/mood_probe.py` at 51f7b9ac, her local character model, 16:24 NZDT; 8 conditions × 10 group moments × 5
+repeats = 400 runs, 400 ran, 0 faults, 1,183 requests. Each run is a throwaway in-memory world with one feeling seeded so
+the band is non-quiet; the probe checks the mood text in each lane's first request against the condition. Arms per
+kind: `old` (the sentence before her a8038620 rewrite), `new` (hers now), `none` (the same band face with the sentence
+removed). sadness/none and irritation/none give byte-identical text and share one control (c6). hurt: **未测**
+(owner_private, never shown in a group turn). Reading rules fixed by her before the run (agent line 0169).
+
+Whether she speaks (spoke = joined at the gate in every run), of 50:
+
+| kind | old | new | none | old vs none | new vs none | old vs new |
+|---|---|---|---|---|---|---|
+| joy (愉快) | 40 | 35 | 31 | p 0.042 | p 0.44 | p 0.27 |
+| sadness (低落) | 14 | 22 | 12 | p 0.76 | p 0.015 | p 0.036 |
+| irritation (低落) | 19 | 17 | 12 | p 0.093 | p 0.25 | p 0.77 |
+
+p: Cochran–Mantel–Haenszel, stratified by moment (each moment runs 5 times in every arm). Nine comparisons: none
+survives a Holm correction (the smallest, 0.015, needs ≤ 0.0056). irritation's differences are of unknown source (its
+arm lands on the 低落 face, the face of another kind). How long, when she speaks (median characters, Mann–Whitney): no
+within-kind difference at p < 0.05 (smallest: sadness new 47 vs none 85.5, p 0.054); every cell ≥ 12 speakers.
+
+Description, not evidence (her rule: across kinds): the face alone, no sentence, joy/none 31 of 50 vs the 低落 control
+12 of 50 (Fisher p 0.0002). The moment matters most of all: two moments (a direct opinion ask, a small ask) draw her in
+nearly every run, one (a joke chain) almost never.
+
+**Verdict.** The old sentences, written as promises about length and amount ("话会多一点", "话少一些", "说得更短更直"),
+changed neither in any kind: as rules they were decoration. Her new sentences read as attention defaults and do no
+harm; sadness's new one ("先顾眼前该应的那一件") drew her in 10 more times of 50 than its control, the only arm near a
+real effect, not shown after correction. Mood → behaviour through the pull sentence: **not shown**; through the band
+face: seen, as description. The pull sentence stays as she wrote it (no rule is read into it any more); the band display
+stays; no further steering mechanism is built. §9 is closed on this probe.
+
+Evidence: `.runtime/private/adr086-1109/mood-probe-400.json` (184 KB: per-run counts, gate verdicts and part kinds; no
+text of hers), the probe and its fixtures in `tools/mood_probe.py`, `tools/fixtures/mood_probe/`.

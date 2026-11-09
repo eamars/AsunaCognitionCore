@@ -209,11 +209,7 @@ def edit_register(store, task, back_to):
 def edits_back_to(store, scope_key, *, limit=MAX_ITEMS_OFFERED):
     """Edits of other people's pictures that go back to this conversation, newest first (as produced_images)."""
     count = max(1, int(limit or 1))
-    try:
-        rows = [row for row in _images(store).rows(newest_first=True, limit=200)
-                if scope_key and returns_to(row) == scope_key]
-    except Exception:
-        return []
+    rows = [row for row in _images(store).rows(newest_first=True, limit=200) if scope_key and returns_to(row) == scope_key]
     wanted = {row['_id'] for row in rows}
     scopes = list(dict.fromkeys(row['scope_key'] for row in rows if row.get('scope_key')))
     items = image_artifacts(store, scopes, limit=count * 10, own_scope='')
@@ -263,17 +259,17 @@ def _images(store, **scopes):
 def produced_images(store, *, limit=MAX_ITEMS_OFFERED):
     """她做出来的图（不分场景），新的在前；群聊回合里只列这些。"""
     count = max(1, int(limit or 1))
-    try:
-        # Bounded: the newest images only, and her own among them.
-        rows = [row for row in _images(store).rows(newest_first=True, limit=200) if produced(row)]
-    except Exception:
-        return []
+    # Bounded: the newest images only, and her own among them.
+    rows = [row for row in _images(store).rows(newest_first=True, limit=200) if produced(row)]
     mine = {row['_id'] for row in rows}
     scopes = list(dict.fromkeys(row['scope_key'] for row in rows if row.get('scope_key')))
     items = image_artifacts(store, scopes, limit=count * 10, own_scope='')
     return [item for item in items if item['artifact_id'] in mine][:count]
 
 
+# A read of the pictures that failed (ADR-119 F1, her wording): never the words of an empty list, nor of a full one.
+OFFER_UNREAD = '能发的图这次没读出来（读库出错）——这里既不是「没有图」，也不代表有图能发；下一回合会再读。'
+OWN_UNREAD = '你画的图这次没读出来（读库出错）——这里既不是「没有图」，也不代表有图；下一回合会再读。'
 OWN_PICTURES_NOTE = ('这些是你自己画的图（新的在前）。这里发不出去，只是给你看：想看哪张，就用 read_image 传它的 '
                      'artifact_id。没调用就是没看过。')
 
@@ -316,10 +312,7 @@ def _linked_scene_ids(config, scene_id):
     """
     if not scene_id:
         return []
-    try:
-        links = scene_links.context_links(config)
-    except Exception:
-        return []
+    links = scene_links.context_links(config)
     out = list(links.get(scene_id) or ())
     for reader, targets in links.items():
         if scene_id in (targets or ()):
@@ -362,10 +355,7 @@ def image_scopes(store, config, scene, session_cls=None, person_id=None):
     if not mine:
         return out
     for peer_id in _linked_scene_ids(config, scene_id):
-        try:
-            peer = scene_records.get(store, peer_id)
-        except Exception:
-            continue
+        peer = scene_records.get(store, peer_id)
         if not isinstance(peer, dict) or peer.get('kind') != 'dm' or not peer.get('scope_key'):
             continue
         peer_person = _route_person(config, peer)
@@ -421,11 +411,8 @@ def image_artifacts(store, scope_keys, *, limit=MAX_ITEMS_OFFERED, own_scope=Non
         return []
     wanted = {'scope': scopes[0]} if len(scopes) == 1 else {'scopes': scopes}
     own_scope = own_scope or (scopes[0] if len(scopes) == 1 else None)
-    try:
-        # 每轮都要问一次，所以读是有界的：新的在前、只取够用的几份元数据行，字节一个都不读。
-        rows = _images(store, **wanted).rows(newest_first=True, limit=max(1, int(limit or 1)) * 10)
-    except Exception:
-        return []
+    # 每轮都要问一次，所以读是有界的：新的在前、只取够用的几份元数据行，字节一个都不读。
+    rows = _images(store, **wanted).rows(newest_first=True, limit=max(1, int(limit or 1)) * 10)
     rows.sort(key=lambda row: str(row.get('created_at') or ''), reverse=True)
     out = []
     for row in rows:

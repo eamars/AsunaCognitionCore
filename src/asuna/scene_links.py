@@ -47,13 +47,11 @@ def _id_list(value, limit=MAX_LINKS):
 
 
 def _scenes(store):
-    """Every conversation of this store, or none when it cannot be read."""
+    """Every conversation of this store. A store that cannot be read raises (ADR-119 F1): read as none, a person's
+    relationship would be taken, and written, from this conversation's own record."""
     if store is None:
         return []
-    try:
-        return [row for row in scene_records.all(store) if isinstance(row, dict)]
-    except Exception:
-        return []
+    return [row for row in scene_records.all(store) if isinstance(row, dict)]
 
 
 # ── 场景这一侧：谁能读谁 ────────────────────────────────────────────

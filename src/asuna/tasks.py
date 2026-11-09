@@ -994,7 +994,10 @@ class ToolBroker:
                 raise Denied('UNKNOWN_TOOL: %s 不是这里能执行的工具；重试也一样，换用工具清单里的工具' % str(tool)[:60])
             if tool!=READ_IMAGE_TOOL_NAME:
                 from . import credentials
-                result=credentials.scrub(result)          # no stored credential value reaches her or a receipt
+                try:
+                    result=credentials.scrub(result,self.service.store)   # no stored credential value reaches her or a receipt
+                except credentials.Unscrubbed:
+                    raise Denied('CREDENTIALS_UNREADABLE: '+credentials.UNSCRUBBED_RESULT)
             # A result is JSON data: the receipt and her character brain's view of it are JSON, and a raw database row
             # can hold other values (an archived message's original ObjectId).
             result=json_data(result)
@@ -1136,7 +1139,11 @@ class Executor:
         if attachments:facts['attachments']=attachments
         if cls==visibility.OWNER_PRIVATE and 'sandbox_run' in task.get('allowed_capabilities',()):
             from . import credentials
-            vault=credentials.listing()
+            try:
+                vault=credentials.listing()
+            except Exception:                      # ADR-119 F1: unreadable is said, never an empty vault
+                vault=None
+                facts['credentials']={'items':[],'how':credentials.LIST_UNREAD}
             if vault:facts['credentials']={'items':vault,'how':'sandbox_run 写 credentials（名字照抄），这些环境变量只在那一条命令里有；脚本用 os.environ 读，值不要写进文件、脚本、报告。'}
         from . import local_time                     # the action brain reads times on the local clock
         facts=local_time.for_model(facts,local_time.her_zone(self.service.store))
@@ -1188,7 +1195,10 @@ class Executor:
         # The model reports in natural language; identities and actual receipts
         # are attached by the program, never recopied or invented by the model.
         from . import credentials
-        content=credentials.scrub(value.content)
+        try:
+            content=credentials.scrub(value.content,self.service.store)
+        except credentials.Unscrubbed:
+            raise Denied('CREDENTIALS_UNREADABLE: '+credentials.UNSCRUBBED_REPORT)
         result={'task_id':task['_id'],'intent_revision':task['intent_revision'],'text':content,
                 'finish_reason':value.finish_reason,'artifact_refs':[a['_id'] for a in observations],
                 'diagnostic':value.diagnostic,

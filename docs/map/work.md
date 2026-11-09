@@ -263,6 +263,7 @@ Schemas for the native Host publication floor; no second publisher.
 
 Her credentials (owner 2026-10-07): secrets a home task may use without any brain holding the value.
 
+- class `Unscrubbed` — The vault's list could not be read, or not lately: what would be handed on is not, and the caller says what was lost in its own sentence (UNSCRUBBED_*).
 - def `attach` — The Host's credential requests: call({'op': 'list'|'read'|'write'|'delete', ...}).
 - def `available`
 - def `listing` — What a home turn or task may see: [{name, note, env: [variable names]}].

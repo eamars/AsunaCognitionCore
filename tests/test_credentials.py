@@ -77,3 +77,35 @@ def test_every_tool_schema_stays_inside_what_dsh_registers():
             check({k: v for k, v in param.items() if k != 'required'}, spec['name'] + '.' + name)
 
 
+
+
+class Audits:
+    def __init__(self):
+        self.rows = []
+
+    def audit(self, stream, kind, payload, scope):
+        self.rows.append((kind, payload))
+
+
+def test_an_unreadable_vault_never_passes_a_value_through_nor_reads_as_empty(vault, monkeypatch):
+    """ADR-119 F1 (her rule): no list read, or none lately, hands nothing on; a recent one scrubs, said with its time."""
+    credentials.keep('solar', '只读', {'SOLAR_PASSWORD': SECRET})
+    down = {'now': False}
+    host = credentials._host
+    credentials.attach(lambda args: (_ for _ in ()).throw(ConnectionError('down')) if down['now'] else host(args))
+    down['now'] = True
+    with pytest.raises(credentials.Unscrubbed):                 # never read: refused, not passed through
+        credentials.scrub('pw=' + SECRET)
+    with pytest.raises(ConnectionError):                        # the vault's names: unreadable is not "none"
+        credentials.listing()
+    down['now'] = False
+    assert SECRET not in credentials.scrub('pw=' + SECRET)       # read once
+    clock = {'t': credentials.time.monotonic()}
+    monkeypatch.setattr(credentials.time, 'monotonic', lambda: clock['t'])
+    down['now'], audits = True, Audits()
+    clock['t'] += credentials.CACHE_SECONDS + 1                 # due again, and failing: the recent list still scrubs
+    assert SECRET not in credentials.scrub('pw=' + SECRET, audits)
+    assert audits.rows[0][0] == 'credentials.scrub_stale' and audits.rows[0][1]['list_read_at']
+    clock['t'] += credentials.SCRUB_LIST_STALE_SECONDS          # too old now
+    with pytest.raises(credentials.Unscrubbed):
+        credentials.scrub('pw=' + SECRET, audits)

@@ -1690,14 +1690,23 @@ class RoleTools:
         """A text she hands the action brain (ADR-098 D3): no stored credential value, then each placeholder this
         line may hand over as its real path; a raw root, an unknown ${ASUNA_…} name or a climbing `..` is refused
         (local_roots.PathRefused, in words). The line she speaks from decides."""
-        from . import credentials, local_roots
-        return local_roots.outbound(credentials.scrub(text), self._place(ep) == visibility.OWNER_PRIVATE)
+        from . import local_roots
+        return local_roots.outbound(self._scrubbed(text), self._place(ep) == visibility.OWNER_PRIVATE)
 
     def _kept(self, ep, *texts):
         """Her words on placeholders this line handed over as written (ADR-098 D3), for the tool result; None for none."""
         from . import local_roots
         home = self._place(ep) == visibility.OWNER_PRIVATE
         return local_roots.kept_words(sorted({n for t in texts for n in local_roots.kept(t, home)}))
+
+    def _scrubbed(self, text):
+        """Her text without a stored credential value; refused, with nothing sent, when the vault cannot be read
+        (ADR-119 F1)."""
+        from . import credentials
+        try:
+            return credentials.scrub(text, self.store)
+        except credentials.Unscrubbed:
+            raise Refused(credentials.UNSCRUBBED_TEXT, ['CREDENTIALS_UNREADABLE'])
 
     def _text(self, args, field, limit, *, required=True, ask=None, offer=True):
         """A text field of hers, checked (ADR-108 D4c): refused past `limit` and asked for `ask` (by default four fifths of
@@ -3273,10 +3282,10 @@ class RoleTools:
 
     # ── notes between her conversations (ADR-018) ───────────────────
     def _note(self, ep, call_id, args, cls):
-        from . import credentials, notes
+        from . import notes
         if not self.coordinator.scheduler:
             raise Refused('现在没有定时服务，便条送不出去（不是你的错）；重试也一样。', ['SCHEDULER_UNAVAILABLE'])
-        args = {**args, 'text': credentials.scrub(str(args.get('text') or ''))}     # never a credential value
+        args = {**args, 'text': self._scrubbed(str(args.get('text') or ''))}     # never a credential value
         try:
             return self.coordinator.scheduler.note(ep, cls, args, call_id), False
         except notes.NoteRefused as exc:
@@ -3458,9 +3467,9 @@ class RoleTools:
         raise Refused('问不到「%s」：to 写 %s这里，或 行动脑。' % (echoed(wanted), names + '、' if names else ''), ['ASK_PLACE_UNKNOWN'])
 
     def tool_ask_ask(self, ep, call_id, args):
-        from . import credentials, ingress, notes, questions
+        from . import ingress, notes, questions
         from .questions import QUESTION_CHARS
-        text = credentials.scrub(self._text(args, 'question', QUESTION_CHARS))
+        text = self._scrubbed(self._text(args, 'question', QUESTION_CHARS))
         patience = args.get('patience') or questions.DEFAULT_PATIENCE
         if patience not in questions.PATIENCE:
             raise Refused('patience 是 %s 之一%s；不写就是 %s。'

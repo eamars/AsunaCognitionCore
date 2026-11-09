@@ -55,14 +55,35 @@ def test_a_forward_by_id_is_fetched_once_and_a_forward_inside_it_is_read_one_lev
     assert block['source'] == 'fetched' and [n['name'] for n in block['nodes']] == ['甲', '↳ 乙']
 
 
-def test_a_forward_that_cannot_be_read_keeps_its_placeholder():
+def test_a_forward_that_cannot_be_read_says_so_in_its_place_never_as_an_empty_one():
+    """ADR-119 F1 (her wording): the reason in one line from the table, never the exception's text."""
     env = envelope({'id': 'gone'})
     logged = []
 
     def call(action, params):
         raise TimeoutError('no answer')
     assert forward.attach(env, call, log=logged.append) == 0
-    assert env['text'] == '看这个' + forward.PLACEHOLDER and forward.FORWARD_KEY not in env['raw']
+    assert env['text'] == '看这个[合并转发：没读出来（取不到；条数不知道，不再重试）；没有可取的把手]' and forward.FORWARD_KEY not in env['raw']
+    assert 'no answer' not in env['text']
     assert logged[0].startswith('FORWARD_UNREAD') and 'TimeoutError' in logged[0]
 
 
+
+
+def test_a_forward_inside_a_forward_that_is_not_read_leaves_a_line_with_why():
+    """ADR-119 F1: refused inside, or past two levels: a line in its place, never skipped in silence."""
+    inner, deeper = {'type': 'forward', 'data': {'id': 'inner'}}, {'type': 'forward', 'data': {'id': 'deeper'}}
+    text = lambda words, *more: [{'type': 'text', 'data': {'text': words}}, *more]
+    answers = {'outer': {'retcode': 0, 'data': {'messages': [
+                   {'sender': {'user_id': 1, 'nickname': '甲'}, 'time': 1, 'message': text('先看', inner)},
+                   {'sender': {'user_id': 2, 'nickname': '乙'}, 'time': 2, 'message': text('还有', {'type': 'forward', 'data': {'id': 'broken'}})}]}},
+               'inner': {'retcode': 0, 'data': {'messages': [
+                   {'sender': {'user_id': 3, 'nickname': '丙'}, 'time': 3, 'message': text('里面', deeper)}]}},
+               'broken': {'retcode': 1200}}
+    env = envelope({'id': 'outer'})
+    assert forward.attach(env, lambda action, params: answers[params['id']]) == 1
+    [block] = env['raw'][forward.FORWARD_KEY]
+    assert [(n['name'], n['text']) for n in block['nodes']] == [
+        ('甲', '先看[合并转发（未解析）]'), ('↳ 丙', '里面[合并转发（未解析）]'),
+        ('↳ ↳', '（这里还套着一条合并转发，没读出来：套得太深，只读两层；不再重试，没有可取的把手）'),
+        ('乙', '还有[合并转发（未解析）]'), ('↳', '（这里还套着一条合并转发，没读出来：QQ 拒绝了这次读取；不再重试，没有可取的把手）')]

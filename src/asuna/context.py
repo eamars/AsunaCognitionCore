@@ -875,15 +875,24 @@ class ContextBuilder:
             media=media_note(source,self.store.config)
             if media:context['media_from_program']=media
         # 本轮可随这条消息发出去的图片：程序给出的 artifact，不是文件路径；方向不对或没图就不出现。
-        offer=outbound_media.offer(self.store,self.store.config,scene,session_class,event['person_id'],
-                                 picked=(event.get('visit') or {}).get('artifact_id'))
+        # A read that fails says so in the block (ADR-119 F1): never the absence of a block, which reads as no picture.
+        try:
+            offer=outbound_media.offer(self.store,self.store.config,scene,session_class,event['person_id'],
+                                     picked=(event.get('visit') or {}).get('artifact_id'))
+        except Exception as exc:
+            self.store.audit('scene:'+scene['_id'],'outbound.offer_unread',{'error':type(exc).__name__},scene['scope_key'])
+            offer={'items':[],'note':outbound_media.OFFER_UNREAD}
         if offer:context['image_artifacts_from_program']=offer
         elif session_class==visibility.OWNER_PRIVATE:
             # Looking does not wait on sending: where none of her pictures can go out (her local chat), she
             # still sees her own newest ones listed, and read_image comes with them (role_tools.her_pictures).
             from .vision import vision_capability as _vision
-            mine=outbound_media.own_pictures(self.store,moment) if _vision(self.store.config,'character')['supported'] else []
-            if mine:context['your_pictures_from_program']={'items':mine,'note':outbound_media.OWN_PICTURES_NOTE}
+            try:
+                mine=outbound_media.own_pictures(self.store,moment) if _vision(self.store.config,'character')['supported'] else []
+                if mine:context['your_pictures_from_program']={'items':mine,'note':outbound_media.OWN_PICTURES_NOTE}
+            except Exception as exc:
+                self.store.audit('scene:'+scene['_id'],'outbound.offer_unread',{'error':type(exc).__name__,'block':'your_pictures'},scene['scope_key'])
+                context['your_pictures_from_program']={'items':[],'note':outbound_media.OWN_UNREAD}
         # ADR-092: the files her tasks registered that this conversation may send (a group whose adapter takes files).
         from . import outbound_files
         files=outbound_files.offer(self.store,scene)
@@ -925,8 +934,12 @@ class ContextBuilder:
         # Owner 2026-10-07: her credential vault at home, names and notes only (credentials.py).
         if session_class==visibility.OWNER_PRIVATE and (event.get('episode_kind') or 'external') in ('external','task_feedback','self_development'):
             from . import credentials as _credentials
-            vault=_credentials.listing()
-            if vault:context['credentials_from_program']={'items':vault,'note':_credentials.CREDENTIALS_NOTE}
+            try:
+                vault=_credentials.listing()
+                if vault:context['credentials_from_program']={'items':vault,'note':_credentials.CREDENTIALS_NOTE}
+            except Exception as exc:                  # ADR-119 F1: unreadable is said, never an empty vault
+                self.store.audit('credentials','credentials.unread',{'error':type(exc).__name__},scene['scope_key'])
+                context['credentials_from_program']={'items':[],'note':_credentials.LIST_UNREAD}
         # Owner 2026-10-06: her watchlist, and this line's speaker being on it.
         from . import watches as _watches
         watching=_watches.watching_block(self.store,persona,session_class,moment)

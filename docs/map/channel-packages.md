@@ -187,6 +187,8 @@ Built-in placeholder fixtures for the offline self checks.
 
 Merged forwards (合并转发): the messages a forward carried, brought to the host as raw.asuna_forward.
 
+- class `Unread` — A forward that cannot be read, and which of WHY it was.
+- def `why` — One line of why a forward was not read, in her words; never the exception's text.
 - def `ref_of` — The short handle she copies to read a forward in full.
 - def `segments` — The forward segments' data of one OneBot message, in order, at most MAX_FORWARDS.
 - def `read` — (nodes, source) of one forward segment's data; raises when it cannot be read.

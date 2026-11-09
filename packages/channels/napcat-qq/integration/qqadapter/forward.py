@@ -4,7 +4,8 @@ A received forward segment carries an id. Its messages come inline (`data.conten
 from one bounded `get_forward_msg` call on the submitter thread. Each forward becomes a block
 {ref, count, nodes: [{name, user_id, time, text}], source}, a forward inside a forward is read one level deep, and
 the line's placeholder becomes `[合并转发｜N 条｜ref]` with the first PREVIEW messages, one short line each. A forward
-that cannot be read keeps its placeholder. Only metadata is logged, never the text.
+that cannot be read says so in its place, with one line of why (UNREAD, NESTED_UNREAD), never in the words of an empty
+one. Only metadata is logged, never the text.
 """
 import hashlib
 
@@ -21,6 +22,25 @@ PREVIEW_CHARS = 40
 DEPTH = 2
 TIMEOUT = 8.0
 MAX_FETCHES = 6           # get_forward_msg calls per message, nested ones included: a line's wait has a bound
+# A forward that was not read, in its place (her wording, ADR-119 F1): nothing reads it again, its count is unknown
+# (its messages never came), and only a forward that was read is kept, so neither has a ref recall could read.
+UNREAD = "[合并转发：没读出来（%s；条数不知道，不再重试）；没有可取的把手]"
+NESTED_UNREAD = "（这里还套着一条合并转发，没读出来：%s；不再重试，没有可取的把手）"
+WHY = {"limit": "这一条消息里要取的转发超过了一次能取的条数", "refused": "QQ 拒绝了这次读取",
+       "empty": "返回里没有消息", "no_id": "这条转发既没带内容也没带编号", "deep": "套得太深，只读两层"}
+WHY_ELSE = "取不到"
+
+
+class Unread(ValueError):
+    """A forward that cannot be read, and which of WHY it was."""
+    def __init__(self, why):
+        super().__init__(why)
+        self.why = why
+
+
+def why(exc):
+    """One line of why a forward was not read, in her words; never the exception's text."""
+    return WHY.get(getattr(exc, "why", None), WHY_ELSE)
 
 
 def ref_of(forward_id):
@@ -75,12 +95,12 @@ def read(data, call, depth=1):
     elif call is not None and data.get("id") not in (None, ""):
         response = call("get_forward_msg", {"id": str(data["id"]), "message_id": str(data["id"])})
         if isinstance(response, dict) and response.get("retcode") not in (0, None):
-            raise ValueError("retcode %s" % response.get("retcode"))
+            raise Unread("refused")
         raw, source = _raw_nodes(response), "fetched"
         if raw is None:
-            raise ValueError("no messages in the response")
+            raise Unread("empty")
     else:
-        raise ValueError("no content and no id")
+        raise Unread("no_id" if data.get("id") in (None, "") else "no_call")     # no_call: 取不到
     nodes, total = [], 0
     for node in raw:
         if len(nodes) >= MAX_NODES or total >= MAX_TOTAL_CHARS:
@@ -90,15 +110,18 @@ def read(data, call, depth=1):
         item = {"name": name, "user_id": user, "time": when, "text": text}
         nodes.append(item)
         total += len(text)
-        if depth < DEPTH:
-            for inner in segments(message):
-                try:
-                    nested, _ = read(inner, call, depth + 1)
-                except Exception:
-                    continue
-                for sub in nested[:max(MAX_NODES - len(nodes), 0)]:
-                    nodes.append({**sub, "name": "↳ " + sub["name"]})
-                    total += len(sub["text"])
+        for inner in segments(message):
+            try:
+                if depth >= DEPTH:
+                    raise Unread("deep")
+                nested, _ = read(inner, call, depth + 1)
+            except Exception as exc:
+                if len(nodes) < MAX_NODES:
+                    nodes.append({"name": "↳", "user_id": "", "time": None, "text": NESTED_UNREAD % why(exc)})
+                continue
+            for sub in nested[:max(MAX_NODES - len(nodes), 0)]:
+                nodes.append({**sub, "name": "↳ " + sub["name"]})
+                total += len(sub["text"])
     return nodes, source
 
 
@@ -116,7 +139,7 @@ def preview(block):
 def attach(envelope, call, log=None):
     """Read the envelope's forwards into raw.asuna_forward and put their previews in its text.
 
-    Returns the number of forwards read. Never raises: an unreadable forward keeps its placeholder."""
+    Returns the number of forwards read. Never raises: an unreadable forward says so in its place (UNREAD)."""
     raw = envelope.get("raw") if isinstance(envelope.get("raw"), dict) else None
     found = segments((raw or {}).get("message"))
     if not found or FORWARD_KEY in raw:
@@ -125,9 +148,9 @@ def attach(envelope, call, log=None):
     fetched = [0]
 
     def bounded(action, params):
-        # past MAX_FETCHES a forward without its messages inline stays as its placeholder (nested: left out)
+        # past MAX_FETCHES a forward without its messages inline is not read, and says so in its place
         if fetched[0] >= MAX_FETCHES:
-            raise ValueError("fetch limit")
+            raise Unread("limit")
         fetched[0] += 1
         return call(action, params)
     for data in found:
@@ -138,6 +161,8 @@ def attach(envelope, call, log=None):
             if log:
                 log("FORWARD_UNREAD event_id=%s ref=%s keys=%s reason=%s"
                     % (envelope.get("event_id"), ref, ",".join(sorted(data)) or "-", type(exc).__name__))
+            if PLACEHOLDER in text:
+                text = text.replace(PLACEHOLDER, UNREAD % why(exc), 1)
             continue
         block = {"ref": ref, "count": len(nodes), "nodes": nodes, "source": source}
         blocks.append(block)
@@ -149,5 +174,6 @@ def attach(envelope, call, log=None):
                    sum(len(n["text"]) for n in nodes)))
     if blocks:
         raw[FORWARD_KEY] = blocks
+    if text != (envelope.get("text") or ""):
         envelope["text"] = text[:inbound.MAX_TEXT]
     return len(blocks)

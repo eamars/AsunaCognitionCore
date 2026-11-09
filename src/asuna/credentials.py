@@ -37,19 +37,31 @@ VALUE_CHARS = 4096
 HIDDEN = '[凭据已隐藏]'
 SECRET_WORDS = ('pass', 'token', 'secret', 'key')     # a variable whose name has one of these holds a secret (ADR-115)
 CACHE_SECONDS = 60
+# ADR-119 F1: a scrub uses the last list read only while it is this young; older (or none), nothing is handed on.
+SCRUB_LIST_STALE_SECONDS = 600
+# Her wording (agent line 0222/0224): the vault unreadable is never the words of an empty vault.
+LIST_UNREAD = '保险箱这次读不到——这里既不是「没有凭据」，也不代表有哪一份能用；下一回合会再读。'
+UNSCRUBBED_RESULT = '保险箱这次读不到，没法先遮住结果里的凭据，结果先没给你；这一步已经做过了，要结果得再做一次。'
+UNSCRUBBED_REPORT = '保险箱这次读不到，没法先遮住报告里的凭据，这份报告先没交出去；要结果得重跑一次。'
+UNSCRUBBED_TEXT = '保险箱这次读不到，没法先遮住这段话里的凭据，这次没交出去；过一会儿再调一次就行，不用改。'
 CREDENTIALS_NOTE = ('这些是存在保险箱里的凭据（只有名字和用途，值谁都看不到，你和行动脑都看不到）。要用的时候交代行动脑：'
                     '让它 sandbox_run 时写 credentials（名字照抄），脚本从环境变量里读。交代里、话里都不写值。')
 
 _host = None
 _lock = threading.Lock()
-_cache = {'at': 0.0, 'listing': [], 'values': set()}
+_cache = {'at': 0.0, 'read_at': None, 'listing': [], 'values': set()}
+
+
+class Unscrubbed(Exception):
+    """The vault's list could not be read, or not lately: what would be handed on is not, and the caller says what
+    was lost in its own sentence (UNSCRUBBED_*)."""
 
 
 def attach(call):
     """The Host's credential requests: call({'op': 'list'|'read'|'write'|'delete', ...})."""
     global _host
     _host = call
-    _cache['at'] = 0.0
+    _cache.update(at=0.0, read_at=None)
 
 
 def available():
@@ -73,17 +85,16 @@ def _refresh(force=False):
             payload = _call(op='read', name=item['name']) or {}
             values.update(str(v) for k, v in (payload.get('env') or {}).items()
                           if len(str(v)) >= 4 and any(word in k.lower() for word in SECRET_WORDS))
-        _cache.update(at=time.monotonic(), listing=listing, values=values)
+        from . import clock
+        _cache.update(at=time.monotonic(), read_at=clock.now().isoformat(), listing=listing, values=values)
 
 
 def listing():
-    """What a home turn or task may see: [{name, note, env: [variable names]}]."""
+    """What a home turn or task may see: [{name, note, env: [variable names]}]. Raises when the vault cannot be
+    read: the caller says so (LIST_UNREAD), never an empty list."""
     if _host is None:
         return []
-    try:
-        _refresh()
-    except Exception:
-        return []
+    _refresh()
     return [{'name': item['name'], 'note': item.get('note') or '', 'env': sorted(item.get('env') or [])}
             for item in _cache['listing']]
 
@@ -146,14 +157,22 @@ def environment(names):
     return env
 
 
-def scrub(value):
-    """The same value with every stored credential value replaced by HIDDEN (strings, lists and dicts)."""
+def scrub(value, store=None):
+    """The same value with every stored credential value replaced by HIDDEN (strings, lists and dicts).
+
+    A refresh that fails scrubs with the last list read while it is at most SCRUB_LIST_STALE_SECONDS old, recorded
+    in `store` with the time that list was read (credentials.scrub_stale); with no list, or an older one, it raises
+    Unscrubbed (ADR-119 F1)."""
     if _host is None:
         return value
     try:
         _refresh()
-    except Exception:
-        pass
+    except Exception as exc:
+        if not _cache['at'] or time.monotonic() - _cache['at'] > SCRUB_LIST_STALE_SECONDS:
+            raise Unscrubbed(type(exc).__name__) from exc
+        if store is not None:
+            store.audit('credentials', 'credentials.scrub_stale', {'list_read_at': _cache['read_at'],
+                        'error': type(exc).__name__}, 'global-safe')
     secrets = sorted(_cache['values'], key=len, reverse=True)
     if not secrets:
         return value

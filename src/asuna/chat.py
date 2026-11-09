@@ -515,6 +515,11 @@ class Chat:
                     input_state(self.app.store, episode, 'FAILED', failure=error)
                     self.app.store.audit(episode, 'chat.error', {'traceback': error}, 'scene:' + event['scene_id'])
                     ep = episode_records.get(self.app.store, episode)
+                    if not ep and not self.stopping.is_set():
+                        # Failed before the turn was kept (its preparation): reported like any failed turn, so her
+                        # next turn here says so (ADR-119 F1); the message itself is not delivered again.
+                        self._report_fault({'_id': episode, 'scene_id': event['scene_id'], 'persona': self.settings['persona'],
+                                            'episode_kind': event.get('episode_kind') or 'external'}, error)
                     if ep and ep['state'] not in ('COMMITTED', 'WAITING_TASK'):
                         episode_records.save(self.app.store, {**ep, 'state': 'INTERRUPTED' if self.stopping.is_set() else 'FAILED_RUNTIME',
                                              'failure': error}, expected=ep['revision'], stream=episode)

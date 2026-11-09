@@ -9,7 +9,7 @@ reads.
 
 | # | Item | Closes when |
 |---|---|---|
-| D1 | Remove `memory_tiers.ENABLED` and its off branches | She has changed her `asuna-render-budget-per-place/budget_per_place.py:144` (it prints the switch); then the switch and its branches go, the two tests that turn it off go or test the one shape, and the suite is green **Built 2026-11-10**: the switch and every branch that read it are gone, with what only the off branches used (`rhythm.selections` and `promotion_candidates`, `context_budget.review_block`, the untiered tool budget); suite 962 passed, js 308 |
+| D1 | Remove `memory_tiers.ENABLED` and its off branches | She has changed her `asuna-render-budget-per-place/budget_per_place.py:144` (it prints the switch); then the switch and its branches go, the two tests that turn it off go or test the one shape, and the suite is green. **Built 2026-11-10** (0fa7d6fa): the switch and every branch that read it are gone, with what only the off branches used (`rhythm.selections` and `promotion_candidates`, `context_budget.review_block`, the untiered tool budget); suite 962 passed, js 308 |
 | D2 | `integration/test_data_child.py` off the real server | The data child's behaviour is tested without a real server (unit layer, in-memory adapter), the integration file keeps only adapter promises, and AGENTS.md's rule needs no exception. The child's deadline on a real server is no longer covered: say so here when built |
 | D3 | `routes.appraiser` and `routes.action.summaryEffort` on the settings card | Both show and save on the card through DSH's own facilities, shown in the isolated review profile, and the card's check covers them |
 

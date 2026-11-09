@@ -27,20 +27,13 @@ from .records import tasks as task_records
 from .records import memories as memory_records
 from .records import heads as head_records
 
-try:                                  # 宿主按包加载
-    from . import schedule_rules
-except Exception:                     # 同目录平铺加载（离线自检）也认
-    import schedule_rules
+from . import schedule_rules
 
-try:                                  # 跨场景只读联动（A2）：联动范围现算自配置
-    from . import scene_links
-except Exception:
-    scene_links = None                # 拿不到就整体不联动，与改动前逐字一致
+# 跨场景只读联动（A2）：联动范围现算自配置
+from . import scene_links
 
-try:                                  # 出站图片附件：本轮可引用清单 + 历史里的附件位
-    from . import outbound_media
-except Exception:                     # 拿不到就整体不带附件位，行形状与改动前逐字一致
-    outbound_media = None
+# 出站图片附件：本轮可引用清单 + 历史里的附件位
+from . import outbound_media
 
 # 主动机会给角色看的说明：只说清这是什么、她能选什么，不暗示她该说。
 CHAIN_NOTE = ('群里在跟队形：好几个人接连发了同一样东西，没人叫你。要跟就发同样的东西：一句话就照抄；'
@@ -403,9 +396,7 @@ class ContextBuilder:
         she still sees there (those rows, her last thoughts here, the lines queued behind the calling one), which the
         memories leave out."""
         scope=scene['scope_key']
-        read=(scene_links.read_scope(self.store.config,scene) if scene_links else
-              {'scene_id':scene['_id'],'scene_ids':[scene['_id']],'linked_scenes':[],
-               'scope_keys':[scope],'linked_scope_keys':[]})
+        read=scene_links.read_scope(self.store.config,scene)
         from .ingress import episode_id
         source = message_records.get(self.store, 'in-' + episode_id(event))
         # Newly accepted/future queued inputs must not enter an earlier turn.
@@ -601,9 +592,7 @@ class ContextBuilder:
         content_lines=[line for line in body.splitlines() if line.strip() and not line.startswith('#')]
         if len(''.join(content_lines))<80:
             raise ValueError('REQUIRED_PERSONA_BODY_MISSING')
-        target=(scene_links.relationship_target(self.store.config,self.store,scene,event['person_id'])
-                if scene_links else {'entity':'relationship:'+event['person_id'],'scope':scope,
-                                     'canonical':event['person_id'],'shared':False,'linked_scopes':[]})
+        target=scene_links.relationship_target(self.store.config,self.store,scene,event['person_id'])
         # 没配 canonical 映射时 target 就是原来那一份（relationship:<本人>｜本场景 scope）。
         relation=head_records.current(self.store,target['entity'],target['scope'])
         # The person layer (understanding.py): one record for this person, read wherever she meets them.
@@ -676,11 +665,10 @@ class ContextBuilder:
             row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
             if row.get('direction')!='outbound':
                 row.pop('episode_id',None)
-            if outbound_media is not None:
-                # 已送达的图在她历史里显示成「我发过这张图」；没跟着出去的、回执对不上的都另说，不含混。
-                slot=outbound_media.history_slot(row,self.store)
-                if slot:row['attachment']=slot
-                else:row.pop('attachment',None)
+            # 已送达的图在她历史里显示成「我发过这张图」；没跟着出去的、回执对不上的都另说，不含混。
+            slot=outbound_media.history_slot(row,self.store)
+            if slot:row['attachment']=slot
+            else:row.pop('attachment',None)
         found=self._memories(event,persona,scene,session_class,read,tail_sources,moment,recall=recall,
                              turn_kind=turn_kind,age_bound=age_bound,history_lines=history_lines)
         facts,memories,retrieval_manifest=found['facts'],found['memories'],found['retrieval']
@@ -887,17 +875,16 @@ class ContextBuilder:
             from .vision import media_note
             media=media_note(source,self.store.config)
             if media:context['media_from_program']=media
-        if outbound_media is not None:
-            # 本轮可随这条消息发出去的图片：程序给出的 artifact，不是文件路径；方向不对或没图就不出现。
-            offer=outbound_media.offer(self.store,self.store.config,scene,session_class,event['person_id'],
-                                     picked=(event.get('visit') or {}).get('artifact_id'))
-            if offer:context['image_artifacts_from_program']=offer
-            elif session_class==visibility.OWNER_PRIVATE:
-                # Looking does not wait on sending: where none of her pictures can go out (her local chat), she
-                # still sees her own newest ones listed, and read_image comes with them (role_tools.her_pictures).
-                from .vision import vision_capability as _vision
-                mine=outbound_media.own_pictures(self.store,moment) if _vision(self.store.config,'character')['supported'] else []
-                if mine:context['your_pictures_from_program']={'items':mine,'note':outbound_media.OWN_PICTURES_NOTE}
+        # 本轮可随这条消息发出去的图片：程序给出的 artifact，不是文件路径；方向不对或没图就不出现。
+        offer=outbound_media.offer(self.store,self.store.config,scene,session_class,event['person_id'],
+                                 picked=(event.get('visit') or {}).get('artifact_id'))
+        if offer:context['image_artifacts_from_program']=offer
+        elif session_class==visibility.OWNER_PRIVATE:
+            # Looking does not wait on sending: where none of her pictures can go out (her local chat), she
+            # still sees her own newest ones listed, and read_image comes with them (role_tools.her_pictures).
+            from .vision import vision_capability as _vision
+            mine=outbound_media.own_pictures(self.store,moment) if _vision(self.store.config,'character')['supported'] else []
+            if mine:context['your_pictures_from_program']={'items':mine,'note':outbound_media.OWN_PICTURES_NOTE}
         # ADR-092: the files her tasks registered that this conversation may send (a group whose adapter takes files).
         from . import outbound_files
         files=outbound_files.offer(self.store,scene)

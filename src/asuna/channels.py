@@ -44,10 +44,8 @@ def thread_stacks(admitting):
             for f in traceback.extract_stack(frame)[-STACK_DEPTH:]]
     return stacks
 
-try:                                  # 出站图片附件：元数据、字节端点的围栏都在 outbound_media
-    from . import outbound_media
-except Exception:                     # 同目录平铺加载（离线自检）也认
-    import outbound_media
+# 出站图片附件：元数据、字节端点的围栏都在 outbound_media
+from . import outbound_media
 
 
 def route_for_scene(config, channel_id, scene_id):

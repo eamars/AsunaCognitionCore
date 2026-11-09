@@ -35,49 +35,16 @@ from datetime import timedelta
 from .records import scenes as scene_records
 from .records import messages as message_records
 
-try:                                  # 宿主内：按包加载
-    from .history_query import (DEFAULT_LIMIT, DEFAULT_WINDOW_DAYS, MAX_LIMIT, HISTORY_TOOL_NAME,
-                                TIME_SOURCE_INBOUND, TIME_SOURCE_RECEIPT_AT, TIME_SOURCE_SINK,
-                                query_history, _parse as _parse_stamp, _text as _norm,
-                                _scene_parts, _row_allowed, _outbound_time, _sink_times,
-                                _stamp, _hit as _history_hit, person_values,
-                                _link_fields, bind_people,
-                                _bounded_text as _checked_text, _bounded_int as _checked_int,
-                                _bad_stamp, _bad_flag)
-except Exception:                     # 同目录平铺加载（离线自检）也认
-    try:
-        from history_query import (DEFAULT_LIMIT, DEFAULT_WINDOW_DAYS, MAX_LIMIT,
-                                   HISTORY_TOOL_NAME, TIME_SOURCE_INBOUND, TIME_SOURCE_RECEIPT_AT,
-                                   TIME_SOURCE_SINK, query_history, _parse as _parse_stamp,
-                                   _text as _norm, _scene_parts, _row_allowed, _outbound_time,
-                                   _sink_times, _stamp, _hit as _history_hit, person_values,
-                                   _link_fields, bind_people,
-                                   _bounded_text as _checked_text, _bounded_int as _checked_int,
-                                   _bad_stamp, _bad_flag)
-    except Exception as exc:
-        raise ImportError("discussion_digest needs the P1-b history_query module: %s" % exc)
-
-try:
-    from .peer_context import peer_from_message, verify_peer, channel_of
-except Exception:
-    try:
-        from peer_context import peer_from_message, verify_peer, channel_of
-    except Exception:
-        peer_from_message = verify_peer = channel_of = None
-
-try:
-    from .ingress import PROGRAM_AUTHOR
-except Exception:
-    PROGRAM_AUTHOR = "asuna:internal"      # 平铺加载（离线自检）：与 ingress.py 同值
-
-try:
-    from .state import Denied
-except Exception:
-    try:
-        from state import Denied
-    except Exception:
-        class Denied(PermissionError):
-            pass
+from .history_query import (DEFAULT_LIMIT, DEFAULT_WINDOW_DAYS, MAX_LIMIT, HISTORY_TOOL_NAME,
+                            query_history, _parse as _parse_stamp, _text as _norm,
+                            _scene_parts, _row_allowed, _outbound_time, _sink_times,
+                            _stamp, _hit as _history_hit, person_values,
+                            _link_fields, bind_people,
+                            _bounded_text as _checked_text, _bounded_int as _checked_int,
+                            _bad_stamp, _bad_flag)
+from .peer_context import peer_from_message, verify_peer, channel_of
+from .ingress import PROGRAM_AUTHOR
+from .state import Denied
 
 IDENTITY_NAMES = ("peer_from_message", "verify_peer", "channel_of")
 

@@ -45,10 +45,8 @@ def local_settings(config):
     return settings
 
 
-try:                                  # 跨场景只读联动（A2）
-    from . import scene_links
-except Exception:
-    scene_links = None
+# 跨场景只读联动（A2）
+from . import scene_links
 
 
 def seed_documents(store, settings):
@@ -77,8 +75,7 @@ def prepare_local_scene(store, settings):
     if authorized['kind'] != 'dm' or authorized['scope_key'] != scope:
         raise PermissionError('LOCAL_CHAT_SCENE_CONFIG_MISMATCH')
     seed_documents(store, settings)
-    if scene_links:
-        scene_links.sync_scene_docs(store, store.config, [scene])
+    scene_links.sync_scene_docs(store, store.config, [scene])
 
 
 class Chat:

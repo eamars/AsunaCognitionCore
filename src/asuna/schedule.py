@@ -21,10 +21,7 @@ from .records import receipts as receipt_records
 from .records import plans as plan_records
 from .records import tasks as task_records
 
-try:                                  # 宿主按包加载
-    from . import schedule_rules
-except Exception:                     # 同目录平铺加载（离线自检）也认
-    import schedule_rules
+from . import schedule_rules
 
 # Her rhythm plans belong to the program (ADR-012 §4.3): she never sees them in her plan list, so she cannot
 # cancel or retime them there; she sets the heartbeat's pace through her policy keys.

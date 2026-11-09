@@ -24,23 +24,13 @@ from .records import artifacts as artifact_records
 from .records import scenes as scene_records
 from .records import messages as message_records
 
-try:                                  # 宿主内：与 channels / history_query 同一套围栏
-    from .state import Denied
-    from .visibility import OWNER_PRIVATE
-except Exception:                     # 同目录平铺加载（离线自检）也认
-    from state import Denied
-    from visibility import OWNER_PRIVATE
+# 与 channels / history_query 同一套围栏
+from .state import Denied
+from .visibility import OWNER_PRIVATE
 
-try:                                  # 谁是同一个人、哪两个场景联动：只看配置（scene_links 是唯一来源）
-    from . import scene_links
-    from . import visibility
-except Exception:                     # 拿不到就只认本场景，与只开本场景时的行为逐字一致
-    try:
-        import scene_links
-        import visibility
-    except Exception:
-        scene_links = None
-        visibility = None
+# 谁是同一个人、哪两个场景联动：只看配置（scene_links 是唯一来源）
+from . import scene_links
+from . import visibility
 
 SHA256 = re.compile(r'^[0-9a-f]{64}$')
 
@@ -236,10 +226,7 @@ def target_allowed(config, scene, session_class):
     target = route_target(config, scene)
     if target is None:
         return False, 'scene_has_no_channel_route' if not (scene or {}).get('channel_id') else 'channel_route_not_authorized'
-    try:
-        from . import channel_kinds
-    except Exception:
-        import channel_kinds
+    from . import channel_kinds
     if not channel_kinds.sends_images((scene or {}).get('_id')):
         return False, 'channel_carries_text_only'
     if target == 'group' and (scene or {}).get('kind') == 'group':
@@ -262,7 +249,7 @@ def row_own_only(store, row):
     try:
         scene = scene_records.get(store, row.get('scene_id')) or {'_id': row.get('scene_id')}
         person = _route_person(store.config, scene, row.get('channel_id'))
-        return visibility is None or not person or             visibility.session_class(store.config, store, scene, person) != OWNER_PRIVATE
+        return not person or visibility.session_class(store.config, store, scene, person) != OWNER_PRIVATE
     except Exception:
         return True
 
@@ -327,7 +314,7 @@ def _linked_scene_ids(config, scene_id):
     owner_private 的数据带进 public 会话（public→private 那种降级由
     ``visibility.without_link_downgrades`` 在启动时挡掉）。别的场景对仍然按有向边读。
     """
-    if scene_links is None or not scene_id:
+    if not scene_id:
         return []
     try:
         links = scene_links.context_links(config)
@@ -341,7 +328,7 @@ def _linked_scene_ids(config, scene_id):
 
 
 def _canonical(config, store, person_id):
-    if scene_links is None or not person_id:
+    if not person_id:
         return person_id
     try:
         return scene_links.canonical_person_id(config, store, person_id)
@@ -360,7 +347,7 @@ def image_scopes(store, config, scene, session_cls=None, person_id=None):
     own = (scene or {}).get('scope_key')
     out = [own] if own else []
     scene_id = (scene or {}).get('_id')
-    if scene_links is None or visibility is None or not scene_id:
+    if not scene_id:
         return out
     if session_cls is None:
         try:
@@ -568,10 +555,7 @@ def kept_sticker(store, row, item):
     """This row sends a sticker, and its picture is one she keeps on her shelf."""
     if not isinstance((row or {}).get('sticker'), dict):
         return False
-    try:
-        from .stickers import on_shelf
-    except Exception:       # flat offline load: no shelf
-        return False
+    from .stickers import on_shelf
     return on_shelf(store, item['_id'])
 
 

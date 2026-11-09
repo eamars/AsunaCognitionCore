@@ -896,8 +896,6 @@ def g1_indexer_hands_every_scene_to_the_summarizer():
     indexer = MemoryIndexer(store, FakeEvidence(), [SCENE, GROUP], summary_lane=lane,
                             summary_scenes=[SCENE, GROUP])
     assert indexer.summarizer.scene_ids == [SCENE, GROUP], indexer.summarizer.scene_ids
-    legacy = MemoryIndexer(store, FakeEvidence(), SCENE, summary_lane=lane, summary_scene=SCENE)
-    assert legacy.summarizer.scene_ids == [SCENE], '旧接线参数还得能用'
     assert summarizer(store, FakeEvidence(), lane, moment=T0).tick('other-scene') is None
     return '索引线程把本机场景与每个授权群都交给摘要器；不是自己那份场景直接不判断'
 

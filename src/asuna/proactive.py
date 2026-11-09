@@ -19,16 +19,10 @@ import statistics
 from datetime import datetime, timezone
 from . import clock
 
-try:                                  # 宿主按包加载
-    from . import summary_trigger
-    from .history_query import (OUTBOUND, _outbound_time, _receipt_ref,
-                               _sink_times)
-    from .records import messages as message_records
-except Exception:                     # 同目录平铺加载（离线自检）也认
-    import summary_trigger
-    from asuna.records import messages as message_records
-    from history_query import (OUTBOUND, _outbound_time, _receipt_ref,
-                               _sink_times)
+from . import summary_trigger
+from .history_query import (OUTBOUND, _outbound_time, _receipt_ref,
+                           _sink_times)
+from .records import messages as message_records
 
 WAKE_REASON = 'proactive_unprompted'
 OUTCOME_WAKE = 'PROACTIVE_WAKE'

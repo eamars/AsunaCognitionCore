@@ -26,18 +26,11 @@ import statistics
 from datetime import datetime, timezone
 from . import clock
 
-try:                                  # 宿主按包加载
-    from .discussion_digest import (CONFIRM_CUES, CORRECTION_CUES, QUESTION_CUES, QUESTION_MARKS,
-                                    _first_cue)
-    from .history_query import (OUTBOUND, _outbound_time, _receipt_ref,
-                               _sink_times, _stamp)
-    from .records import messages as message_records
-except Exception:                     # 同目录平铺加载（离线自检）也认
-    from asuna.records import messages as message_records
-    from discussion_digest import (CONFIRM_CUES, CORRECTION_CUES, QUESTION_CUES, QUESTION_MARKS,
-                                   _first_cue)
-    from history_query import (OUTBOUND, _outbound_time, _receipt_ref,
-                               _sink_times, _stamp)
+from .discussion_digest import (CONFIRM_CUES, CORRECTION_CUES, QUESTION_CUES, QUESTION_MARKS,
+                                _first_cue)
+from .history_query import (OUTBOUND, _outbound_time, _receipt_ref,
+                           _sink_times, _stamp)
+from .records import messages as message_records
 
 # 形状参数与安全上下界：它们决定「怎么算」和「别算飞了」，不决定「第几条／第几秒触发」。
 OBSERVE_ROWS = 120          # 每个场景最多回看多少行来归纳节奏（有界扫描，不是触发条件）

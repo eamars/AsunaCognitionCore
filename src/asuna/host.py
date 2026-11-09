@@ -27,10 +27,8 @@ from .records import people as people_records
 # lost heartbeat is found on a day when nobody talks to her too. It only checks; the clock stays DSH's.
 RHYTHM_WATCH_SECONDS = 300
 
-try:                                  # 跨场景只读联动（A2）
-    from . import scene_links
-except Exception:
-    scene_links = None
+# 跨场景只读联动（A2）
+from . import scene_links
 
 
 def _workspace_overlaps(workspace, ordered, known):
@@ -193,7 +191,7 @@ def prepare_channels(store, *, dry_run=False):
                 workspaces.add(workspace)
                 _bind_identity(put, identities_by_id, channel_id, route, kind, sender, person)
             _route_scene(store, local, channel_id, channel, scene_id, kind, people, save_scene)
-    if scene_links and not dry_run:
+    if not dry_run:
         # 派生投影：联动边写进 scenes，只为可观察；读路径每次现算自配置。
         scene_links.sync_scene_docs(store, store.config, sorted(scene_ids | {local['scene_id']}))
     _WORKSPACES[store] = workspaces
@@ -234,8 +232,7 @@ def prepare_admission(store, channel_id, route_id, route, sender, *, dry_run=Fal
     people = [other['person_id'] for other_sender, other in members.items() if _speaks(channel, route, kind, other_sender)]
     _route_scene(store, local, channel_id, channel, scene_id, kind, people, save_scene)
     if not dry_run:
-        if scene_links:
-            scene_links.sync_scene_docs(store, store.config, [scene_id])
+        scene_links.sync_scene_docs(store, store.config, [scene_id])
         workspaces.add(workspace)
     return route
 

@@ -16,16 +16,10 @@
 """
 from __future__ import annotations
 
-try:                                  # 宿主按包加载
-    from .discussion_digest import CORRECTION_CUES, SELF_REFERENCE_CUES, _first_cue
-    from .state import Conflict, now
-    from .records import messages as message_records
-    from .records import memories as memory_records
-except Exception:                     # 同目录平铺加载（离线自检）也认
-    from discussion_digest import CORRECTION_CUES, SELF_REFERENCE_CUES, _first_cue
-    from state import Conflict, now
-    from asuna.records import messages as message_records
-    from asuna.records import memories as memory_records
+from .discussion_digest import CORRECTION_CUES, SELF_REFERENCE_CUES, _first_cue
+from .state import Conflict, now
+from .records import messages as message_records
+from .records import memories as memory_records
 
 SNIPPET = 120            # 条目里只带显示片段，全文仍按 source_event_ids 回读
 MAX_CORRECTIONS = 8      # 一条摘要上最多带几条更正标注

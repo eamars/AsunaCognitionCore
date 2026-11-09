@@ -46,10 +46,7 @@ import json
 import re
 from datetime import datetime, timedelta, timezone
 
-try:
-    from . import channel_kinds
-except ImportError:                   # 同目录平铺加载（离线自检）：用同一份已装平台登记
-    from asuna import channel_kinds
+from . import channel_kinds
 
 # ── 身份解析：宿主 peer_context.py 已提供这三个公开函数，顶层直接导入 ──────────
 # 2026-09-24 宿主侧只读组合导入实测：当前 src/asuna/peer_context.py 三项齐全
@@ -57,13 +54,7 @@ except ImportError:                   # 同目录平铺加载（离线自检）�
 # 上一版另加过注入入口与 sys.modules 惰性采纳，为的是“宿主可能晚导入 peer_context”；
 # 那个前提在真宿主上不成立，协议没有需求方，已按 ADR-005 薄接线撤掉。
 # 宿主那份没有 _group_token / _norm_person，两个纯字符串解析在本模块内自带。
-try:                                  # 宿主按 src.asuna.history_query 加载时走这条
-    from .peer_context import peer_from_message, verify_peer, channel_of
-except Exception:                     # 同目录平铺加载（离线自检）也认
-    try:
-        from peer_context import peer_from_message, verify_peer, channel_of
-    except Exception:                 # 更旧的宿主连这三个都没有：降级，不带崩查询主干
-        peer_from_message = verify_peer = channel_of = None
+from .peer_context import peer_from_message, verify_peer, channel_of
 
 IDENTITY_CONTRACT = ("peer_from_message(doc) -> dict|None；channel_of(doc) -> dict|None；"
                      "verify_peer(peer, channel) -> (bool, reason)")
@@ -127,23 +118,13 @@ DEFAULT_WINDOW_DAYS = 7
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 
-try:                                  # 出站图片附件：已送达历史里的附件位（拿不到就不带，行形状不变）
-    from . import outbound_media
-except Exception:
-    try:
-        import outbound_media
-    except Exception:
-        outbound_media = None
+# 出站图片附件：已送达历史里的附件位
+from . import outbound_media
 
-try:                                  # 宿主内：联动场景与 canonical person 都现算自配置
-    from . import scene_links
-except Exception:                     # 同目录平铺加载（离线自检）也认
-    try:
-        import scene_links
-    except Exception:                 # 更薄的环境里没有：照实不联动，不猜范围
-        scene_links = None
+# 联动场景与 canonical person 都现算自配置
+from . import scene_links
 
-MAX_LINKED_SCENES = getattr(scene_links, 'MAX_LINKS', 8)
+MAX_LINKED_SCENES = scene_links.MAX_LINKS
 RENDER_SNIPPET = 200
 ID_FIELD = "_id"
 # 第三支的单页预算：每轮最多看这么多条送达回执、一页最多这么多轮。它只限制「这一页干多少活」，
@@ -253,10 +234,7 @@ def bind_people(store, scene, scene_doc, person):
     Returns a notice when the text names nobody here, or several people (a copied name);
     then the caller answers with the notice instead of querying.
     """
-    try:
-        from .people import People
-    except Exception:                  # 同目录平铺加载（离线自检）：照旧按名字过滤
-        return None
+    from .people import People
     people = People(store)
     scene_doc["labeler"] = people.row_head
     def archive_label(row):
@@ -498,10 +476,7 @@ def _streams(parts):
 
 
 def _forward_text(doc):
-    try:
-        from .forwards import search_text
-    except ImportError:
-        return ""
+    from .forwards import search_text
     return search_text(doc)
 
 
@@ -530,11 +505,10 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
         return dict(base, archived=True, who=who, speaker=who, person_id='', names=[])
     if doc.get("errand"):
         base["errand"] = LINE_MARK                     # ADR-066: her line sent on an errand from home
-    if outbound_media is not None:
-        # 附件位只在这条真的带过图时出现；没带图的命中与改动前逐字一致。
-        slot = outbound_media.history_slot(doc)
-        if slot:
-            base["attachment"] = slot
+    # 附件位只在这条真的带过图时出现；没带图的命中与改动前逐字一致。
+    slot = outbound_media.history_slot(doc)
+    if slot:
+        base["attachment"] = slot
     labeler = (parts or {}).get("labeler")
     if labeler:
         # Who wrote it, by fixed label (people.py): names can repeat or be copied, labels can't.
@@ -950,14 +924,8 @@ from .config import echoed
 from .errands import LINE_MARK
 
 
-try:                                  # 宿主内：复用已有的 Denied 语义（409 失败回执走原路径）
-    from .state import Denied
-except Exception:                     # 同目录平铺加载（离线自检）也认
-    try:
-        from state import Denied
-    except Exception:                 # 更薄的环境里自带同型异常，不改变调用方的分支写法
-        class Denied(PermissionError):
-            pass
+# 复用已有的 Denied 语义（409 失败回执走原路径）
+from .state import Denied
 
 HISTORY_TOOL_NAME = "query_authorized_history"
 HISTORY_TOOL = {
@@ -1088,9 +1056,7 @@ def _cursor_after_delivered(delivered, inner_cursor):
 
 
 def _link_fields(store, scene_doc, person=""):
-    """把配置派生的联动范围装进 scene_doc：scene_links 不在就照实不联动。"""
-    if scene_links is None:
-        return {}
+    """把配置派生的联动范围装进 scene_doc。"""
     fields = {"readable_scenes": scene_links.readable_scenes(getattr(store, "config", None),
                                                              scene_doc["scene_id"])}
     try:

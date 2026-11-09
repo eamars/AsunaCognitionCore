@@ -17,7 +17,7 @@ class _Waiting(Exception):
 
 
 class MemoryIndexer:
-    def __init__(self, store, evidence, scene_id, *, summary_lane=None, summary_scene=None, summary_scenes=None, summary_can_run=lambda: True):
+    def __init__(self, store, evidence, scene_id, *, summary_lane=None, summary_scenes=None, summary_can_run=lambda: True):
         self.store, self.evidence, self.scene_id = store, evidence, scene_id
         self.scene_ids = [scene_id] if isinstance(scene_id, str) else list(scene_id)
         self.stopping = threading.Event()
@@ -25,9 +25,8 @@ class MemoryIndexer:
         self.retrieval.http.client.timeout = httpx.Timeout(10, connect=5)
         self.worker = threading.Thread(target=self._run, name='asuna-memory', daemon=True)
         self.summarizer = None
-        # P2: 摘要跟着场景走——本机私聊和每个已授权群都要有自己的节奏与归属，
-        # 不再只绑一个 scene_id（summary_scene 保留兼容旧接线）。
-        scenes = list(summary_scenes) if summary_scenes else ([summary_scene] if summary_scene else [])
+        # P2: 摘要跟着场景走——本机私聊和每个已授权群都要有自己的节奏与归属。
+        scenes = list(summary_scenes or [])
         if summary_lane and scenes:
             from .dialogue_summary import DialogueSummarizer
             self.summarizer = DialogueSummarizer(store, evidence, summary_lane, scenes, summary_can_run)

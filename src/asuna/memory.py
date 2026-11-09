@@ -18,10 +18,8 @@ from .records import scenes as scene_records
 from .records import memories as memory_records
 from .records import heads as head_records
 
-try:                                  # 跨场景只读联动（A2）：关系记录落在哪一份由配置决定
-    from . import scene_links
-except Exception:
-    scene_links = None
+# 跨场景只读联动（A2）：关系记录落在哪一份由配置决定
+from . import scene_links
 
 
 
@@ -54,11 +52,8 @@ class MemoryService:
         elif layer=='person':
             result=self._commit_person(episode,body,scope,operation,person_id,short,base)
         else:
-            entity='relationship:'+person_id
-            target_scope,linked=scope,[]
-            if scene_links:
-                target=scene_links.relationship_target(self.store.config,self.store,scene,person_id)
-                entity,target_scope,linked=target['entity'],target['scope'],list(target['linked_scopes'])
+            target=scene_links.relationship_target(self.store.config,self.store,scene,person_id)
+            entity,target_scope,linked=target['entity'],target['scope'],list(target['linked_scopes'])
             # 本轮上下文里给她看的那一份优先（manifest 记的是她实际读到的 head）；但它只能是本场景
             # 那一份，或配置认定同一个人时的那一份——别的都算越权，不给「看起来连着」的错写。
             key=(episode['manifest'].get('relationship_entity_key') if own and base is None else None) or (entity+'|'+target_scope)

@@ -9,10 +9,7 @@ Adapted from the persona's ADR-005 development draft (host_wiring/peer_context.p
   持久消息      message['event']['raw']['asuna_peer']  （落库后跟着事件走的那一层）
 不是 message['raw']。读不到就返回 None：没有身份块就别让角色以为自己知道什么。
 """
-try:
-    from . import channel_kinds
-except ImportError:                   # history_query 的平铺加载（离线自检）：用同一份已装平台登记
-    from asuna import channel_kinds
+from . import channel_kinds
 
 PEER_KEY = "asuna_peer"
 MENTIONED_KEY = "asuna_mentioned"

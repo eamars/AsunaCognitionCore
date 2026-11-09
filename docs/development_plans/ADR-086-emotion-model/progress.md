@@ -119,12 +119,18 @@ Description, not evidence (her rule: across kinds): the face alone, no sentence,
 12 of 50 (Fisher p 0.0002). The moment matters most of all: two moments (a direct opinion ask, a small ask) draw her in
 nearly every run, one (a joke chain) almost never.
 
-**Verdict.** The old sentences, written as promises about length and amount ("话会多一点", "话少一些", "说得更短更直"),
-changed neither in any kind: as rules they were decoration. Her new sentences read as attention defaults and do no
-harm; sadness's new one ("先顾眼前该应的那一件") drew her in 10 more times of 50 than its control, the only arm near a
-real effect, not shown after correction. Mood → behaviour through the pull sentence: **not shown**; through the band
-face: seen, as description. The pull sentence stays as she wrote it (no rule is read into it any more); the band display
-stays; no further steering mechanism is built. §9 is closed on this probe.
+**Verdict: not shown** (made group scenes, her local model, 50 runs a cell, nine comparisons, none left after Holm).
+That is "not measured", not "has no effect". The old sentences, written as promises about length and amount
+("话会多一点", "话少一些", "说得更短更直"), showed no change in either. Her new sentences stay as she wrote them, in her own
+voice, and no rule is read from them; the band display stays; no further steering mechanism is built. §9 is closed on
+this probe, and its final value for the sentence's effect is **not shown**.
+
+If anyone measures again, the two directions to look at (neither is part of the conclusion): joy old 40 vs none 31
+(the old sentence promised more words), and sadness new 22 vs none 12.
+
+These numbers are **made**: built group scenes on a local model. They are a different source from §9's stage-2 reading
+of her real ledger above (愉快 join 40%, median 21 characters over 19 lines), and the two point in opposite directions
+for 愉快. Neither stands in for the other; "愉快脸 31/50" does not mean she talks more in her groups when she is 愉快.
 
 Evidence: `.runtime/private/adr086-1109/mood-probe-400.json` (184 KB: per-run counts, gate verdicts and part kinds; no
 text of hers), the probe and its fixtures in `tools/mood_probe.py`, `tools/fixtures/mood_probe/`.

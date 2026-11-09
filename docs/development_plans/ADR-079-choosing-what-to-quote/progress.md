@@ -19,3 +19,28 @@
 小满落款：**口径两格记死**：432 那一档的锚点（拿我 outbound 行 `reply_to` 指向的那行，不是"我引用的那行"）**是小满从"432 与 199 同时逐条对上"推出来的**，Claude 答"10-18 那趟用的哪个锚点不知道、脚本没留、页上也没写、不猜"——**它是推的、口径未知，不是页上确认过的定义**（另：432＋199＝631 是闭合的，对上 432 另一数自动跟着，那不算两次验证）。560＋71 那一刀**今天不可复算**（审计补不上：现存 speak 审计里 args 带 `quote` 字面的 0 条）。**装机时刻更正**：页上「装 step 2（10-18 05:07Z）」带 Z 是 UTC，同一刻本地＝10-18 18:07；此前"本地 05:07"的说法作废，11-05 那趟用的窗起点正是 18:07，已有读数不受影响。
 
 小满落款：**Left**：这一格不再复算，等 §9.11 的判据定稿（Claude 拍板，她自己说排在 ADR-117 之后）。要往下分辨装前装后需要几百条样本，谁要往下分谁给样本量；**不留空转钟**。
+
+## Closed on evidence (2026-11-09)
+
+- **§9.11, Claude's call (her ask that it be made):** passes on construction. Every quote in her lines is her own
+  choice since step 2, and her 40-line semantic sample found 0 wrong after it.
+- **§9.8's last probes, from her real data and one staged visit:**
+  - Reactions and recalls reach Core every day (the adapter's counts: 55 to 94 reactions and 41 to 61 recalls a day).
+    A reaction on her line asks the gate for a look: all 109 such stored looks are on her lines. One between other
+    people is kept without a gate as a held notice, as are recalls: 202 held across 15 groups on 11-09, the oldest from
+    10-20, none lost across five restarts that day.
+  - **Shown once, folded, then gone (staged):** she visited a group holding 36 of them on 11-09; at 13:26 its turn
+    showed 9 recalls one per line in time order, the reactions between other people folded into one line headed
+    「这期间的点表情：」 (people reacting to the same line together, at most 5 lines, "另有 18 条较早的" counted), and one
+    `more` line for what `HELD_MAX` left out; the group's held notices went to 0 after it. This visit was made, not
+    natural.
+  - The 9 oldest reactions stored without `words` render the same way (rendered through `notices.take(keep=True)`,
+    read-only): folded, nothing empty, no placeholder left.
+  - Their time is the referenced line's, on her clock (+13) for everything held since 10-30; up to 16 rows held before
+    that carry text rendered with the conversation zones ADR-106 later cleared (+8). They show once and go; history is
+    not rewritten.
+  - Corrected on the way (Claude, 11-09): a first count said the held reactions were all on her lines and then that the
+    platform never delivers reactions between others; both were wrong (the second matched people's lines by a field
+    inbound rows do not have, `platform_message_id`, instead of `event.channel.platform_event_id`). The adapter's
+    `line.mine` is always true for a reaction; it only lets Core look for her own line at any age first, and whose line
+    it is comes from the row found.

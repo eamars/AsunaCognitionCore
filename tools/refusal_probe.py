@@ -87,8 +87,9 @@ class Anthropic:
     def call(self, system, messages, schemas, names):
         import httpx
         body = {'model': self.model, 'max_tokens': self.max_tokens, 'messages': messages,
-                'system': [{'type': 'text', 'text': system, 'cache_control': {'type': 'ephemeral'}}],
-                'tools': anthropic_tools(schemas, names)}
+                'system': [{'type': 'text', 'text': system, 'cache_control': {'type': 'ephemeral'}}]}
+        if names:
+            body['tools'] = anthropic_tools(schemas, names)
         headers = {'x-api-key': self.key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json'}
         if self.effort:
             marker = {'role': 'system', 'content': [], 'output_config': {'effort': self.effort}}
@@ -115,9 +116,10 @@ class OpenAICompatible:
 
     def call(self, system, messages, schemas, names):
         import httpx
-        body = {'model': self.model, 'max_tokens': self.max_tokens, 'messages': to_openai(system, messages),
-                'tools': [{'type': 'function', 'function': {'name': name, 'description': schemas[name]['description'],
-                                                            'parameters': schemas[name]['parameters']}} for name in names]}
+        body = {'model': self.model, 'max_tokens': self.max_tokens, 'messages': to_openai(system, messages)}
+        if names:                 # a request with no tools (the relevance gate's) sends none, as DSH does
+            body['tools'] = [{'type': 'function', 'function': {'name': name, 'description': schemas[name]['description'],
+                                                               'parameters': schemas[name]['parameters']}} for name in names]
         headers = {'content-type': 'application/json', **({'authorization': 'Bearer ' + self.key} if self.key else {})}
         data = post(httpx, self.url, headers, body)
         choice = (data.get('choices') or [{}])[0]

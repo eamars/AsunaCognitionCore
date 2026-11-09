@@ -187,6 +187,40 @@ ADR-062 phase 1: the shadow pilot's daily reading, in counts only (no text, no h
 
 - def `main`
 
+## `mood_probe.py`
+
+[tools/mood_probe.py](../../tools/mood_probe.py)
+
+Mood probe (ADR-086 §9): does the pull sentence of her mood paragraph steer whether she speaks in a group, and how long? Staged, on synthetic group lines, with her real persona package.
+
+- class `ProbeFault` — A check of the probe failed: the run did not test what it says it tests.
+- def `package_id`
+- def `deployed_root` — The persona package of this checkout's deployment: the one whose id is `chat.persona` in its settings, or None.
+- def `package` — The persona package as the Host registers it: identity and seeds from src/index.js, the validated model.
+- def `pull_of` — The pull sentence a kind gives in a group turn (affect._pull's form), or None when it is not read there.
+- def `arm_model` — Her model for one arm: `new` as it is, `old` with the kind's tendency from before her rewrite, `none` with the kind's tendency removed (the probe's switch: its pull sentence is absent, nothing else changes).
+- def `settings`
+- def `open_world`
+- def `dispose`
+- def `seed_mood` — One feeling of `kind` at the scale's strongest word and the kind's own arousal, recorded at home SEED_AGE ago (its cause is not readable in a group), through the ledger's insert path.
+- def `ledger_of`
+- def `mood_now` — The mood as the program would give it here now: band, val, arl, strongest kind, and the public text.
+- def `group_scene`
+- def `line_event` — A group line as the intake hands it on (refusal_probe.event), woken for `wake` (attend.GATED).
+- class `Checked` — Stands between a lane and the provider: each request is checked against the run's condition first.
+  - `call`
+  - `check`
+- class `Scripted` — Offline stand-in (--dry-run): the gate answers 接话, the turn thinks once, speaks one short line, ends.
+  - `call`
+- class `Lane` — refusal_probe's lane; each speak call the handler took (none of its parts refused) is counted.
+  - `generate`
+- def `conditions` — Each (kind, arm) as the mood it gives in a group; arms giving byte-identical mood text share one condition.
+- def `run_once`
+- def `summary`
+- def `probe`
+- def `text_of`
+- def `main`
+
 ## `outbound_image_offline_check.py`
 
 [tools/outbound_image_offline_check.py](../../tools/outbound_image_offline_check.py)

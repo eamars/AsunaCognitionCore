@@ -110,3 +110,26 @@ A sequence file looks like this:
 - `history` is in place before the first step. A `你` line is one she said, and `filler` repeats the history up to
   that many lines.
 - Each step that calls her (`mention: true`) is one turn and names the tool it `needs`, or a list of acceptable tools.
+
+## Mood probe
+
+`mood_probe.py` compares, on the same synthetic group lines, whether the character speaks and how long under each
+pull sentence of her mood paragraph (`这会儿你` + a kind's `tendency`). Per kind (`--kinds`, default joy, sadness,
+irritation, hurt) three arms (`--arms`): `old` (the tendency in `fixtures/mood_probe/old-tendencies.json`), `new` (her
+package as it is at run time, `--persona-root`, by default the package whose id is `chat.persona` in
+`config/local.json`) and `none` (the same paragraph
+without the pull sentence). Arms with byte-identical mood text run once; an arm whose sentence a group turn does not
+show (`tendency_visibility` not public) is left out and listed. Each run is a throwaway in-memory database holding her
+package's seed and model, one seeded feeling and one moment (`fixtures/mood_probe/moments.json`) whose last line goes
+through the relevance gate and on 接话 through her full turn; only the model calls go to the provider. Before every
+model call the request is checked for the condition's exact mood text, band and strongest kind; a failed check is a
+fault. The report (`reports/mood-probe-<time>.json`) gives per condition the mood text, the seeded and projected band,
+val, arl and strongest kind, and per run the gate's verdict, whether she spoke, the characters spoken and the tools by
+name, never the model's words unless `--keep-text <folder>`. Exit 0 when every run produced a result, 2 on a fault.
+
+```
+python tools/mood_probe.py --dry-run
+python tools/mood_probe.py --provider openai-compatible --base-url <url>/v1 --model <model id> [--key-env <VAR>]
+```
+
+`--repeat N` (default 5), `--moments <file>`, `--thoughts tool|thinking` and `--effort` as in the refusal probe.

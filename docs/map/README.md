@@ -508,7 +508,7 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`check_staged_secrets.py`](../../tools/check_staged_secrets.py) — Report paths only; never print configured secret values or matching bytes.
 - [`cleanup_test_databases.py`](../../tools/cleanup_test_databases.py) — Inventory or remove only explicitly inventoried Asuna test databases.
 - [`import_native_credentials.mjs`](../../tools/import_native_credentials.mjs) — One-time private migration through DSH's credential provider; never logs values.
-- [`integration_import_offline_check.py`](../../tools/integration_import_offline_check.py) — 集成产物导入的离线自检：不需要 Mongo、不需要 pytest、不需要 WSL，直接跑同一套用例。
+- [`integration_import_offline_check.py`](../../tools/integration_import_offline_check.py) — 集成产物导入的离线自检：不需要 Mongo、不需要 pytest，直接跑同一套用例。
 - [`journal_import.py`](../../tools/journal_import.py) — ADR-117 L4's one-off: one of her working documents becomes a running record, one row per section.
 - [`make_demo_config.py`](../../tools/make_demo_config.py) — Create the ignored demo config (ADR-009 §0.3) from config/demo.example.json.
 - [`memory_fires_report.py`](../../tools/memory_fires_report.py) — ADR-097: the reading of what came back, from the count rows (memory_fires), in counts only (no text, word, heading, query, id or place name).
@@ -528,7 +528,6 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`probe_plugin_install.mjs`](../../tools/probe_plugin_install.mjs) — Probe of a clean install: the packed tarballs go into a new DSH profile outside this checkout, and every core export and persona package resolves and imports through DSH's public resolver.
 - [`project_map.py`](../../tools/project_map.py) — Write the project map (docs/map): what each module owns and what it offers, from the code's own docstrings.
 - [`publication_scan.py`](../../tools/publication_scan.py) — The checks that guard main, run on a candidate before it is published (`PublicationFloor.publish`, packages/cognition-core/src/floor.js), so a publication is refused where it can still be fixed:
-- [`qq_face_census.py`](../../tools/qq_face_census.py) — ADR-103: what the faces, stickers and face clicks people send her look like in the stored rows, in counts only.
 - [`refusal_probe.py`](../../tools/refusal_probe.py) — Refusal probe (ADR-080): can the model under test do what the character brain needs with the current design, without being refused? PASS or FAIL, for that model on that day.
 - [`release.py`](../../tools/release.py) — Build and check a GitHub Release of the distributable plugins (ADR-010 D10).
 - [`setup_native_profile.py`](../../tools/setup_native_profile.py) — Install the core, one persona package and its channel packages into a local-only native Web profile.

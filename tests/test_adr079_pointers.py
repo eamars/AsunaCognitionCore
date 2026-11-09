@@ -9,7 +9,6 @@ import pytest
 
 from asuna import capabilities
 from asuna.role_tools import LINE_NUMBER, NUMBER_NOT_WORDS, reply_receipt
-from test_people import GROUP
 
 
 @pytest.fixture(autouse=True)

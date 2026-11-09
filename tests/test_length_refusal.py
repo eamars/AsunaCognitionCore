@@ -3,7 +3,7 @@ over she went, the aim, where the line comes from and where the excess starts, b
 offers no cut and does not judge which part to drop; a list she writes also says on which line the excess starts. A text
 between the aim and the line is kept and the result says the fact, without leniency."""
 from asuna import role_tools, schedule
-from asuna.config import CUT_MARK, cut, excess_line, over, soft, too_long
+from asuna.config import CUT_MARK, cut, excess_line, over, soft
 
 
 def tools():

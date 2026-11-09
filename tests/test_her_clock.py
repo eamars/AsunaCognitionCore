@@ -4,7 +4,6 @@ import itertools
 import json
 from datetime import datetime, timezone
 
-import pytest
 
 from asuna import dbread, schedule_rules
 from asuna.records import plans as plan_records

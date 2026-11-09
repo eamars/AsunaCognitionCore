@@ -3,7 +3,6 @@ looks one up by its id answers with the one sentence, never "not found", and a s
 that names the erased file or picture. A row outside the caller's fence is refused as before, so the sentence never
 tells anyone that a row they may not see exists."""
 import ast
-from pathlib import Path
 
 
 from asuna.config import ROOT

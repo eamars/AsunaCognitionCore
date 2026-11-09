@@ -1,5 +1,5 @@
 """ADR-028: a conversation that no longer fits the model's window continues in a new session carrying its last
-summary. These tests use an in-memory Mongo; they create no database."""
+summary. These tests use the in-memory store; they create no database."""
 from types import SimpleNamespace
 
 import pytest

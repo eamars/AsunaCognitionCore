@@ -2,7 +2,7 @@
 there (or a line naming the question, or the task's report), lapsing past their patience, closed by her or once by the
 program, and shown at home once per change without repeating a text in the same notice."""
 
-from asuna import notes, questions
+from asuna import questions
 from asuna.channels import kept_raw
 
 HOME = {'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '在吗'}

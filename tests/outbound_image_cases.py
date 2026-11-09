@@ -315,24 +315,6 @@ class Collection:
     def count_documents(self, query=None):
         return len([row for row in self.docs.values() if _match(row, query or {})])
 
-    def find_one_and_update(self, query, update, return_document=None):
-        '''只实现 coordinator 写 SPEAK 行取场景序号用到的 $inc／$set，返回改后的那份（AFTER）。'''
-        for row in self.docs.values():
-            if _match(row, query):
-                for field, step in (update.get('$inc') or {}).items():
-                    row[field] = (row.get(field) or 0) + step
-                for field, value in (update.get('$set') or {}).items():
-                    row[field] = value
-                unknown = set(update) - {'$inc', '$set'}
-                if unknown:
-                    raise AssertionError('假集合没实现的更新操作符：%s' % sorted(unknown))
-                return copy.deepcopy(row)
-        return None
-
-    def distinct(self, field, query=None):
-        return sorted({row.get(field) for row in self.docs.values()
-                       if _match(row, query or {}) and row.get(field) is not None})
-
 
 class DB:
     def __init__(self):
@@ -395,15 +377,6 @@ class FakeStore:
         self.audit(stream, 'state.commit', {'collection': collection, 'id': doc['_id']},
                    doc.get('scope_key', 'operator'))
         return doc
-
-    def authorize(self, scene_id, person_id):
-        scene = self.db.scenes.find_one({'_id': scene_id})
-        if not scene or person_id not in scene['members']:
-            raise Denied('SCENE_MEMBERSHIP_DENIED')
-        return scene
-
-    def next_scene_seq(self, scene_id):
-        return len(list(self.db.messages.find({'scene_id': scene_id}))) + 1
 
 
 class FakeEvidence:
@@ -672,7 +645,7 @@ def endpoint_checks_scope_and_sha():
 
     # 存进去的字节被换掉：BlobStore 读时按行内 sha 复核必须发现
     store3, stored3 = world()
-    row3 = sending_row(store3, stored3)
+    sending_row(store3, stored3)
     store3.db.tamper(_gridfs_id(store3, stored3['artifact_id']), b'tampered-bytes')
     try:
         outbound_media.serve(store3, BlobStore(store3), store3.db.messages.find_one({'_id': 'out-1'}),

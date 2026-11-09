@@ -5,7 +5,6 @@ Does not call a model or contact a platform. Browser evidence is separate.
 import argparse
 import json
 import uuid
-from pathlib import Path
 from types import SimpleNamespace
 
 import httpx

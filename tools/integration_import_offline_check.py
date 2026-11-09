@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""集成产物导入的离线自检：不需要 Mongo、不需要 pytest、不需要 WSL，直接跑同一套用例。
+"""集成产物导入的离线自检：不需要 Mongo、不需要 pytest，直接跑同一套用例。
 
 用法：python3 tools/integration_import_offline_check.py
 它验证的是判定与写入围栏（端点别名白名单、URL 拒绝、工作区边界、默认不覆盖、大小上限、
-失败原因映射），以及 127.0.0.1 上真 HTTP 取字节；真 WSL 命名空间里「只有配置的中继可达」
-由 tools/probe_integration_transport.py 与 tests/test_integration.py 在隔离宿主复测，
-两者不互相代替。
+失败原因映射），以及 127.0.0.1 上真 HTTP 取字节。
 """
 import os
 import sys

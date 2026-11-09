@@ -23,7 +23,6 @@ import pytest
 
 from asuna import repo_files
 from asuna.config import ROOT,DATA
-from asuna.evidence import write_json,sha
 from asuna.testing import remove_workspace
 from asuna import channel_kinds
 
@@ -78,7 +77,6 @@ def _cannot_confine():
 # Whether a confined command really runs here is measured once (one confined write); where none can (no runner, as on
 # a host without DSH's sandbox package, or a run that is itself confined), a test skips at the command it would run:
 # what it checks there is unchecked, not passed.
-HOST_SANDBOX=True
 CANNOT_CONFINE=_cannot_confine()
 UNCHECKED='UNCHECKED, not passed: no confined command runs in this run (%s)'%CANNOT_CONFINE
 
@@ -113,24 +111,6 @@ def no_machine_zone(monkeypatch):
     # sets neither reads UTC whatever zone the runner is in, and a test that wants the machine's sets it itself.
     monkeypatch.delenv('TZ',raising=False)
     monkeypatch.delenv('ASUNA_HOST_TIMEZONE',raising=False)
-
-@pytest.fixture(autouse=True)
-def preserve_temporary_evidence(request):
-    root=os.environ.get('ASUNA_TEST_EVIDENCE_ROOT')
-    temporary=request.getfixturevalue('tmp_path') if root and 'tmp_path' in request.fixturenames else None
-    yield
-    if temporary is None:return
-    destination=Path(root).resolve()/sha(request.node.nodeid.encode())[:16]/'temporary-evidence'
-    assert destination.is_relative_to((ROOT/'reports').resolve())
-    files=[]
-    for source in temporary.rglob('*'):
-        if not source.is_file():continue
-        assert source.resolve().is_relative_to(temporary.resolve())
-        target=destination/source.relative_to(temporary);target.parent.mkdir(parents=True,exist_ok=True)
-        shutil.copyfile(source,target)
-        files.append({'artifact_path':target.relative_to(ROOT).as_posix(),'sha256':sha(target.read_bytes())})
-    write_json(destination/'capture.json',{'node_id':request.node.nodeid,'files':files,'purpose':'preserve actual loopback and renderer artifacts from passing or failed tests'})
-    request.node.user_properties.append(('auxiliary_evidence_path',destination.relative_to(ROOT).as_posix()))
 
 FIXTURES=Path(__file__).with_name('fixtures')
 

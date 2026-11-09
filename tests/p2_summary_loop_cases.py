@@ -173,10 +173,6 @@ class FakeCursor:
             self.rows.sort(key=lambda d: (d.get(key) is None, d.get(key)), reverse=direction < 0)
         return self
 
-    def limit(self, count):
-        self.rows = self.rows[:count]
-        return self
-
     def __iter__(self):
         return iter(self.rows)
 
@@ -220,7 +216,7 @@ class FakeDB:
 def bind_store(rows_by_collection=None, workspace=True):
     '''真 Store 建在假库之上（Store.over，内存适配器读写假库自己的行）：put／audit／head／mutate／authorize 全走仓库实现。'''
     from asuna import memory_tiers
-    memory_tiers.ENABLED = False      # the fake DB has no tier rows; tiered memory is checked on Mongo (test_memory_tiers*)
+    memory_tiers.ENABLED = False      # the fake DB has no tier rows
     config = {'character_id': 'demo', 'mongo_uri': 'mongodb://stub', 'database': 'fake', 'legacy_database': 'legacy',
               'allowed_databases': ['fake']}
     if workspace:
@@ -400,7 +396,7 @@ def w8_sources_bottom_out_at_real_messages():
         assert (store.fake.messages.find_one({'_id': source})
                 or store.fake.messages.find_one({'platform_event_id': source})), \
             '来源根回读不到真实原文行：%s' % source
-    assert {INBOUND, OUTBOUND} <= ids, '摘要盖的两条原文必须都在里面' % ()
+    assert {INBOUND, OUTBOUND} <= ids, '摘要盖的两条原文必须都在里面'
     return '关系版本的每个来源根都能回读成真实 messages 行（不编造来源）'
 
 
@@ -473,11 +469,8 @@ GROUP = 'grp-1'
 GROUP_SCOPE = 'scene:grp-1'
 PERSON_B = 'qq:B'
 SLOW = 'dm-slow'
-SLOW_SCOPE = 'scene:dm-slow'
 BUSY = 'grp-busy'
-BUSY_SCOPE = 'scene:grp-busy'
 COLD = 'grp-cold'
-COLD_SCOPE = 'scene:grp-cold'
 T0 = datetime(2026, 9, 24, 6, 0, tzinfo=timezone.utc).timestamp()
 
 

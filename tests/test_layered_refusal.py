@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from asuna import memory_tiers, role_tools, tool_schema
+from asuna import role_tools, tool_schema
 from asuna.documents import DocumentStore
 from asuna.records import episodes as episode_records
 from asuna.records import scenes as scene_records

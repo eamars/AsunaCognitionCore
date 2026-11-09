@@ -1,9 +1,6 @@
 """ADR-030: the program's watchdog over handovers between the brains catches definite failures and nothing else."""
-from types import SimpleNamespace
 
 from asuna import handover
-from asuna.state import now
-from asuna.lanes import FakeTurn
 
 
 def test_her_task_list_says_where_each_task_stands_in_words():

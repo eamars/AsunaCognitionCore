@@ -2,7 +2,6 @@
 of her first batch; the host passes a line on as the program's, through the same gates as a message, holds a group
 notice that starts no turn for that group's next turn only, and brings requests and news about her own account to
 her home, where group_action answers a request."""
-import json
 import sys
 from types import SimpleNamespace
 

@@ -1,4 +1,4 @@
-"""Host contracts on isolated Mongo; fake model receipts, never real QQ sends."""
+"""Host contracts on the in-memory store; fake model receipts, never real QQ sends."""
 import os
 from queue import Queue
 import threading
@@ -8,7 +8,6 @@ from types import SimpleNamespace
 from asuna.chat import SceneQueue
 from asuna.host import RuntimeHost, _workspace_overlaps
 from asuna.records import receipts as receipt_records
-from asuna.state import Conflict
 
 
 def test_workspace_overlap_check_preserves_ancestor_and_sibling_rules(tmp_path):

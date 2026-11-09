@@ -40,7 +40,7 @@ def test_a_persons_line_keeps_speaker_and_a_program_woken_turn_has_none(store):
 
 
 def test_a_note_names_the_place_it_was_written_in(store):
-    scene = setup(store)
+    setup(store)
     words = woken_by(store, 'demo', {'episode_kind': 'note', 'note': {'id': 'no-such-note'}})
     assert words == WAKE_WORDS['note'] % wake_words.SOMEWHERE_ELSE, 'a note that cannot be found says so'
 

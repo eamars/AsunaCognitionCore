@@ -13,7 +13,6 @@ import http.server
 import io
 import json
 import os
-import shutil
 import socketserver
 import sys
 import tempfile
@@ -81,8 +80,8 @@ def _install_stubs():
 STUBBED = _install_stubs()
 
 from asuna import integration_fetch                                    # noqa: E402
-from asuna.integration_import import (DEFAULT_MAX_BYTES, IMPORT_TOOL, IMPORT_TOOL_NAME,   # noqa: E402
-                                      MAX_ARTIFACT_BYTES, import_artifact, integration_gated)
+from asuna.integration_import import (DEFAULT_MAX_BYTES, IMPORT_TOOL_NAME,   # noqa: E402
+                                      MAX_ARTIFACT_BYTES, import_artifact)
 
 # 配置里已有的端点：真取字节时只用这里的地址，模型说什么都换不掉。
 ENDPOINTS = [{'name': 'napcat', 'host': '192.0.2.5', 'port': 18080, 'target_port': 3001},

@@ -4,7 +4,6 @@ python3 tools/p5_offline_check.py 直接跑，不需要 Mongo／pytest／模型�
 假掉的只有 import 期的第三方和数据库本身（沿用 P2 那份假集合），
 proactive.observe／decide／consider、channels.group_context、ContextBuilder.prepare、
 Chat 的挂钩方法都是仓库里那份真代码在跑。
-每条用例都对着 ACCEPTANCE §Q7 的一条确定性检查，或 DELIVERY_PLAN §P5 的一条边界。
 """
 import contextlib
 import os

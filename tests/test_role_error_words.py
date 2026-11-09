@@ -1,7 +1,7 @@
 """Refusals the character brain reads carry the real values and the fix (tool error convention)."""
 import pytest
 
-from asuna import affect, render, schedule, schedule_rules
+from asuna import affect, schedule, schedule_rules
 from asuna.documents import missing_section
 from asuna.persona_model import writable_keys
 from asuna.policy import PolicyStore

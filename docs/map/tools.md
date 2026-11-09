@@ -148,7 +148,7 @@ One-time private migration through DSH's credential provider; never logs values.
 
 [tools/integration_import_offline_check.py](../../tools/integration_import_offline_check.py)
 
-集成产物导入的离线自检：不需要 Mongo、不需要 pytest、不需要 WSL，直接跑同一套用例。
+集成产物导入的离线自检：不需要 Mongo、不需要 pytest，直接跑同一套用例。
 
 
 ## `journal_import.py`
@@ -242,7 +242,6 @@ ADR-005 P1-c 离线自检：不需要 Mongo、不需要 pytest，直接跑同一
 ADR-005 P2 离线自检：不需要 Mongo、不需要 pytest，直接跑摘要闭环那批用例。
 
 - def `run_cases`
-- def `main`
 
 ## `p5_offline_check.py`
 
@@ -251,7 +250,6 @@ ADR-005 P2 离线自检：不需要 Mongo、不需要 pytest，直接跑摘要�
 ADR-005 P5 离线自检：不需要 Mongo、不需要 pytest，直接跑话题追踪＋主动参与那批用例。
 
 - def `run_cases`
-- def `main`
 
 ## `pack_plugins.py`
 
@@ -346,20 +344,6 @@ The checks that guard main, run on a candidate before it is published (`Publicat
 - def `scan_version` — Which checks ran: this file and the release's personal-data checks it loads, as one short hash.
 - def `scan` — Findings for the changed files: the private list and private addresses in every file of text up to TEXT_LIMIT and in every name (as tests/test_personal_words.py and tests/test_release_scan.py), and, in what the release ships, the release's 
 - def `scan_reason` — The publication's reason, which becomes a public commit message: the private list and the release's personal-data checks (not persona names: she may say who she is in her own commit).
-- def `main`
-
-## `qq_face_census.py`
-
-[tools/qq_face_census.py](../../tools/qq_face_census.py)
-
-ADR-103: what the faces, stickers and face clicks people send her look like in the stored rows, in counts only.
-
-- def `top`
-- class `Tally` — The counts of one run.
-  - `add` — Count one stored inbound line.
-  - `shape` — The item's shape (napcat-qq 0.17.0 on), and a dice or rock-paper-scissors throw in order.
-  - `report`
-- def `read` — (the tally, the scenes read by kind, the first moment, whether the cap cut the read).
 - def `main`
 
 ## `refusal_probe.py`

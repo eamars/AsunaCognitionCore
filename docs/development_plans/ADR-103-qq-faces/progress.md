@@ -16,7 +16,7 @@ Designed 2026-10-29 by a cloud session (a fresh reviewer's fourteen findings fol
 
 ## D5's census and the close (2026-11-09)
 
-`tools/qq_face_census.py` over the last 30 days (since 2026-10-09 23:43 UTC; 160,974 lines read, 24 conversations,
+`tools/qq_face_census.py` (deleted, ADR-118 L1) over the last 30 days (since 2026-10-09 23:43 UTC; 160,974 lines read, 24 conversations,
 not cut): 4,808 face items, every one named (0 nameless, 0 odd, 180 distinct names); 11,689 sticker items (222 market,
 11,467 custom); no sticker-shaped type unread; one throw, an `rps` (`result=2`, 2026-11-01); `dice` never seen;
 `markdown` (94) shows in `unread_types` only because the census counts segment types, while the adapter reads its

@@ -8,6 +8,8 @@ checks only that the MongoDB adapter keeps the interface's promises on a real se
 database per test module, its collections dropped before each case, a few synthetic records, dropped at the end and on
 failure. The rules Xiaoman signed in this ADR are marked **hers**.
 
+What this costs: feature logic above the store has no automated tests by decision 9; integration tests and staged evidence when an ADR closes are the alarm.
+
 ## Static
 
 | Test | What it guards |

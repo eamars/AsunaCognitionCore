@@ -191,7 +191,7 @@ not a reminder at the point of use. Its wording stands on F1 to F3, which are in
   numbers in order. It is the only way to see what NapCat sends, since the segment is not stored. No file, no counter,
   no new I/O: `shape_of` is a pure function run once per such segment, before the line is spooled. **Its end:** it
   stays; it is a few dozen characters on the lines that need it.
-- *Census* (`tools/qq_face_census.py`, read-only): over the QQ conversations' stored inbound rows of a window (default
+- *Census* (`tools/qq_face_census.py` (deleted, ADR-118 L1), read-only): over the QQ conversations' stored inbound rows of a window (default
   30 days), counts faces (named, nameless, the nameless ids, the names used), stickers (custom, store, named), the
   segment types in the media items, the unrecognized segment types (the `[xxx消息（未解析）]` tags), the stored click
   lines (and how many name no emoji), typed look-alikes (a `[表情:` or `[表情包` in the text beyond what the media items
@@ -233,7 +233,7 @@ dice and rps gets a pointer to this row (done with part 1).
 
 ## Tests that earn their place
 
-- The census counting, on synthetic rows through the in-memory store (`tests/test_qq_face_census.py`): a wrong count is
+- The census counting, on synthetic rows through the in-memory store (`tests/test_qq_face_census.py` (deleted, ADR-118 L1)): a wrong count is
   a wrong decision, silently. One test: named, nameless and 358, sticker kinds, unrecognized tags, a typed look-alike, a
   cut block, the window, another kind's conversation, the cap, and the order of throws.
 - The item's shape in the adapter's self-test (five `shape_*` checks): fields not words, a number only when it is one

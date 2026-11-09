@@ -492,6 +492,8 @@ class Chat:
                     # fail. What failed is recorded where the watchdog reads it: her turn on it ended, or the hand-back
                     # never reached a turn.
                     try:
+                        # Countable like any failed turn (ADR-119 F1): a chat.error row, stream_id the turn's id.
+                        self.app.store.audit(episode, 'chat.error', {'traceback': error}, 'scene:' + event['scene_id'])
                         from .handover import result_event_id
                         task = task_records.get(self.app.store, event['_feedback_task'])
                         short = event.get('_short', False)

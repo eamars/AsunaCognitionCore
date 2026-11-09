@@ -797,6 +797,7 @@ class ToolBroker:
         self.service,self.store=service,service.store
         self.evidence=evidence          # the worker's: the data child's records are kept here (data_children.py)
         self.bindings={}
+        self.unscrubbed={}              # task id: {'row': refused in a row, call key: refused} (ADR-119 F1)
 
     @property
     def specs(self):
@@ -994,10 +995,16 @@ class ToolBroker:
                 raise Denied('UNKNOWN_TOOL: %s 不是这里能执行的工具；重试也一样，换用工具清单里的工具' % str(tool)[:60])
             if tool!=READ_IMAGE_TOOL_NAME:
                 from . import credentials
+                counts=self.unscrubbed.setdefault(task['_id'],{'row':0})
                 try:
                     result=credentials.scrub(result,self.service.store)   # no stored credential value reaches her or a receipt
+                    counts['row']=0
                 except credentials.Unscrubbed:
-                    raise Denied('CREDENTIALS_UNREADABLE: '+credentials.UNSCRUBBED_RESULT)
+                    key=sha(canonical([tool,args]))
+                    counts['row'],counts[key]=counts['row']+1,counts.get(key,0)+1
+                    raise Denied('CREDENTIALS_UNREADABLE: '+(credentials.UNSCRUBBED_STOP if counts['row']>=credentials.STOP_AFTER
+                                                             else credentials.UNSCRUBBED_SETTLED if counts[key]>=2
+                                                             else credentials.UNSCRUBBED_RESULT))
             # A result is JSON data: the receipt and her character brain's view of it are JSON, and a raw database row
             # can hold other values (an archived message's original ObjectId).
             result=json_data(result)

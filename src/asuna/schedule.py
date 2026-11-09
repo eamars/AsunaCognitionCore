@@ -659,7 +659,10 @@ class ScheduleService:
                 counted = (plan, date)          # a note from home that wakes a group is one of her visits
         person = notes.receiver(self.app.config, draft['to_scene'])
         if draft['mode'] == notes.WAKE and not person:
-            raise notes.NoteRefused('NOTE_TARGET_UNKNOWN', '那边没有可以接待你的成员授权，叫不醒；可以改成 next_time。')
+            # next_time is offered only where she may choose it (from a group a note can only wake, notes.MODES).
+            later = notes.NEXT_TIME in notes.modes(draft['from_class'], draft['kind'], draft['reply_to'])[1]
+            raise notes.NoteRefused('NOTE_TARGET_UNKNOWN', '那边没有可以接待你的成员授权，叫不醒' +
+                                    ('；可以改成 next_time。' if later else '；从这里写的便条只能马上叫醒那边，这张没送出去。'))
         if draft['mode'] != notes.WAKE:
             return {**notes.result(self.store, notes.record(self.store, draft)), **({'arrives': deferred} if deferred else {})}
         if draft['kind'] == 'home':

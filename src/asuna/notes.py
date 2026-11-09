@@ -57,6 +57,9 @@ NOT_OWN_WORDS = ('便条第 %d–%d 字和 %s %s 在这里说的一句一样。�
                  '别人托你的，用你的话说清是谁的意思。')
 # A group that cannot be woken now, with no deliver given, gets the note next time (ADR-087 §4.4).
 NEXT_TIME_INSTEAD = '那个群现在叫不醒（%s），改成那边下次有回合时看到；三天（72 小时）没读就过期了，读没读在 notes_sent_from_program 看。'
+# The same group, from where a note can only wake it (a group, a turn a note from outside opened): nothing is sent.
+WAKE_ONLY_NOT_NOW = ('现在叫不醒那个群：%s。从这里写的便条只能马上叫醒那边，这张没送出去；'
+                     '想晚点递过去，用 plan 定个时间，到点那一回合能写。')
 TRUSTED, UNTRUSTED = 'trusted', 'untrusted'
 WAKE, NEXT_TIME = 'wake', 'next_time'
 FINISHED = ('COMMITTED', 'WAITING_TASK')
@@ -68,6 +71,13 @@ MODES = {visibility.OWNER_PRIVATE: {'home': (WAKE, (WAKE, NEXT_TIME)), 'group': 
 # A reply to a note from a group, from whichever turn (ADR-091 D2): context for her there, read in her next turn there,
 # not a public turn of its own; `wake` stays her choice.
 REPLY_TO_GROUP = (NEXT_TIME, (NEXT_TIME, WAKE))
+
+
+def modes(cls, kind, reply):
+    """(default, choices) for a note written with class `cls` to a place of this kind; `reply`: it answers a note."""
+    return REPLY_TO_GROUP if reply and kind == 'group' else MODES[cls][kind]
+
+
 KIND_WORDS = {'home': '家里', 'group': '群', 'dm': '私聊'}
 MODE_WORDS = {WAKE: '马上叫醒那边（排在那边手上的事后面）', NEXT_TIME: '那边下次有回合时看到'}
 TRUST_WORDS = {TRUSTED: '你在家里写的', UNTRUSTED: '你在外面写的'}
@@ -396,7 +406,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
         # A reply shown in a turn something else opened (a person, a task: D2 delivers it next time) ended its chain;
         # a note from here starts a new one and counts as one (ADR-091). A turn a reply opened stops at can_send.
         reply = None
-    default, choices = REPLY_TO_GROUP if reply and kind == 'group' else MODES[cls][kind]
+    default, choices = modes(cls, kind, reply)
     mode = args.get('mode') or default
     if mode not in choices:
         raise NoteRefused('NOTE_MODE_NOT_ALLOWED', '送到%s的便条只能%s：deliver 写 %s，或不写。'

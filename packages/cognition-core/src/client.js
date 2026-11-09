@@ -16,7 +16,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
   const DICTIONARY = {
     zh: {
       'date.locale': 'zh-CN',
-      'brain.character': '角色脑', 'brain.executor': '行动脑', 'brain.executorHigh': '行动脑·高档',
+      'brain.character': '角色脑', 'brain.executor': '行动脑', 'brain.executorHigh': '行动脑·高档', 'brain.appraiser': '情绪评估',
       'trigger.message': '收到消息', 'trigger.task_result': '行动脑交回了结果', 'trigger.question': '行动脑在问她',
       'collab.tier.low': '低档', 'collab.tier.high': '高档', 'collab.tier.fell': '选{chosen}，跑{ran}：{why}',
       'collab.tier.why.refused': '高档没接这件', 'collab.tier.why.down': '高档连不上、超时或服务器出错',
@@ -120,7 +120,9 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.route': '{brain} · {field}', 'settings.route.provider': '模型服务', 'settings.route.model': '模型',
       'settings.route.reasoningEffort': '推理强度', 'settings.route.maxTokens': '最大输出 token',
       'settings.route.idleMinutes': '闲置多久后重开上下文（分钟）',
-      'settings.highNone': '不用（没有高档）',
+      'settings.highNone': '不用（没有高档）', 'settings.appraiserNone': '不用（不开情绪评估）',
+      'settings.appraiserHint': '空着就不开情绪评估。选了模型，一个不带工具、从不说话的会话会给她的情绪提出事件，记不记由她定。',
+      'settings.route.summaryEffort': '后台摘要的推理强度',
       'settings.highHint': '空着就没有高档：她派活时不出现档位。选了模型，她才能把一件活交给高档；高档出错时这件落到行动脑接着做。'
         + '闲置分钟数也是高档线路出错后歇多久。',
       'settings.highResting': '高档在歇，最早 {at} 再试：{reason}',
@@ -183,7 +185,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     },
     en: {
       'date.locale': 'en-US',
-      'brain.character': 'Character brain', 'brain.executor': 'Action brain', 'brain.executorHigh': 'Action brain · high tier',
+      'brain.character': 'Character brain', 'brain.executor': 'Action brain', 'brain.executorHigh': 'Action brain · high tier', 'brain.appraiser': 'Affect appraiser',
       'trigger.message': 'Message received', 'trigger.task_result': 'The action brain reported back',
       'collab.tier.low': 'Low tier', 'collab.tier.high': 'High tier', 'collab.tier.fell': 'Chose {chosen}, ran {ran}: {why}',
       'collab.tier.why.refused': 'the high tier refused this job', 'collab.tier.why.down': 'the high tier was unreachable, timed out or erred',
@@ -290,7 +292,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.route': '{brain} · {field}', 'settings.route.provider': 'Model service', 'settings.route.model': 'Model',
       'settings.route.reasoningEffort': 'Reasoning effort', 'settings.route.maxTokens': 'Max output tokens',
       'settings.route.idleMinutes': 'Fresh context after idle (minutes)',
-      'settings.highNone': 'None (no high tier)',
+      'settings.highNone': 'None (no high tier)', 'settings.appraiserNone': 'None (no affect appraiser)',
+      'settings.appraiserHint': 'Empty means no affect appraiser. With a model chosen, a tool-free session that never speaks '
+        + 'proposes affect events for her; she decides whether they are recorded.',
+      'settings.route.summaryEffort': 'Reasoning effort of background summaries',
       'settings.highHint': 'Empty means no high tier: she is offered no tier when handing over work. With a model chosen she may '
         + 'send a job to the high tier; when it fails there, the job continues on the action brain. The idle minutes are also how '
         + 'long the high tier rests after its line failed.',
@@ -390,7 +395,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       [name, value && typeof value === 'object' ? say(t, value) : value])));
 
   // A program value (a state, a code) in the viewer's words; one this version has no words for is shown as it is.
-  const EFFORTS = ['reasoningEffort', 'attendEffort', 'groupEffort'];
+  const EFFORTS = ['reasoningEffort', 'attendEffort', 'groupEffort', 'summaryEffort'];
   const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'chat', 'self_development', 'timezone', 'home_groups', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search', 'active_groups', 'thoughts', 'sandbox', 'character_git', 'persona_sources']);
   const word = (t, prefix, value) => { const key = prefix + value, text = t(key); return text && text !== key ? text : String(value); };
   const deploymentLabel = key => DEPLOYMENT_KEYS.has(key) ? { key: 'settings.deployment.' + key } : key;
@@ -913,10 +918,12 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         for (const key of ['persona', 'channelAdmission', 'python'])
           add([key], { key: 'settings.' + key }, ['persona', 'channelAdmission'].includes(key) ? 'choice' : 'text');
         // The character route also carries the effort of her relevance gate and of her group turns.
-        // The action brain's 高 (ADR-075) is a route of its own, empty when there is none.
-        const brains = { character: 'character', action: 'executor', actionHigh: 'executorHigh' };
-        for (const lane of ['character', 'action', 'actionHigh']) for (const key of ['provider', 'model', 'reasoningEffort', 'maxTokens',
-          ...(lane === 'character' ? ['attendEffort', 'groupEffort'] : ['idleMinutes'])])
+        // The action route also carries the effort of her background summaries. The action brain's 高 (ADR-075) and the
+        // affect appraiser (ADR-009 §6.7) are routes of their own, empty when there is none.
+        const brains = { character: 'character', action: 'executor', actionHigh: 'executorHigh', appraiser: 'appraiser' };
+        const extra = { character: ['attendEffort', 'groupEffort'], action: ['idleMinutes', 'summaryEffort'], actionHigh: ['idleMinutes'], appraiser: [] };
+        for (const lane of ['character', 'action', 'actionHigh', 'appraiser']) for (const key of ['provider', 'model', 'reasoningEffort', 'maxTokens',
+          ...extra[lane]])
           add(['routes', lane, key], { key: 'settings.route', params: { brain: { key: 'brain.' + brains[lane] },
             field: { key: 'settings.route.' + key } } }, ['maxTokens', 'idleMinutes'].includes(key) ? 'number' : 'choice');
         // Business values use the shipped settings fields. Structured settings
@@ -1007,7 +1014,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         if (field.path[0] === 'channelAdmission') return [['automatic', t('settings.admission.automatic')], ['explicit', t('settings.admission.explicit')]];
         if (field.path[0] === 'persona') return (status?.personas ?? []).map(persona => [persona.id, persona.name || persona.id]);
         const [, lane, key] = field.path, providers = status?.providers ?? [];
-        if (key === 'provider') return [...(lane === 'actionHigh' ? [['', t('settings.highNone')]] : []),
+        if (key === 'provider') return [...(lane === 'actionHigh' ? [['', t('settings.highNone')]] : lane === 'appraiser' ? [['', t('settings.appraiserNone')]] : []),
           ...providers.map(provider => [provider.id, provider.name || provider.id])];
         const provider = providers.find(provider => provider.id === routeValue(lane, 'provider'));
         if (key === 'model') return (provider?.models ?? []).map(model => [model.id, model.name || model.id]);
@@ -1073,7 +1080,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
             if (field.type === 'choice') return h(Select, { ...props, t, value: props.text, options: choices(field),
               onChange: value => choose(field, value),
               hint: field.path[0] !== 'routes' ? undefined
-                : field.path[1] === 'actionHigh' && field.path[2] === 'provider' ? highHint() : t('settings.routeHint') });
+                : field.path[1] === 'actionHigh' && field.path[2] === 'provider' ? highHint()
+                : field.path[1] === 'appraiser' && field.path[2] === 'provider' ? t('settings.appraiserHint') : t('settings.routeHint') });
             return field.type.startsWith('secret') ? h(SettingsSecretField, { ...props, configured: credentialState[field.path[1]] ?? false,
               hint: field.type === 'secret-map' ? t('settings.secretMapHint') : t('settings.secretHint'),
               stateLabel: field.type === 'secret-map' ? t('settings.secretAdd') : credentialState[field.path[1]] ? t('settings.secretSet') : t('settings.secretUnset') })

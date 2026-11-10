@@ -235,7 +235,12 @@ of fields, no content):
    hand.
 3. *The local config line removed*, as it was: `config/local.json`, `self_development.every_seconds`, value `86400`
    (inside `"self_development": {"enabled": true, "every_seconds": 86400}`). Rollback is that key back with that
-   value and this landing reverted.
+   value and this landing reverted. Without that key a deployment has no single setting for the daytime interval:
+   it is per persona (`self_development.every_min` in a persona model, or her `set_policy`), else 1,440 min; a
+   deployment that had set another value in its local config falls back to 1,440 (here 86,400 s = 1,440 min).
+4. *What the removed render branch would have returned* (her count, line 0297): no document revision carries a
+   `content.body` (0 of 1,869; every one is `{kind, title, sections, source}`), so the branch rendered nothing,
+   not another text; `sections` is never an empty list.
 
 **Landing:** one, with a restart. Test: none new; each removal is checked by the counts above, read again on her
 data just before the landing, and by the suite (a test that leaned on a removed path is changed with it, named in

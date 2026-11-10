@@ -305,7 +305,8 @@ name promises. Proof, three ways:
    list's 「等」, recent thoughts). These rest on proof 1 alone. The volume module's counts show only that a
    branch ran, never a reading of her data. Files on disk were not compared.
 
-**Evidence kept** (her ask, line 0313): `<data>/private/evidence/adr119-f8/`, 48,325 bytes: the harness
+**Evidence kept** (her ask, line 0313): `<data>/private/evidence/adr119-f8/` (`<data>` is the worker's data root,
+`.runtime/` in the checkout), 48,325 bytes with `SHA256SUMS` itself (497 bytes; the list does not hold its own line): the harness
 (`f8_compare.py`, a pytest plugin loaded with `-p`, and `test_f8_volume.py`), its three reports (`report_ab.txt`
 main against the branch, `report_aa.txt` main against main, `report_mutation.txt` the planted changes),
 `volume_branches.json`, and `SHA256SUMS`. Installed 2026-11-10 19:36 as `7b31cdc216b4`; the installed

@@ -320,7 +320,9 @@ Her choice (agent line 0302, 0303): the interval through `set_policy`, and one r
    for every persona; not a package's own `policy_keys`): integer, 360 to 10,080 minutes, its spec shaped as
    `heartbeat.every_min`'s. The same bounds hold a persona model's default: the schema's
    `self_development.every_min` is 360 to 10,080 (it was a minimum of 60), because `tests/test_persona_model.py`
-   holds every key a package may default to one set of limits; the packages that set it set 1,440. The owner's switches (`self_development.enabled`,
+   holds each of the core's `set_policy` keys (`CORE_WRITABLE_KEYS`) to one set of limits; the packages that set
+   it set 1,440. The cost: a persona model's `self_development.every_min` of 60 to 359 is now refused by the schema
+   (none set one on 2026-11-10). A package's own `policy_keys` are not held by that test. The owner's switches (`self_development.enabled`,
    `night`) stay out of it. `set_policy` is a home, owner-private turn's tool (`POLICY_SET_REQUIRES_OWNER_PRIVATE`
    elsewhere); its description says so beside the `null` sentence.
 2. *The retime, once per change.* Her `set_policy` of the interval ensures the daytime plan at once (the tool

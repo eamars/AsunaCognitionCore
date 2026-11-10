@@ -192,8 +192,11 @@ end in three places, and none of them reaches her:
    `cancel` alike on the four rhythms (`PLAN_RHYTHM`, since 2026-10-19), now in her wording:
    「「…」是你的节律（心跳、夜间沉淀、自我改进或整理安静的群）：这四条归程序，调它们用 set_policy（快慢、时间和夜里的窗口；
    总开关归主人）。」 The rhythm stays as it was. The two self-development plans belong to no ADR: they live while
-   `self_development.enabled` holds. She tunes them with `set_policy` (`self_development.every_min`,
-   `night_start_hour`, `night_hours`; `night_hours = 0` is `NIGHT_OFF` at each tick and keeps the plan). The owner's
+   `self_development.enabled` holds. She tunes the night one with `set_policy` (`self_development.night_start_hour`,
+   `night_hours`, `night_every_min`; `night_hours = 0` is `NIGHT_OFF` at each tick and keeps the plan). The daytime
+   interval (`self_development.every_min`) is not one of her `set_policy` parameters (corrected 2026-11-10, her
+   reading line 0301): it comes from the persona model or the core default, and a change to it does not retime a
+   live plan. The owner's
    switch now removes them as the other rhythms' switches do (`_retire`, one `rhythm.disabled` line with its
    reason); a plan made again after that starts a new `fire_count_since`. Her `night_hours = 0` keeps the plan only
    because `ensure_night_development` never reads `night_hours` (each tick does): the test pins the outcome, not a
@@ -219,7 +222,7 @@ of fields, no content):
 |---|---|---|---|---|
 | `render._document_text` returns `content['body']`, and `carried.sections` returns nothing, for a document revision without `sections` ("pre-conversion legacy") | `state_revisions` of `doc:*` entities, `content.sections` | a head, or a revision an episode's ref names, without `sections` | 0 of 40 document heads, 0 of 1,869 document revisions | remove both branches; a document without sections then fails where it is read instead of rendering a body or nothing |
 | `schedule._migrate_native_links` at every start: a plan bound to another scheduler session is re-linked or re-armed ("one explicit cutover") | `plans.native_scheduler_session` (the current one is `asuna-scheduler-` + a hash of the database name) | an `ACTIVE` or `CREATING` plan on another session | 0 of 28 active plans; 2 ended plans have none | remove; the cutover it served is done |
-| `persona_model.self_development_minutes` reads `self_development.every_seconds` from the local config ("compat until P7") before the persona model | `config/local.json` and `config/local.example.json`, `self_development.every_seconds` | a deployment whose interval comes only from that key | her live config holds 86,400 (1,440 min); her policy and her persona model set no `self_development.every_min`; the core default is 1,440 min | remove the read and the key from both files: her interval stays 1,440 min (the default); a pace of her own goes through `set_policy` |
+| `persona_model.self_development_minutes` reads `self_development.every_seconds` from the local config ("compat until P7") before the persona model | `config/local.json` and `config/local.example.json`, `self_development.every_seconds` | a deployment whose interval comes only from that key | her live config holds 86,400 (1,440 min); her policy and her persona model set no `self_development.every_min`; the core default is 1,440 min | remove the read and the key from both files: her interval stays 1,440 min (the default) |
 
 **Her reading** (agent line 0294):
 
@@ -236,7 +239,7 @@ of fields, no content):
 3. *The local config line removed*, as it was: `config/local.json`, `self_development.every_seconds`, value `86400`
    (inside `"self_development": {"enabled": true, "every_seconds": 86400}`). Rollback is that key back with that
    value and this landing reverted. Without that key a deployment has no single setting for the daytime interval:
-   it is per persona (`self_development.every_min` in a persona model, or her `set_policy`), else 1,440 min; a
+   it is per persona (`self_development.every_min` in a persona model; not settable by her `set_policy`), else 1,440 min; a
    deployment that had set another value in its local config falls back to 1,440 (here 86,400 s = 1,440 min).
 4. *What the removed render branch would have returned* (her count, line 0297): no document revision carries a
    `content.body` (0 of 1,869; every one is `{kind, title, sections, source}`), so the branch rendered nothing,

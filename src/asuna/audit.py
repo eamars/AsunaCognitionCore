@@ -261,7 +261,8 @@ def trace_contents(events: list[dict], store: Store):
 
 
 def replay(events: list[dict], target: Store, contents: dict | None=None):
-    if not target.name.startswith('asuna_v2_test_'):
+    from .store.adapters import TEST_PREFIX
+    if not target.name.startswith(TEST_PREFIX):
         raise Denied('REPLAY_REQUIRES_NEW_TEST_DATABASE')
     verify(events)
     contents=contents or {}

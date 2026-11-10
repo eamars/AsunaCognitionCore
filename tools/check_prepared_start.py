@@ -121,7 +121,8 @@ def byte_check(sha, tree, base):
     extra = sorted(path.relative_to(installed).as_posix() for path in (installed / 'python/asuna').rglob('*')
                    if path.is_file() and 'python/' + path.relative_to(installed / 'python').as_posix() not in expected)
     problems += ['not in the commit: ' + name for name in extra]
-    packed = next(item for item in json.loads((tree / '.runtime/adr008/packages/manifest.json').read_text(encoding='utf-8'))
+    from pack_plugins import MANIFEST
+    packed = next(item for item in json.loads((tree / MANIFEST).read_text(encoding='utf-8'))
                   if item['name'] == '@asuna/cognition-core')
     entries = 0
     in_package = set()

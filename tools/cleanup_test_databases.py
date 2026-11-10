@@ -8,6 +8,7 @@ from pathlib import Path
 
 from pymongo import MongoClient
 from asuna.config import load, validate_database
+from asuna.store.adapters import TEST_PREFIX
 
 
 def main():
@@ -22,8 +23,8 @@ def main():
         before = set(client.list_database_names())
         if not args.apply:
             data = {'protected': sorted(n for n in protected if n), 'database_count': len(before),
-                    'test_databases': sorted(n for n in before if n.startswith('asuna_v2_test_') and n not in protected),
-                    'other_databases': sorted(n for n in before if not n.startswith('asuna_v2_test_') or n in protected)}
+                    'test_databases': sorted(n for n in before if n.startswith(TEST_PREFIX) and n not in protected),
+                    'other_databases': sorted(n for n in before if not n.startswith(TEST_PREFIX) or n in protected)}
             args.inventory.parent.mkdir(parents=True, exist_ok=True)
             args.inventory.write_text(json.dumps(data, indent=2), encoding='utf-8')
             print(json.dumps({'test_databases': len(data['test_databases']), 'inventory': str(args.inventory)}))
@@ -33,7 +34,7 @@ def main():
         # Validate the whole concrete manifest before the first mutation. New
         # databases appearing after inventory are never added to this operation.
         for name in targets:
-            if name in protected or not re.fullmatch(r'asuna_v2_test_[A-Za-z0-9_]+', name):
+            if name in protected or not re.fullmatch(re.escape(TEST_PREFIX) + r'[A-Za-z0-9_]+', name):
                 raise ValueError('TEST_CLEANUP_TARGET_NOT_AUTHORIZED')
             validate_database(config, name)
         dropped = []
@@ -48,7 +49,7 @@ def main():
         finally:
             after = set(client.list_database_names())
             result = {'dropped': dropped, 'remaining_targets': sorted(set(targets) & after),
-                      'remaining_test_databases': sorted(n for n in after if n.startswith('asuna_v2_test_')),
+                      'remaining_test_databases': sorted(n for n in after if n.startswith(TEST_PREFIX)),
                       'other_databases_preserved': sorted(before - set(targets)) == sorted(after - set(targets)),
                       'database_count_after': len(after)}
             args.inventory.with_name('result.json').write_text(json.dumps(result, indent=2), encoding='utf-8')

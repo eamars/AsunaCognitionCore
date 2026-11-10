@@ -12,6 +12,10 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .store.adapters import TEST_PREFIX  # noqa: E402  the throwaway databases' prefix, one source
+
+CHANNEL_PORT = 8766          # the channel API's port when the settings name none (index.js keeps the same default)
+
 # The source tree: a development checkout, or the installed package's root. Development tools, tests and
 # git checks use it; a profile's state never goes here.
 ROOT = Path(__file__).resolve().parents[2]
@@ -95,7 +99,7 @@ def load(path: str | Path = 'config/local.json', *, dsh_home: str | Path | None 
         channels = json.loads(channel_path.read_text(encoding='utf-8'))
         if channels.get('enabled') is True:
             value['channels'] = channels['channels']
-            value['channel_port'] = channels.get('port', 8766)
+            value['channel_port'] = channels.get('port', CHANNEL_PORT)
         # 跨场景只读联动（A2）：这两个键写在通道文件顶层也要能到 store.config 里。
         # 原样带过，不校验 route 内部键；形状不对的条目由 scene_links 在读的时候照实丢掉。
         for key in ('context_links', 'canonical_persons'):
@@ -114,7 +118,7 @@ def load(path: str | Path = 'config/local.json', *, dsh_home: str | Path | None 
 
 def validate_database(config: dict, name: str) -> str:
     if not (
-        name in config['allowed_databases'] or name.startswith('asuna_v2_test_')
+        name in config['allowed_databases'] or name.startswith(TEST_PREFIX)
     ) or any(c in name for c in '/\\. $\x00'):
         raise ValueError('DATABASE_NOT_AUTHORIZED')
     return name

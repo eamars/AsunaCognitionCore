@@ -76,6 +76,8 @@ export async function prepareFresh(rung, args, { logFile, spawnChild = spawnPrep
 
 /** Each start's preparation log is its own: named by the restart's id (last.json's `id`) and the rung, so neither the
  * next rung nor the next restart overwrites the log of one that failed. */
+// What was packed (tools/pack_plugins.py: MANIFEST), under a checkout's root.
+export const PACKAGES_MANIFEST = '.runtime/adr008/packages/manifest.json';
 export const prepareLog = (folder, id, rung) => path.join(folder, 'prepare-' + id + '-rung' + rung + '.log');
 export const PREPARE_LOGS_KEPT = 10;              // restarts whose preparation logs are kept
 
@@ -165,7 +167,7 @@ export async function clearEmptyLocks(home) {
  * difference runs the installer, which records the previous running package so a start that never comes up returns
  * to it (advanceSelection below). Uncommitted edits are installed too: what is on disk is what runs. */
 export async function syncCheckout(launch, exec, report = text => process.stderr.write(text + '\n'),
-  { python = checkoutPython(), manifest = path.join(root, '.runtime/adr008/packages/manifest.json'),
+  { python = checkoutPython(), manifest = path.join(root, PACKAGES_MANIFEST),
     selection = launch.base && path.join(launch.base, 'activation.json') } = {}) {
   const setup = launch.setup;
   if (!setup) { report('Asuna: this profile does not record its packages yet; run tools/setup_native_profile.py once.'); return 'UNKNOWN'; }

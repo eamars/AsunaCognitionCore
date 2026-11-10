@@ -7,6 +7,8 @@ from .queue import effects_lock_path
 from .tasks import workspace_lock_path
 
 
+from .store.adapters import TEST_PREFIX  # noqa: E402
+
 def suite_config(path='config/local.json'):
     """The settings a test run reads (the MongoDB address) with the DSH home of the data folder the run writes
     (ASUNA_DATA_ROOT), so a run confined to its own folder never needs the profile's."""
@@ -32,7 +34,7 @@ def dispose_test_store(store):
     """Drop an owned test database even if its application client was closed."""
     config, name = store.config, store.name
     protected = {config['database'], *config['allowed_databases']}
-    if name in protected or not re.fullmatch(r'asuna_v2_test_[A-Za-z0-9_]+', name):
+    if name in protected or not re.fullmatch(re.escape(TEST_PREFIX) + r'[A-Za-z0-9_]+', name):
         raise ValueError('TEST_CLEANUP_TARGET_NOT_AUTHORIZED')
     validate_database(config, name)
     from .store import adapters

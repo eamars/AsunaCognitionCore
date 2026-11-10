@@ -25,7 +25,8 @@ Stable entry: native Web and repair tools boot without importing Python code.
 
 - def `packageManagerEnv`
 - def `prepareFresh` — Prepare one start (rung 0: sync the checkout and apply selections; rung 1: return selections to the previous running version) in a fresh process of this script, so a change to it or to the tools it runs takes effect at her next restart with
-- def `prepareLog` — Each start's preparation log is its own: named by the restart's id (last.json's `id`) and the rung, so neither the next rung nor the next restart overwrites the log of one that failed.
+- def `PACKAGES_MANIFEST`
+- def `prepareLog`
 - def `PREPARE_LOGS_KEPT`
 - def `pruneLogs` — Remove the preparation logs of all but the newest `keep` restarts (ids sort by time), and any other `prepare*.log` (a log of an earlier naming).
 - def `fastForwardCheckout` — Her restart brings origin/main into the checkout when it can (owner 2026-10-13, ADR-065): fetch, then a fast-forward only when the branch is main, tracked files are unchanged and main is behind origin/main.

@@ -16,7 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 from asuna import repo_files  # noqa: E402
 
-DESTINATION = ROOT / '.runtime/adr008/packages'
+PACKAGES = '.runtime/adr008/packages'               # under a checkout's root (one source; asuna-launch.mjs: PACKAGES_MANIFEST)
+MANIFEST = PACKAGES + '/manifest.json'             # what was packed, read by the profile setup and the start checks
+DESTINATION = ROOT / PACKAGES
 # Every tracked file under src/asuna ships with the worker except the debug CLI and its Web shim.
 NOT_IN_WORKER = {'src/asuna/cli.py', 'src/asuna/native_ui.py'}
 
@@ -213,7 +215,7 @@ def main():
         artifacts.append({'name': package['name'], 'path': str(path), 'integrity': package['integrity'],
                           'sha256': digest,
                           'files': [row['path'] for row in package['files']]})
-    (DESTINATION / 'manifest.json').write_text(json.dumps(artifacts, indent=2), encoding='utf-8')
+    (ROOT / MANIFEST).write_text(json.dumps(artifacts, indent=2), encoding='utf-8')
     prune(artifacts)
     print(json.dumps([{k:v for k,v in item.items() if k != 'files'} for item in artifacts], indent=2))
 

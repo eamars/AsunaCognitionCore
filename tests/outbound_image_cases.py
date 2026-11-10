@@ -15,8 +15,8 @@ scope / sha 复核 / 不是图就拒）、claim 元数据（声明 supports=imag
 attach_image 校验（清单外、群方向、非 owner_private、非图片、超限、参数逐次退回、沉默的回合不发图）、
 历史投影（我发过这张图 / 回执对不上 / 没带图的行逐字不变）。
 
-假集合的匹配语义按 Mongo 的字面查询实现（等值、$in/$ne/$lt/$lte/$gt/$gte/$exists/$or、
-点号路径、sort/limit/projection）；语义不一致会让用例假绿，改动这里要对着 Mongo 文档看。
+记录主人读写这些行走 fake_collections（内存适配器，它的匹配语义由 integration/store_contract.py 对着真 Mongo 核）；
+用例自己回读只按整条查询逐键相等，查询里出现 $ 算子就当场报错（ADR-119 F5）。
 """
 import copy
 import hashlib

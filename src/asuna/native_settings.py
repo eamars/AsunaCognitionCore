@@ -3,7 +3,7 @@ from copy import deepcopy
 import re
 
 from . import channel_kinds
-from .config import DATA, local_workspace, validate_database, validate_endpoint
+from .config import CHANNEL_PORT, DATA, local_workspace, validate_database, validate_endpoint
 
 # A secret's key, by substring (settings.js uses the same pattern): its value goes to DSH's credential store and the
 # settings keep a reference named like an environment variable (ADR-010 D6).
@@ -48,7 +48,7 @@ def export_settings(config):
     value.setdefault('vision', {})
     value.setdefault('context_links', {})
     value.setdefault('canonical_persons', {})
-    value.setdefault('channel_port', 8766)
+    value.setdefault('channel_port', CHANNEL_PORT)
     value.setdefault('active_groups', 4)
     value.setdefault('thoughts', 'tool')
     return {'deployment': visit(value), 'secrets': secrets}
@@ -93,7 +93,7 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
     validate_endpoint(value['embedding']['base_url'])
     if not isinstance(value['embedding'].get('model'), str) or not value['embedding']['model']:
         raise ValueError('EMBEDDING_MODEL_REQUIRED')
-    if type(value.get('channel_port', 8766)) is not int or not 1024 <= value.get('channel_port', 8766) <= 65535:
+    if type(value.get('channel_port', CHANNEL_PORT)) is not int or not 1024 <= value.get('channel_port', CHANNEL_PORT) <= 65535:
         raise ValueError('INVALID_CHANNEL_PORT')
     if type(value.get('active_groups', 4)) is not int or not 1 <= value.get('active_groups', 4) <= 100:
         raise ValueError('INVALID_ACTIVE_GROUPS: a whole number from 1 to 100')

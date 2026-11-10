@@ -12,7 +12,7 @@ from . import channel_kinds
 from .application import Application
 from .channels import Channels, ChannelServer, route_members
 from .chat import Chat, local_settings, prepare_local_scene
-from .config import DATA
+from .config import CHANNEL_PORT, DATA
 from .memory_indexer import MemoryIndexer
 from . import handover
 from .state import Denied, now
@@ -249,7 +249,7 @@ def write_route_keys(config, root):
             continue
         for route_id, route in channel['routes'].items():
             wanted['%s-%s.json' % (channel_id, route_id)] = {
-                'url': 'http://127.0.0.1:%d/v1/channels/%s' % (config.get('channel_port', 8766), channel_id),
+                'url': 'http://127.0.0.1:%d/v1/channels/%s' % (config.get('channel_port', CHANNEL_PORT), channel_id),
                 'route_id': route_id, 'account_id': channel['account_id'], 'sender_id': route['sender_id'],
                 'key': route_key(channel['token'], route_id)}
     if wanted:
@@ -380,7 +380,7 @@ class RuntimeHost:
             if self.pilot:
                 self.stack.callback(self.pilot.close)
             if self.config.get('channels'):
-                self.channel_server = ChannelServer(channels, self.config.get('channel_port', 8766))
+                self.channel_server = ChannelServer(channels, self.config.get('channel_port', CHANNEL_PORT))
                 self.stack.callback(self.channel_server.close)
                 write_route_keys(self.config, DATA)
                 self.evidence.record('host.channels_started', {'port': self.channel_server.server.server_port})

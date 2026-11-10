@@ -254,7 +254,8 @@ def main():
     if not (home / 'profiles' / args.profile / 'package.json').exists():
         subprocess.run([*dsh, '--profile', args.profile, '--from-default-profile', 'web', '--help'],
                        env=env, cwd=ROOT, check=True, capture_output=True)
-    packed = json.loads((ROOT / '.runtime/adr008/packages/manifest.json').read_text(encoding='utf-8'))
+    from pack_plugins import MANIFEST
+    packed = json.loads((ROOT / MANIFEST).read_text(encoding='utf-8'))
     # The reviewed DSH patches (tools/dsh-inline) are installed with the plugins they serve.
     names = {'@asuna/cognition-core', persona['name'], *(c['name'] for c in channels),
              *(a['name'] for a in packed if a.get('kind') == 'dsh-inline')}

@@ -30,6 +30,8 @@ STACKS_AFTER_SECONDS = 1.0       # ... with every thread's stack as it stood thi
 STACK_DEPTH = 12
 
 
+MAX_TEXT = 16000             # the channel API's text limit; each channel client keeps the same (test_shared_constants)
+
 def thread_stacks(admitting):
     """Every other thread's innermost frames as `file:line function` (file names and code only, never a value);
     `admitting` (a thread ident) is shown as `admission`."""
@@ -469,7 +471,7 @@ class Channels:
         # Reject malformed payloads before any automatic enrollment writes.
         if not isinstance(body.get('event_id'), str) or not 1 <= len(body['event_id']) <= 200:
             raise ValueError('INVALID_PLATFORM_EVENT_ID')
-        if not isinstance(body.get('text'), str) or not 1 <= len(body['text']) <= 16000:
+        if not isinstance(body.get('text'), str) or not 1 <= len(body['text']) <= MAX_TEXT:
             raise ValueError('INVALID_MESSAGE_TEXT')
         if 'occurred_at' in body and not isinstance(body['occurred_at'], str):
             raise ValueError('INVALID_OCCURRED_AT')
@@ -495,7 +497,7 @@ class Channels:
             raise Denied('DM_GROUP_FIELDS_DENIED')
         if not isinstance(body.get('event_id'), str) or not 1 <= len(body['event_id']) <= 200:
             raise ValueError('INVALID_PLATFORM_EVENT_ID')
-        if not isinstance(body.get('text'), str) or not 1 <= len(body['text']) <= 16000:
+        if not isinstance(body.get('text'), str) or not 1 <= len(body['text']) <= MAX_TEXT:
             raise ValueError('INVALID_MESSAGE_TEXT')
         if 'occurred_at' in body and not isinstance(body['occurred_at'], str):
             raise ValueError('INVALID_OCCURRED_AT')

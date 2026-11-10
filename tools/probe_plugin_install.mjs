@@ -3,6 +3,7 @@
  *
  * No Host, Python worker, Mongo database, model request or channel consumer starts. The result is written as
  * evidence beside the packed artifacts. */
+import { PACKAGES_MANIFEST } from './asuna-launch.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -20,7 +21,7 @@ try {                                     // the temporary DSH home goes whateve
   assert(!home.toLowerCase().startsWith(root.toLowerCase()));
   const profileDir = path.join(home, 'profiles', 'package-probe');
   initProfile(profileDir, PROFILE_TEMPLATES.web.bundles);
-  const artifacts = JSON.parse(await fs.readFile(path.join(root, '.runtime/adr008/packages/manifest.json'), 'utf8'));
+  const artifacts = JSON.parse(await fs.readFile(path.join(root, PACKAGES_MANIFEST), 'utf8'));
   const installAnchor = path.join(root, 'node_modules/@deepseek-ai/dsh/package.json');
   const install = await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [path.join(path.dirname(installAnchor), 'lib/bin.js'),

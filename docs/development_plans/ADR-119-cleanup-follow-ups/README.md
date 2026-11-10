@@ -254,14 +254,22 @@ the landing).
 
 Her choice (agent line 0302, 0303): the interval through `set_policy`, and one rule for clearing every parameter.
 
-1. *The parameter.* `self_development.every_min` joins her `set_policy` parameters (`CORE_WRITABLE_KEYS`):
-   integer, 360 to 10,080 minutes. The owner's switches (`self_development.enabled`, `night`) stay out of it.
+1. *The parameter.* `self_development.every_min` joins the core's `set_policy` parameters (`CORE_WRITABLE_KEYS`,
+   for every persona; not a package's own `policy_keys`): integer, 360 to 10,080 minutes, its spec shaped as
+   `heartbeat.every_min`'s. The 360 bound is `set_policy`'s alone: a persona model's own default may be lower (the
+   schema's minimum, 60, stays; it is every persona's). The owner's switches (`self_development.enabled`,
+   `night`) stay out of it. `set_policy` is a home, owner-private turn's tool (`POLICY_SET_REQUIRES_OWNER_PRIVATE`
+   elsewhere); its description says so beside the `null` sentence.
 2. *The retime, once per change.* Her `set_policy` of the interval ensures the daytime plan at once; the rhythm
    watch (every 300 s) and each start ensure it too, for a change in the persona model. When the interval it
    computes (policy, else persona model, else `SELF_DEVELOPMENT_DEFAULT_MIN`, 1,440) differs from the live plan's
    `rule.every_seconds`, the native record is updated in place (`/schedule/update`, as `_rhythm_plan` retimes her
    heartbeat), the plan's `rule` and `next_fire_at` follow, and one `rhythm.retimed` line records `from` and `to`.
-   An equal value does nothing. *Where the next run falls:* DSH rebuilds an `every` task whose timing changes from
+   An equal value does nothing. Every path that writes the native record uses the computed interval: today a
+   live plan returns early and a missing native record is rebuilt from the plan's old `rule.every_seconds`
+   (`_ensure_development_plan`); both take the new one. The plan record, its `fire_count` and
+   `fire_count_since` are Asuna's and stay through a retime (DSH keeps the task's id when it rebuilds it), so the
+   count goes on; `rhythm.retimed` marks where the interval changed. *Where the next run falls:* DSH rebuilds an `every` task whose timing changes from
    the moment of the change (`createEveryScheduleRecord`: now plus the interval) and takes no anchor, so the next
    run is the moment of the change plus the new interval. With her plan as read on 11-10 (last run 18:18:44, next
    11-11 18:18, 1,440 min): set to 360 at 19:02, the next run is 11-11 01:02; set to 10,080 at 19:02, it is 11-17

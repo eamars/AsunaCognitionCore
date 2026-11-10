@@ -306,6 +306,12 @@ name promises. Proof, three ways:
    list's 「等」, recent thoughts). These rest on proof 1 alone. The volume module's counts show only that a
    branch ran, never a reading of her data. Files on disk were not compared.
 
+**Evidence kept** (her ask, line 0313): `<data>/private/evidence/adr119-f8/`, 48,325 bytes: the harness
+(`f8_compare.py`, a pytest plugin loaded with `-p`, and `test_f8_volume.py`), its three reports (`report_ab.txt`
+main against the branch, `report_aa.txt` main against main, `report_mutation.txt` the planted changes),
+`volume_branches.json`, and `SHA256SUMS`. Installed 2026-11-10 19:36 as `7b31cdc216b4`; the installed
+`context.py` has the commit's blob (`0fe96bd8f33f`).
+
 ## 9. F14 design: her daytime interval, and clearing a parameter (2026-11-10)
 
 Her choice (agent line 0302, 0303): the interval through `set_policy`, and one rule for clearing every parameter.

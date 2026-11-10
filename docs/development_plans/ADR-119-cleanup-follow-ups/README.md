@@ -28,7 +28,7 @@ Left as is by the owner: the four channel API clients (ADR-118 §7.2).
 | F7 | The scanners (four private-word scanners; a default secret scan that passes on nothing) | A design here first: one scanner or a stated split; no scan passes when nothing was checked Design §5. **(a) built 2026-11-10**: `check_staged_secrets.py` exits 0 clean, 1 on a counted hit, 3 (`UNCHECKED`) when nothing was read or nothing it is asked to look for could be (in both modes; the secret mode refuses options); `--personal` always fails on a hit and `--strict` is gone; `release.py` goes by the exit code; the core skill's push-gate lines say so; the lead's push gate runs its scans from its own folder and stops on a git failure or an empty range. **(b) built 2026-11-10**: `asuna.private_words` is the one Python reader (the list with its categories, `text_of`: a NUL anywhere is binary, else UTF-8 with bad bytes replaced, `persona_names`: each persona package's folder and its model's names); `check_staged_secrets` (no persona name written in it any more), `release` and `publication_scan` read and match through it. It found the released QQ package's `resources-provenance.json` naming her, reworded. Two causes, apart (her correction): `check_staged_secrets`' deleted pattern was case-blind and caught the name in the core already; the release path missed it because `release.py` matched model names case-sensitively and never read the package folder (`publication_scan` matched case-sensitively too). A known hole: a name written in another form of the same character (the Japanese form of her name's second character, U+6E80) does not match; no tracked file holds one today. **(c) built 2026-11-10**: one table, `tests/fixtures/private_words_cases.json`, holds both readers (Python `tests/test_private_words_parity.py`, JS `private-words.test.js`): parsing a list and matching words; either side drifting fails. Her own copies are hers, held by her own check |
 | F8 | Long functions (`context._prepare`, `native_worker.dispatch`, `client.js`, `AsunaCore`) | Each refactor proven identical at her layer, or dropped with a reason |
 | F9 | Paths that need a reading of her data first (revisions without `sections`, old scheduler links, `every_seconds`) | Her data read; each path removed or kept with the count that justifies it |
-| F10 | A plan whose dispatch fails is silent on her side (her line 0018, 2026-11-04); her plan view shows `next_fire_at` and `fire_count` empty for the two self-development plans though they fire | Same class as F1: a failed dispatch reaches her as a line in her wording, shown by a staged failure; the two plans show their real values |
+| F10 | A plan whose dispatch fails is silent on her side (her line 0018, 2026-11-04); her plan view shows `next_fire_at` and `fire_count` empty for the two self-development plans though they fire | Same class as F1: a failed dispatch reaches her as a line in her wording, shown by a staged failure; the two plans show their real values **Built 2026-11-10** (design §6, her wording line 0277): a failed firing marks its conversation and her next turn there reads one line, saying whether the plan fires again; a logged firing never handed over is handed on by the rhythm watch after 300 s, once, and its turn says when it was due and why it came late; the two self-development plans carry `native_recurring` and `next_fire_at`, `fire_count` from `fire_count_since` (not back-filled). Whether the night stage runs inside her window is hers to measure |
 | F11 | A silence after a body the turn-end check sent back said 「这一回合正文里一个字都没写」 (her agent line, 2026-11-10 13:22): the receipt counted only the repair stage, so her refused reply was lost while the receipt said nothing was written | **Built 2026-11-10** (her wording, line 0234): on a line whose body is sent at the turn's end, silence after a refused body says 「这一步正文里没写字。这一回合前面那段被打回了、还没发出去：就这样结束，它不会发出去。现在在正文里重写一遍才发得出去（写进 think 的不会发）。」 and echoes the refused text's first 40 characters. Where only `speak` sends, the worker already says what the whole turn sent (`sent`). The check that sends a body back is unchanged. Covered by `stage-view.test.js` "ADR-119 F11: silence after a body the check sent back…"; she reports the first real one |
 | F12 | `summary_batch_id` read two ways (her finding, line 0246): the query of lines still to summarise (`records/messages.said`, `Exists(False)`) took a null as summarised, while the writer and every reader (`dialogue_summary`, `summary_attribution`, `retrieval`) take a falsy id as not; the catalog allows null, so only "nobody writes null" kept them agreeing | **Built 2026-11-10**: the query takes absent, null and empty as not summarised, the readers' rule; `tests/test_summary_batch_id.py` covers the four shapes |
 | F13 | `check_staged_secrets.py --personal --all` counts 50 hits on main (2026-11-10, after F7 b: 43 account-number shapes, 2 time zones, 1 persona name), nearly all synthetic numbers in test fixtures and the scanner's own tests; three are in her image skill's files; with every persona's names read (F7 b) four more, persona names in two core tests | Each hit fixed, or allowed where it is a fixture's placeholder (`personal_scan_allow.txt` or the line's `personal-scan: ok` mark); hers are hers to judge; `--all` then exits 0 on main **Built 2026-11-10**: every hit judged, none personal: test fixtures' numbers now the placeholder form or built at runtime, scanner tests' account-shaped numbers marked, digit-only fake hashes made hex, persona names used as test data replaced (the persona paths a test reads marked); real constants (a millisecond hour, the platform's 30-day mute, the QQ bot intents mask and two error codes) and her two image seeds (her judgment) on `tools/personal_scan_allow.txt`; two daylight-saving tests moved off the deployment's own zone to another with the same switch dates. `--all` exits 0 on main. This machine has no denylist (`<data>/private/personal-denylist.txt`), so that dimension is not checked here: `--all` exiting 0 covers the private-words list, account-number shapes and persona names, not the denylist. The denylist is the owner's own list of literals; it is not drafted from her private-words list, and each list keeps its own words |
@@ -139,3 +139,54 @@ persona names are matched case-blind in one place and case-sensitively in two.
 each test is run on the old code first to show it fails there.
 
 One landing at a time; tests only where a failure would be silent and costly.
+
+## 6. F10 design: a due plan that does not reach her (2026-11-10)
+
+**What is there** (survey 2026-11-10). A firing goes DSH scheduler → the scheduler session's pre-step hook
+(`scheduler.js`, `schedule.js delivered`) → worker `schedule.deliver` → `Schedule._deliver_locked` → her turn. It can
+end in three places, and none of them reaches her:
+
+1. *It reaches the worker and fails there* (`_deliver_locked`'s `except`: the route revoked, the policy stale, the
+   turn not enqueued). The error is kept only as the plan's `last_outcome` and a `schedule.dispatched` audit row.
+2. *It never reaches the worker*: the scheduler session's turn ends before its hook (11-04: every scheduler turn
+   ended "has no provider/model" from 21:08 to 22:49, no plan fired), or the callback is refused
+   (`SCHEDULE_DISPATCH_NOT_FOUND` and the like). DSH has logged the firing; nothing on Asuna's side looks at it again
+   until the next start (`reconcile` delivers every logged dispatch newer than the plan's `last_dispatch_seq`).
+3. *The two self-development plans* (`plan-asuna-self-development`, `-night`) are written by
+   `_ensure_development_plan`, which sets neither `native_recurring` nor `next_fire_at`; the firing path moves the
+   next time on and counts `fire_count` only for a plan marked `native_recurring` (the rhythms' `_rhythm_plan` marks
+   it). So both fire (30 and 4,278 `schedule.dispatched` rows on 11-10) with the two fields empty.
+
+**The broken invariants and the change** (her reading and wording, agent line 0276 and 0277):
+
+1. *A due plan that did not run is said where she reads, as a failed turn is* (ADR-076 R4, `faults.py`). A failure in
+   case 1 marks the plan's conversation (`scenes.plan_fault`: the newest failure's time, cause, plan wording and
+   whether the plan fires again, which plans failed, and how many since she was last told), apart from the
+   turn-fault mark so the two do not overwrite each other. Her next turn there reads one line
+   (`plan_fault_from_program`): 「你安排的计划「…」… 到点了没排上：程序没把它交上去（CAUSE），不是你做错了什么。」
+   then 「这条计划还在，下次照旧。」 or 「这条不再响了。」, and 「从上次告诉你以来，这里没排上的计划一共 N 次。」 when
+   N > 1. It says nothing about a report: the developer's inbox note (one per cause a day, counted) is written
+   after the mark, and a failed write is audited (`schedule.fault_unreported`), not claimed. When the turn that showed
+   the line commits, each plan it named gets a `schedule.fault_told` audit row (so she can count the times), and the
+   mark goes down by what she was shown: a failure arriving while she reads stays, counted once. The deliberate
+   outcomes (`OUTSIDE_NIGHT`, `NOT_DUE`, `STAGE_BUSY`, `LOOKING`, `NIGHT_OFF`) are answers, not failures, and are not
+   said. These failures write no `chat.error`, so they are not in the count of turns whose episode is missing.
+2. *A logged firing is handed on without waiting for a start.* The host's rhythm watch (every 300 s) delivers each
+   logged dispatch that is newer than its plan's `last_dispatch_seq` and was due more than `HANDOFF_LATE_SECONDS`
+   (300 s) ago, through the same `_deliver` a start uses (serialised by `deliver_lock`, a seq at most once), and
+   records `schedule.handoff_late`. The plan's turn reads 「这条计划 DUE 到点，HANDED 才交到你手上：中间这一截程序没交过来
+   （WHY），不是你拖的。」: WHY is the refused callback's code when this process saw one after the firing was due, else
+   「定时那一拍没把它递过来，这边看不到原因」 (a scheduler turn that ended before its hook leaves the worker nothing to
+   read); a time that cannot be read is 「时间不详」. A refused callback is picked up the same way, so case 2 needs no
+   second path.
+3. *One writer of a native recurring plan's shown fields.* `_ensure_development_plan` writes `native_recurring` and
+   `next_fire_at` as `_rhythm_plan` does, and an already-live record is completed the same way at the next ensure.
+   History is not back-filled (her ask, line 0276: the empty fields are the evidence of this defect): `fire_count`
+   counts from the first firing after the change, and the record says from when (`fire_count_since`).
+
+**Not closed by this:** whether the night stage really runs inside her window (an outcome other than `STAGE_BUSY` or
+`OUTSIDE_NIGHT` between 01:07 and 05:57) is her own measurement and stays hers.
+
+**Landing:** one, with a restart. Tests (unit, in-memory adapter): a staged dispatch failure marks the conversation
+and her next turn reads the line once; a logged dispatch the callback never brought is delivered by the watch once;
+the development plans carry `native_recurring` and `next_fire_at`. Each is run on the old code first to show it fails.

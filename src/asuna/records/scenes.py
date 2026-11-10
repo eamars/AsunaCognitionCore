@@ -152,6 +152,26 @@ def note_fault(store, scene_id, fault):
     _set(store, scene_id, {'fault': fault})
 
 
+def note_plan_fault(store, scene_id, fault):
+    """A due plan here did not run (ADR-119 F10): the newest failure's fields, and one more in its count."""
+    _rows(store).update({'_id': scene_id}, [Set({'plan_fault.' + key: value for key, value in fault.items()}),
+                                            Increase('plan_fault.count')])
+
+
+def clear_plan_fault(store, scene_id, shown):
+    """The plan-fault mark she was shown goes. A newer failure since then keeps the mark, less what she was shown:
+    the count goes down first and the mark is removed only if it is still the one shown, so a failure arriving
+    between the two steps is neither lost nor counted twice."""
+    _rows(store).update({'_id': scene_id, 'plan_fault.at': Not(shown['at']), 'plan_fault.count': Exists(True)},
+                        Increase('plan_fault.count', -int(shown['count'])))
+    now = ((get(store, scene_id, ['plan_fault']) or {}).get('plan_fault') or {}).get('plans') or {}
+    told = ['plan_fault.plans.' + plan_id for plan_id, failed_at in (shown.get('plans') or {}).items()
+            if now.get(plan_id) == failed_at]                           # a plan that failed again since stays
+    if told:
+        _unset(store, scene_id, *told)
+    _unset(store, scene_id, 'plan_fault', **{'plan_fault.at': shown['at']})
+
+
 def clear_fault(store, scene_id, at):
     """The fault mark goes, if it is still the one shown (`fault.at`)."""
     _unset(store, scene_id, 'fault', **{'fault.at': at})

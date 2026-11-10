@@ -1054,6 +1054,11 @@ class ContextBuilder:
             stored=plan
             plan={key:plan[key] for key in ('_id','last_occurrence_id','last_outcome') if key in plan}
             if then:plan['your_thought_then']=then
+            late=event.get('handed_late')
+            if late:                      # ADR-119 F10: handed on by the rhythm watch, not by the firing itself
+                from . import faults
+                plan['handed_late']=faults.late_line(schedule_zone,late.get('due'),late.get('handed'),
+                                                     late.get('why') or '原因不明')
             # ADR-111 §3.6: whose work the plan is for, and where that person stands now.
             from . import whose as _whose
             said=_whose.words(self.store,persona,_whose.of_plan(self.store,{**stored,'source_episode_id':source_episode}),
@@ -1352,6 +1357,11 @@ class ContextBuilder:
         if fault:
             context['fault_from_program']=fault
             manifest.setdefault('told',{})['fault']=scene['fault'].get('at')
+        missed=faults.plan_line(self.store,scene,schedule_rules.her_zone(self.store.config))
+        if missed:
+            context['plan_fault_from_program']=missed
+            manifest.setdefault('told',{})['plan_fault']={key:scene['plan_fault'].get(key)
+                                                          for key in ('at','count','plans')}
         if scene.get('channel_id'):
             # How her words leave on a platform, and which lines are hers to answer now (coordinator._absorb).
             from . import channel_kinds

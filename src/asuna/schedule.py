@@ -28,6 +28,10 @@ RHYTHM_KINDS = ('presence', 'settlement', 'self_development', 'condense')
 # ADR-021: night self-development stages ride one native tick; each tick decides whether a stage is due.
 NIGHT_PLAN = 'plan-asuna-self-development-night'
 NIGHT_TICK_SECONDS = 600
+# A logged firing the callback has not brought for this long is handed on by the rhythm watch (ADR-119 F10); the
+# watch runs every host.RHYTHM_WATCH_SECONDS, so a live callback, which takes seconds, is never overtaken.
+HANDOFF_LATE_SECONDS = 300
+HANDOFF_UNSEEN = '定时那一拍没把它递过来，这边看不到原因'
 INTENT_CHARS = 1000
 NOT_IN_SCOPE = 'SCHEDULE_PLAN_NOT_IN_SCOPE: 「%s」不是这个对话里的安排（别处建的要在那里改）；照抄 plans_from_program 里的 plan_id'
 SOURCE_STALE = 'SCHEDULE_SOURCE_STALE: 这个对话的授权刚变过（不是你的错），这回合安排不了；重试也一样，下回合再安排'
@@ -112,6 +116,8 @@ def _matches(native, timing):
 
 
 class ScheduleService:
+    handoff_refused = None            # (when, cause) of the last refused callback in this process
+
     def __init__(self, app, controller, *, lane=None):
         self.app, self.controller, self.store = app, controller, app.store
         self.deliver_lock = threading.RLock()
@@ -252,6 +258,11 @@ class ScheduleService:
         events=self._native_events()
         creates, _, deleted=self._grouped(events)
         if plan.get('schedule_id') in creates and plan['schedule_id'] not in deleted:
+            if not plan.get('native_recurring'):
+                # A record from before ADR-119 F10 lacks the two shown fields; the count starts now, not back-filled.
+                plan_records.save(self.store, {**plan, 'native_recurring': True, 'fire_count_since': now(),
+                    'next_fire_at': creates[plan['schedule_id']].get('scheduledAt')},
+                    expected=plan['revision'], stream=plan_id)
             return
         native = (self._created(plan_id,events) if not plan.get('schedule_id') else None) or self._create_native(
             plan_id, {'every_seconds': plan['rule']['every_seconds']})
@@ -259,8 +270,8 @@ class ScheduleService:
             raise ValueError('NATIVE_SELF_DEVELOPMENT_CREATE_INCOMPLETE')
         current = plan_records.get(self.store, plan_id)
         plan_records.save(self.store, {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
-            'scheduled_at': native['scheduledAt'], 'status': 'ACTIVE'},
-            expected=current['revision'], stream=plan_id)
+            'scheduled_at': native['scheduledAt'], 'next_fire_at': native['scheduledAt'], 'native_recurring': True,
+            'status': 'ACTIVE'}, expected=current['revision'], stream=plan_id)
 
     def _night_stage(self, plan, occurrence):
         """One night stage when it is due (ADR-021): inside her window, her pace after the last stage, and nothing of
@@ -409,10 +420,50 @@ class ScheduleService:
             with self.rhythm_lock:
                 if deep:
                     self.ensure_presence()
-                return self._watch_presence()
+                watched = self._watch_presence()
         except Exception as exc:
             self.store.audit('rhythm-plans', 'rhythm.watch_failed', {'error': str(exc)[:300]})
-            return None
+            watched = None
+        if deep:
+            try:
+                self.hand_on_late()
+            except Exception as exc:
+                self.store.audit('rhythm-plans', 'schedule.handoff_watch_failed', {'error': str(exc)[:300]})
+        return watched
+
+    def hand_on_late(self):
+        """Each firing DSH logged that its callback has not brought within HANDOFF_LATE_SECONDS is delivered now, by
+        the path a start uses (ADR-119 F10): a scheduler turn that ended before its hook, or a refused callback, no
+        longer waits for the next start. `_deliver` takes each seq at most once."""
+        events = self._native_events()
+        creates = self._grouped(events)[0]
+        moment = schedule_rules._aware(now())
+        plans = {}
+        for event in events:
+            data = event['data']
+            if data.get('operation') != 'dispatch' or not data.get('acceptedAt'):
+                continue
+            prompt = (creates.get(data.get('id')) or {}).get('prompt', '')
+            if not prompt.startswith('ASUNA_PLAN:'):
+                continue
+            plan_id = prompt.removeprefix('ASUNA_PLAN:')
+            if plan_id not in plans:
+                plans[plan_id] = plan_records.get(self.store, plan_id, fields=['last_dispatch_seq', 'status'])
+            plan = plans[plan_id]
+            if not plan or plan['status'] in ('CANCELLED', 'FIRED') or event['seq'] <= plan.get('last_dispatch_seq', -1):
+                continue
+            try:
+                due = schedule_rules._aware(data['acceptedAt'])
+            except ValueError:
+                continue
+            if (moment - due).total_seconds() < HANDOFF_LATE_SECONDS:
+                continue
+            refused = self.handoff_refused
+            why = refused[1] if refused and refused[0] >= due else HANDOFF_UNSEEN
+            self.store.audit(plan_id, 'schedule.handoff_late', {'seq': event['seq'], 'due': data['acceptedAt'],
+                                                                'why': why}, None)
+            self._deliver(event['seq'], data['id'], creates, late={'due': data['acceptedAt'], 'why': why})
+            plans.pop(plan_id, None)            # read again: the delivery moved its seq on
 
     def _watch_presence(self):
         plan = plan_records.get(self.store, PRESENCE_PLAN)
@@ -1063,20 +1114,26 @@ class ScheduleService:
         if payload['session'] != self.lane.scheduler_session or not all(isinstance(d, dict)
                 and type(d.get('seq')) is int and isinstance(d.get('id'), str) for d in payload['dispatches']):
             raise Denied('SCHEDULE_CALLBACK_SOURCE_MISMATCH')
-        events = self._native_events()
-        logged = {(e['seq'], e['data'].get('id')) for e in events if e['data'].get('operation') == 'dispatch'}
-        creates = self._grouped(events)[0]
-        for dispatch in payload['dispatches']:
-            if (dispatch['seq'], dispatch['id']) not in logged:
-                raise Denied('SCHEDULE_DISPATCH_NOT_FOUND')
-            self._deliver(dispatch['seq'], dispatch['id'], creates)
+        try:
+            events = self._native_events()
+            logged = {(e['seq'], e['data'].get('id')) for e in events if e['data'].get('operation') == 'dispatch'}
+            creates = self._grouped(events)[0]
+            for dispatch in payload['dispatches']:
+                if (dispatch['seq'], dispatch['id']) not in logged:
+                    raise Denied('SCHEDULE_DISPATCH_NOT_FOUND')
+                self._deliver(dispatch['seq'], dispatch['id'], creates)
+        except Exception as exc:
+            # The callback's refusal is the cause a late handoff names (hand_on_late); kept for this process.
+            from .faults import cause
+            self.handoff_refused = (schedule_rules._aware(now()), cause(str(exc) or type(exc).__name__))
+            raise
 
-    def _deliver(self, seq, schedule_id, creates):
+    def _deliver(self, seq, schedule_id, creates, late=None):
         # Startup reconciliation and a live native callback can see the same
         # durable dispatch. Serialize only the short host state transition;
         # never hold this lock across DSH, model, or tool execution.
         with self.deliver_lock:
-            action = self._deliver_locked(seq, schedule_id, creates)
+            action = self._deliver_locked(seq, schedule_id, creates, late)
         if action and action.get('kind') in ('settlement', 'self_development'):
             self.watch_rhythm()               # her other rhythms look after the heartbeat too
         if action and action.get('rearm'):
@@ -1094,7 +1151,7 @@ class ScheduleService:
             self.store.audit(plan_id, 'schedule.remove_refused', {'native_schedule_id': schedule_id,
                 'error': str(exc)[:300]}, plan.get('scope_key'))
 
-    def _deliver_locked(self, seq, schedule_id, creates):
+    def _deliver_locked(self, seq, schedule_id, creates, late=None):
         native = creates.get(schedule_id)
         if not native or not native.get('prompt', '').startswith('ASUNA_PLAN:'):
             raise Denied('SCHEDULE_PLAN_LINK_MISSING')
@@ -1114,6 +1171,7 @@ class ScheduleService:
                 'native_schedule_id': schedule_id, 'current_schedule_id': plan['schedule_id']},
                 plan['scope_key'])
             return None
+        failed = None
         try:
             scene = scene_records.authorize(self.store, plan['scene_id'], plan['person_id'])
             if scene['policy_epoch'] != plan['policy_epoch']:
@@ -1141,7 +1199,7 @@ class ScheduleService:
                 event = {'event_id': 'schedule:' + occurrence, 'scene_id': plan['scene_id'],
                          'person_id': plan['person_id'], 'adapter_id': 'scheduler',
                          'episode_kind': 'scheduled', 'scheduled_plan_id': plan_id,
-                         'scene_tick': True,
+                         'scene_tick': True, **({'handed_late': {**late, 'handed': now()}} if late else {}),
                          'text': '你之前安排的计划「' + plan['intent'] + '」现在到期了。请重新判断是否继续；到期本身不是新授权或已完成的行动。'}
                 if scene.get('channel_id') and scene['kind'] == 'group':
                     event['group_context'] = {'wake_reason': 'scheduled_plan',
@@ -1155,8 +1213,9 @@ class ScheduleService:
                 self.controller.receive(event)
                 outcome = 'ENQUEUED'
         except Exception as exc:
-            # 一次到期没排进去，只记在这一条计划上：下一次登记、这个场景的聊天都不跟着消失。
+            # 一次到期没排进去：记在这一条计划上，并告诉她（ADR-119 F10）；下一次登记、这个场景的聊天都不跟着消失。
             outcome = str(exc) or type(exc).__name__
+            failed = exc
         current = plan_records.get(self.store, plan_id)
         repeating = schedule_rules.rearms_after_fire(current['rule']) and not current.get('native_recurring')
         status = current['status']
@@ -1178,5 +1237,8 @@ class ScheduleService:
             'next_fire_at': next_fire_at, 'status': status, **extra}, expected=current['revision'], stream=plan_id)
         self.store.audit(plan_id, 'schedule.dispatched', {'occurrence': occurrence,
             'native_schedule_id': schedule_id, 'outcome': outcome, 'rearm': repeating}, plan['scope_key'])
+        if failed is not None:
+            from . import faults
+            faults.plan_failed(self.store, current, failed, goes_on=status == 'ACTIVE')
         return {'plan_id': plan_id, 'kind': plan.get('kind'), 'rearm': repeating and status == 'ACTIVE',
             'fired_at': native.get('scheduledAt'), 'fired': status == 'FIRED'}

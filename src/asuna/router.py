@@ -34,6 +34,9 @@ class Router:
         # What a heartbeat's die rolled (ADR-058): the program's own internal event only, never a channel's.
         if not event.get('channel') and event.get('episode_kind')=='presence' and event.get('dice'):
             trusted['dice']=event['dice']
+        # A due plan the rhythm watch handed on late (ADR-119 F10): its due time and cause, the program's own event only.
+        if not event.get('channel') and event.get('episode_kind')=='scheduled' and isinstance(event.get('handed_late'),dict):
+            trusted['handed_late']={k:str(event['handed_late'].get(k) or '') for k in ('due','handed','why')}
         # Only the private native Host adapter supplies this execution identity;
         # channel payloads cannot choose a local native session or its authority.
         if not event.get('channel') and event.get('native_session_id'):

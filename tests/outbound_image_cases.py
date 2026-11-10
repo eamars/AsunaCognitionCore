@@ -184,106 +184,28 @@ CONFIG = {
 }
 
 
-def _get(doc, key):
-    value = doc
-    for part in key.split('.'):
-        if not isinstance(value, dict) or part not in value:
-            return None
-        value = value[part]
-    return value
+class Rows(list):
+    """Rows a case read back, in the one order a case asks for (`sort(field, 1|-1)`; a row without it last)."""
 
-
-def _ops(have, want):
-    for op, expect in want.items():
-        if op == '$in':
-            if have not in expect:
-                return False
-        elif op == '$nin':
-            if have in expect:
-                return False
-        elif op == '$ne':
-            if have == expect:
-                return False
-        elif op == '$exists':
-            if (have is not None) != bool(expect):
-                return False
-        elif op == '$lt':
-            if not (have is not None and have < expect):
-                return False
-        elif op == '$lte':
-            if not (have is not None and have <= expect):
-                return False
-        elif op == '$gt':
-            if not (have is not None and have > expect):
-                return False
-        elif op == '$gte':
-            if not (have is not None and have >= expect):
-                return False
-        else:
-            raise AssertionError('假集合没实现的操作符：%s' % op)
-    return True
-
-
-def _match(doc, query):
-    for key, want in (query or {}).items():
-        if key == '$or':
-            if not any(_match(doc, sub) for sub in want):
-                return False
-            continue
-        if key == '$and':
-            if not all(_match(doc, sub) for sub in want):
-                return False
-            continue
-        have = _get(doc, key)
-        operator_query = isinstance(want, dict) and any(str(k).startswith('$') for k in want)
-        if not (_ops(have, want) if operator_query else have == want):
-            return False
-    return True
-
-
-def _project(doc, projection):
-    if not projection:
-        return copy.deepcopy(doc)
-    out = {'_id': doc.get('_id')}
-    for key, keep in projection.items():
-        if not keep:
-            continue
-        if '.' in key:
-            if _get(doc, key) is not None:
-                out[key] = _get(doc, key)
-        elif key in doc:
-            out[key] = doc[key]
-    return out
-
-
-class Cursor:
-    '''链式 sort/limit 与 Mongo 同形；实例属性用下划线前缀，别把方法盖掉。'''
-
-    def __init__(self, rows, projection=None, sorted_by=None, capped=None):
-        self.rows, self.projection, self._sorted_by, self._capped = rows, projection, sorted_by, capped
-
-    def sort(self, *spec):
-        pairs = list(spec[0]) if spec and isinstance(spec[0], (list, tuple)) and \
-            spec[0] and isinstance(spec[0][0], (list, tuple)) else [list(spec)]
-        rows = list(self.rows)
-        for field, direction in reversed(pairs):
-            rows.sort(key=lambda row, f=field: (_get(row, f) is None, _get(row, f)),
-                      reverse=int(direction) < 0)
-        return Cursor(rows, self.projection, spec, self._capped)
-
-    def limit(self, count):
-        return Cursor(list(self.rows)[:int(count)], self.projection, self._sorted_by, count)
-
-    def __iter__(self):
-        return iter(_project(row, self.projection) for row in self.rows)
-
-    def __len__(self):
-        return len(self.rows)
+    def sort(self, field, direction=1):
+        return Rows(sorted(self, key=lambda row: (row.get(field) is None, row.get(field)), reverse=int(direction) < 0))
 
 
 class Collection:
+    """One collection's rows (fake_collections reads and writes `docs`: the record owners match through the in-memory
+    adapter, which the adapter contract holds against MongoDB). A case seeds and reads them by a whole query of plain
+    field equality: every key it names is checked, and a Mongo operator is refused, so no case can quietly lose a
+    condition (ADR-119 F5)."""
+
     def __init__(self, name):
         self.name, self.docs = name, {}
+
+    @staticmethod
+    def _hits(rows, query):
+        for key, value in (query or {}).items():
+            if key.startswith('$') or (isinstance(value, dict) and any(str(op).startswith('$') for op in value)):
+                raise AssertionError('a case reads the fake by plain field equality only: %r' % (query,))
+        return [row for row in rows if all(key in row and row[key] == value for key, value in (query or {}).items())]
 
     def insert_one(self, doc):
         if doc['_id'] in self.docs:
@@ -292,28 +214,20 @@ class Collection:
         return types.SimpleNamespace(inserted_id=doc['_id'])
 
     def replace_one(self, query, doc):
-        hit = [row for row in self.docs.values() if _match(row, query)]
-        if not hit:
+        if not self._hits(self.docs.values(), query):
             return types.SimpleNamespace(modified_count=0)
         self.docs[doc['_id']] = copy.deepcopy(doc)
         return types.SimpleNamespace(modified_count=1)
 
-    def find(self, query=None, projection=None, sort=None, limit=None):
-        rows = [row for row in self.docs.values() if _match(row, query or {})]
-        cursor = Cursor(rows, projection)
-        if sort:
-            cursor = cursor.sort(sort)
-        if limit:
-            cursor = cursor.limit(limit)
-        return cursor
+    def find(self, query=None):
+        return Rows(copy.deepcopy(row) for row in self._hits(self.docs.values(), query))
 
-    def find_one(self, query=None, projection=None, sort=None, limit=None):
-        for row in self.find(query, projection, sort, limit or 1):
-            return row
-        return None
+    def find_one(self, query=None):
+        found = self.find(query)
+        return found[0] if found else None
 
     def count_documents(self, query=None):
-        return len([row for row in self.docs.values() if _match(row, query or {})])
+        return len(self._hits(self.docs.values(), query))
 
 
 class DB:

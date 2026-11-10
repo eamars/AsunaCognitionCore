@@ -90,111 +90,29 @@ PERSONA_BODY = ('示例角色，24 岁。说话清淡直接，有一点不刻薄
                 '不算浪费。会被经历影响，允许自己改看法，不拿工作量证明自己值得被喜欢。')
 
 
-# ── 假集合：用例自己回读时真算过滤／投影／排序（store.fake）──────
-def _lookup(doc, key):
-    value = doc
-    for part in key.split('.'):
-        if isinstance(value, dict) and part in value:
-            value = value[part]
-        else:
-            return False, None
-    return True, value
-
-
-def _match(doc, flt):
-    for key, cond in flt.items():
-        if key == '$or':
-            if not any(_match(doc, sub) for sub in cond):
-                return False
-        elif key == '$and':
-            if not all(_match(doc, sub) for sub in cond):
-                return False
-        elif isinstance(cond, dict):
-            found, value = _lookup(doc, key)
-            for op, arg in cond.items():
-                if op == '$in' and value not in arg:
-                    return False
-                elif op == '$exists' and found is not bool(arg):
-                    return False
-                elif op == '$ne' and found and value == arg:
-                    return False
-                elif op == '$gt' and (value is None or value <= arg):
-                    return False
-                elif op == '$gte' and (value is None or value < arg):
-                    return False
-                elif op == '$lte' and (value is None or value > arg):
-                    return False
-                elif op == '$lt' and (value is None or value >= arg):
-                    return False
-        else:
-            found, value = _lookup(doc, key)
-            if not found or not (value == cond or (isinstance(value, list) and cond in value)):
-                return False
-    return True
-
-
-def _project(doc, projection):
-    if not projection:
-        return dict(doc)
-    if not any(value for key, value in projection.items() if key != '_id'):
-        # 排除式投影（本路径只有 {'embedding':0}）：整条留下，只剔掉点名的键。
-        out = dict(doc)
-        for key, value in projection.items():
-            if not value and key != '_id':
-                out.pop(key, None)
-        return out
-    out = {'_id': doc.get('_id')}
-    for key in projection:
-        if key == '_id':
-            continue
-        found, value = _lookup(doc, key)
-        if not found:
-            continue
-        cursor = out
-        parts = key.split('.')
-        for part in parts[:-1]:
-            cursor = cursor.setdefault(part, {})
-        cursor[parts[-1]] = value
-    return out
-
-
-class FakeCursor:
-    def __init__(self, rows):
-        self.rows = list(rows)
-
-    def sort(self, *args):
-        keys = []
-        for arg in args:
-            if isinstance(arg, list):
-                keys.extend(arg)
-            elif isinstance(arg, str) and len(args) > 1:
-                keys.append((arg, args[1]))
-        for key, direction in reversed(keys):
-            self.rows.sort(key=lambda d: (d.get(key) is None, d.get(key)), reverse=direction < 0)
-        return self
-
-    def __iter__(self):
-        return iter(self.rows)
-
-
+# ── 假集合（ADR-119 F5）：一份集合的行，fake_collections 读写 `rows`；用例回读只按字段相等 ──────
 class FakeCollection:
+    """One collection's rows. The record owners match through fake_collections (the in-memory adapter, which the
+    adapter contract holds against MongoDB). A case (here and in p5_proactive_cases) reads them back by a whole query
+    of plain field equality: every key it names is checked, and a Mongo operator is refused, so no case can quietly
+    lose a condition."""
+
     def __init__(self, rows=None):
         self.rows = {row['_id']: dict(row) for row in (rows or [])}
 
-    def find(self, flt=None, projection=None, sort=None, skip=0, limit=0):
-        cursor = FakeCursor([_project(doc, projection) for doc in self.rows.values() if _match(doc, flt or {})])
-        if sort:
-            cursor.sort(sort)
-        cursor.rows = cursor.rows[skip:skip + limit] if limit else cursor.rows[skip:]
-        return cursor
+    def find(self, flt=None, sort=None):
+        for key, value in (flt or {}).items():
+            if key.startswith('$') or (isinstance(value, dict) and any(str(op).startswith('$') for op in value)):
+                raise AssertionError('a case reads the fake by plain field equality only: %r' % (flt,))
+        rows = [dict(row) for row in self.rows.values()
+                if all(key in row and row[key] == value for key, value in (flt or {}).items())]
+        for field, direction in reversed(sort or []):
+            rows.sort(key=lambda row, f=field: (row.get(f) is None, row.get(f)), reverse=direction < 0)
+        return rows
 
-    def find_one(self, flt=None, projection=None, sort=None):
-        cursor = self.find(flt, projection)
-        if sort:
-            cursor.sort(sort)
-        for row in cursor:
-            return row
-        return None
+    def find_one(self, flt=None, sort=None):
+        rows = self.find(flt, sort)
+        return rows[0] if rows else None
 
 
 class FakeDB:
@@ -613,8 +531,8 @@ def summarizer(store, evidence, lane, scenes=(GROUP,), moment=None):
 
 
 def pending_rows(store, scene_id):
-    return list(store.fake.messages.find({'scene_id': scene_id, 'summary_batch_id': {'$exists': False}})
-                .sort('scene_seq', 1))
+    return [row for row in store.fake.messages.find({'scene_id': scene_id}, sort=[('scene_seq', 1)])
+            if 'summary_batch_id' not in row]
 
 
 def decide_for(store, scene_id, pending, moment, pooled=None, window_rows=8):

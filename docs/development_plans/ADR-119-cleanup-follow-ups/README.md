@@ -195,7 +195,13 @@ end in three places, and none of them reaches her:
    `self_development.enabled` holds. She tunes them with `set_policy` (`self_development.every_min`,
    `night_start_hour`, `night_hours`; `night_hours = 0` is `NIGHT_OFF` at each tick and keeps the plan). The owner's
    switch now removes them as the other rhythms' switches do (`_retire`, one `rhythm.disabled` line with its
-   reason); a plan made again after that starts a new `fire_count_since`.
+   reason); a plan made again after that starts a new `fire_count_since`. Her `night_hours = 0` keeps the plan only
+   because `ensure_night_development` never reads `night_hours` (each tick does): the test pins the outcome, not a
+   designed rule.
+5. *What `fire_count` counts* (her reading, line 0288). It goes up at every firing of an `ACTIVE` native recurring
+   plan whatever the outcome: it says how often the plan fired, not how often anything ran. The night plan's first
+   firing after the change counted 1 with `OUTSIDE_NIGHT`. Whether the night stage runs inside her window is read
+   from the outcomes, never from this count.
 
 **Not closed by this:** whether the night stage really runs inside her window (an outcome other than `STAGE_BUSY` or
 `OUTSIDE_NIGHT` between 01:07 and 05:57) is her own measurement and stays hers.

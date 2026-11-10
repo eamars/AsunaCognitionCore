@@ -34,11 +34,11 @@ test('a listed word is found by line and category, a Latin word only as a whole 
 });
 
 test('a number shaped like a QQ or group number is found; hashes, commit ids, restart ids, sizes and times are not', () => {
-  const found = findings('主人私聊 qq:1234567890:dm:987654321\n群 12345678 里', []);
+  const found = findings('主人私聊 qq:1234567890:dm:987654321\n群 12345678 里', []);  // personal-scan: ok
   assert.deepEqual(found.map(item => [item.line, item.digits]), [[1, 10], [1, 9], [2, 8]]);
-  assert.doesNotMatch(describe(found), /1234567890|987654321|12345678/);
+  assert.doesNotMatch(describe(found), /1234567890|987654321|12345678/);  // personal-scan: ok
   const clean = ['sha256 c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51', '短号 a3abbb47 和 5713aab7',
-    'restart-20261022104708', '1870321 B，2295817B，70800 字节，1792678014629 ms', '09:13:47、10-23、v4.18.0、0.5.0',
+    'restart-20261022104708', '1870321 B，2295817B，70800 字节，1792678014629 ms', '09:13:47、10-23、v4.18.0、0.5.0',  // personal-scan: ok
     '1.5 秒，3.14159265，12345 只有五位'];
   for (const line of clean) assert.deepEqual(findings(line, []), [], line);
 });

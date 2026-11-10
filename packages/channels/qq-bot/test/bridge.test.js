@@ -11,7 +11,7 @@ import { QQBotBridge, INTENTS, inboundText, outboundBody, plainText } from '../s
 const made = [];
 after(() => Promise.all(made.map(dir => fs.rm(dir, { recursive: true, force: true }))));
 
-const APP = '1000000001';
+const APP = '900000001';
 const USER = 'A'.repeat(32), GROUP = 'B'.repeat(32), MEMBER = 'C'.repeat(32), OTHER = 'D'.repeat(32);
 const HOST = 'http://127.0.0.1:8766';
 

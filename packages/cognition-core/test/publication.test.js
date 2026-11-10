@@ -54,15 +54,15 @@ test('a publication reason naming a listed word or a QQ-shaped number is refused
   const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
   await floor.call('development_write', { path: 'README.md', text: 'After', overwrite: true });
   for (const [reason, words] of [['只改 README：在示例交流群里试过', /第 1 行有名单上的词（group 类，名单第 2 行）/],
-    ['只改 README\n主人私聊 qq:1234567890:dm:987654321', /第 2 行有一串 10 位数字.*第 2 行有一串 9 位数字/]]) {
+    ['只改 README\n主人私聊 qq:1234567890:dm:987654321', /第 2 行有一串 10 位数字.*第 2 行有一串 9 位数字/]]) {  // personal-scan: ok
     const refused = await floor.call('development_publish', { reason }).then(() => null, error => error);
     assert.match(String(refused?.message), /PUBLISH_REASON_NAMES_PRIVATE/);
     assert.match(refused.message, words);
-    assert.doesNotMatch(refused.message, /示例交流群|1234567890|987654321/);
+    assert.doesNotMatch(refused.message, /示例交流群|1234567890|987654321/);  // personal-scan: ok
   }
   assert.equal(await fs.readFile(path.join(source, 'README.md'), 'utf8'), 'Before');     // nothing written back
   assert.equal((await floor.selected()).projects?.persona, undefined);                    // nothing selected
-  const result = await floor.call('development_publish', { reason: '只改 README（1870321 B，sha256 c71f0ce0，restart-20261022104708）' });
+  const result = await floor.call('development_publish', { reason: '只改 README（1870321 B，sha256 c71f0ce0，restart-20261022104708）' });  // personal-scan: ok
   assert.equal(result.state, 'APPLIED', JSON.stringify(result));
 });
 

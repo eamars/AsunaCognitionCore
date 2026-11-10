@@ -13,7 +13,7 @@ def config():
             'home_groups': [HOME_GROUP],
             'channels': {'qq': {'routes': {
                 'family': {'scene_id': HOME_GROUP, 'target': {'type': 'group', 'id': '900000101'}},
-                'other': {'scene_id': LOOKALIKE, 'target': {'type': 'group', 'id': '9000001019'}}}}}}
+                'other': {'scene_id': LOOKALIKE, 'target': {'type': 'group', 'id': LOOKALIKE.rsplit(':', 1)[1]}}}}}}
 
 
 def test_every_speaker_in_a_home_group_is_at_home_and_a_lookalike_is_not():

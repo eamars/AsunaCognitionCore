@@ -33,7 +33,7 @@ def test_the_adapter_maps_actions_to_napcat_calls_only():
     # the ceiling she is allowed to ask for is the platform's own: 30 days passes, one minute more does not
     assert call({'target': group, 'admin': {'kind': 'mute', 'account': '20002', 'seconds': 2592000}}, '90000')[1][
         'duration'] == 2592000
-    assert call({'target': group, 'admin': {'kind': 'mute', 'account': '20002', 'seconds': 2592060}}, '90000') == (
+    assert call({'target': group, 'admin': {'kind': 'mute', 'account': '20002', 'seconds': 2592060}}, '90000') == (  # personal-scan: ok
         None, 'bad_duration')
     assert call({'target': {'type': 'dm', 'id': '20002'}, 'admin': {'kind': 'kick', 'account': '20002'}}, '90000')[0] is None
     assert call({'target': group, 'admin': {'kind': 'set_group_admin', 'account': '20002'}}, '90000') == (None, 'unknown_admin_kind')

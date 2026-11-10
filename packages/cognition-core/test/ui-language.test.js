@@ -73,8 +73,8 @@ test('an Asuna preset registers its name and description in the saved language, 
 test('every Asuna preset row names itself in each shipped language', async () => {
   const { readFileSync } = await import('node:fs');
   const yaml = (await import('js-yaml')).default;
-  const files = ['../cordis.patch.yml', '../../personas/xiaoman/cordis.patch.yml', '../../personas/kyoyama-kazusa/cordis.patch.yml',
-    '../../personas/ichinose-asuna/cordis.patch.yml'];
+  const files = ['../cordis.patch.yml', '../../personas/xiaoman/cordis.patch.yml', '../../personas/kyoyama-kazusa/cordis.patch.yml',  // personal-scan: ok
+    '../../personas/ichinose-asuna/cordis.patch.yml'];  // personal-scan: ok
   for (const file of files) {
     const text = readFileSync(new URL(file, import.meta.url), 'utf8').replaceAll('!!js ', '');   // DSH's expression tag
     const rows = yaml.load(text).flatMap(item => item.insert ?? []);

@@ -7,7 +7,7 @@ from asuna.peer_context import snapshot_event
 
 channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'qq-bot' / 'python', 'module': 'qq_bot'},
                     {'python': ROOT / 'packages' / 'channels' / 'napcat-qq' / 'python', 'module': 'napcat_qq'}])
-APP, USER, GROUP = '1000000001', 'E4F4AEA33253A2797FB897C50B81D7ED', '0B1C2D3E4F5A6B7C8D9E0F1A2B3C4D5E'
+APP, USER, GROUP = '900000001', 'E4F4AEA33253A2797FB897C50B81D7ED', '0B1C2D3E4F5A6B7C8D9E0F1A2B3C4D5E'
 
 
 def test_a_bot_conversation_has_openid_ids_apart_from_qq_numbers():
@@ -41,5 +41,5 @@ def test_a_member_list_takes_the_ids_its_kind_names():
 
 
 def test_she_replies_there_in_the_parts_the_bridge_sends():
-    assert channel_kinds.reply_parts('qqbot:1000000001:group:' + 'B' * 32) == ('text', 'picture')
-    assert channel_kinds.reply_parts('qqbot:1000000001:dm:' + 'A' * 32) == ('text', 'picture')
+    assert channel_kinds.reply_parts('qqbot:900000001:group:' + 'B' * 32) == ('text', 'picture')
+    assert channel_kinds.reply_parts('qqbot:900000001:dm:' + 'A' * 32) == ('text', 'picture')

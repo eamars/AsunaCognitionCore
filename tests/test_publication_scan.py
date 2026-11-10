@@ -46,7 +46,7 @@ def test_a_channel_candidate_is_checked_as_the_release_checks_it(lists):
         'integration/a.py': '\n'.join([
             'ok = 1',                                   # 1
             'seen in 示例交流群',                         # 2 listed
-            'qq = 1234567890',                          # 3 an account-shaped number
+            'qq = 1234567890',                          # 3 an account-shaped number; personal-scan: ok
             'speaker = %r' % persona,                   # 4 a persona's name in a shipped file
             'limit = %s' % allowed,                     # 5 an allow-listed constant
             'group = 900000001',                        # 6 a fixtures' placeholder
@@ -55,7 +55,7 @@ def test_a_channel_candidate_is_checked_as_the_release_checks_it(lists):
         # not shipped: the private list and private addresses only (the address is put together here, so this file
         # holds none)
         'test/b.py': 'speaker = %r\nin 示例交流群\nhost = "%s"\n' % (persona, '192.168.' + '0.20'),
-        'uv.lock': 'hash = 12345678901234567890\n',            # a lock file: lines not scanned
+        'uv.lock': 'hash = 12345678901234567890\n',            # a lock file: lines not scanned; personal-scan: ok
     })
     found = publication_scan.scan(str(root), 'packages/channels/napcat-qq',
                                   ['integration/a.py', 'test/b.py', 'uv.lock'])
@@ -73,7 +73,7 @@ def test_a_persona_package_may_name_its_persona_and_a_name_with_a_hit_is_not_pri
 
 
 def test_the_command_prints_findings_and_never_the_word_or_the_number(lists):
-    root = candidate(lists, {'src/asuna/x.py': 'qq = 1234567890  # 示例交流群\n'})
+    root = candidate(lists, {'src/asuna/x.py': 'qq = 1234567890  # 示例交流群\n'})  # personal-scan: ok
     request = lists / 'request.json'
     request.write_text(json.dumps({'root': str(root), 'prefix': '', 'paths': ['src/asuna/x.py']}), encoding='utf-8')
     done = subprocess.run([sys.executable, str(ROOT / 'tools/publication_scan.py'), str(request)], capture_output=True,
@@ -81,20 +81,20 @@ def test_the_command_prints_findings_and_never_the_word_or_the_number(lists):
     assert done.returncode == 0, done.stderr
     assert categories(json.loads(done.stdout)['findings']) == [('src/asuna/x.py', 1, 'account_id'),
                                                               ('src/asuna/x.py', 1, 'listed:group')]
-    assert '1234567890' not in done.stdout and '示例交流群' not in done.stdout
+    assert '1234567890' not in done.stdout and '示例交流群' not in done.stdout  # personal-scan: ok
 
 
 def test_the_reason_is_checked_too_and_the_answer_is_capped_and_says_when_the_list_is_missing(lists, monkeypatch):
-    root = candidate(lists, {'src/asuna/x.py': '\n'.join('qq = %d' % (1234567000 + n) for n in range(80)) + '\n'})
+    root = candidate(lists, {'src/asuna/x.py': '\n'.join('qq = %d' % (1234567000 + n) for n in range(80)) + '\n'})  # personal-scan: ok
     request = lists / 'request.json'
     request.write_text(json.dumps({'root': str(root), 'prefix': '', 'paths': ['src/asuna/x.py'],
-                                   'reason': '只改 x\n在示例交流群 1234567890'}), encoding='utf-8')
+                                   'reason': '只改 x\n在示例交流群 1234567890'}), encoding='utf-8')  # personal-scan: ok
 
     def answer():
         done = subprocess.run([sys.executable, str(ROOT / 'tools/publication_scan.py'), str(request)],
                               capture_output=True, text=True, encoding='utf-8', timeout=120)
         assert done.returncode == 0, done.stderr
-        assert '1234567890' not in done.stdout and '示例交流群' not in done.stdout
+        assert '1234567890' not in done.stdout and '示例交流群' not in done.stdout  # personal-scan: ok
         return json.loads(done.stdout)
     told = answer()
     assert told['total'] == 80 and len(told['findings']) == publication_scan.MAX_FINDINGS and told['list'] == 'checked'

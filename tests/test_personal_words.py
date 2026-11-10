@@ -47,10 +47,10 @@ def private_list(tmp_path, monkeypatch):
 def test_the_list_keeps_entries_without_ever_showing_them(private_list):
     assert private_words.summary()['configured'] is False
     assert private_words.add('group', '示例测试群', 'a fixture group')['kept']
-    assert private_words.add('account', '10001234', 'a fixture number')['line'] > 0
+    assert private_words.add('account', '10001234', 'a fixture number')['line'] > 0  # personal-scan: ok
     assert private_words.add('group', '示例测试群', 'reworded')['replaced'] is True
     shown = repr([private_words.summary(), private_words.add('host', 'fixture-host', 'a fixture host')])
-    assert '示例测试群' not in shown and '10001234' not in shown and 'fixture-host' not in shown
+    assert '示例测试群' not in shown and '10001234' not in shown and 'fixture-host' not in shown  # personal-scan: ok
     comments = sum(1 for line in private_list.read_text(encoding='utf-8').splitlines() if line.startswith('#'))
     assert private_words.summary() == {'configured': True, 'entries': 3, 'by_category': {'group': 1, 'account': 1, 'host': 1},
                                        'file_lines': {'not_empty': 3 + comments, 'comments': comments, 'not_entries': 0},
@@ -59,16 +59,16 @@ def test_the_list_keeps_entries_without_ever_showing_them(private_list):
         handle.write('a line that is not an entry\n')
     assert private_words.summary()['file_lines']['not_entries'] == 1, 'a malformed line is counted, not hidden'
     assert private_list.read_text(encoding='utf-8').startswith('# Words that point at real people')
-    assert private_words.remove('10001234') == {'removed': True}
-    assert private_words.remove('10001234')['removed'] is False
+    assert private_words.remove('10001234') == {'removed': True}  # personal-scan: ok
+    assert private_words.remove('10001234')['removed'] is False  # personal-scan: ok
 
 
 def test_matching_is_whole_word_for_latin_and_refuses_short_or_reasonless_entries(private_list):
-    entries = private_words.parse('person|Alex|fixture\naccount|10001234|fixture\ngroup|示例群|fixture\n# note\nbad line\n')
+    entries = private_words.parse('person|Alex|fixture\naccount|10001234|fixture\ngroup|示例群|fixture\n# note\nbad line\n')  # personal-scan: ok
     assert [category for _, category in private_words.find(entries, 'ask ALEX about it')] == ['person']
     assert private_words.find(entries, 'Alexander and alexa') == []
-    assert private_words.find(entries, 'id 910001234 and 100012345') == []
-    assert [category for _, category in private_words.find(entries, 'qq 10001234.')] == ['account']
+    assert private_words.find(entries, 'id 910001234 and 100012345') == []  # personal-scan: ok
+    assert [category for _, category in private_words.find(entries, 'qq 10001234.')] == ['account']  # personal-scan: ok
     assert [category for _, category in private_words.find(entries, '在示例群里')] == ['group']
     for args in [('person', 'Al', 'too short'), ('person', '人', 'too short'), ('nobody', 'Alex', 'why'),
                  ('person', 'A|B', 'bar'), ('person', 'Alex', '')]:

@@ -243,12 +243,12 @@ test('the record lists only installed packages: a persona selection by its id, a
   const base = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-loaded-'));
   try {
     await fs.writeFile(path.join(base, 'launch.json'), JSON.stringify({ installed: {
-      '@asuna/cognition-core': '59273e56719b8c09', '@asuna/persona-a': '1111111111111111' } }));
+      '@asuna/cognition-core': '59273e56719b8c09', '@asuna/persona-a': 'aaaaaaaaaaaaaaaa' } }));
     await fs.writeFile(path.join(base, 'activation.json'), JSON.stringify({ projects: {
-      'persona-a': { state: 'ACTIVE', sha256: '2222222222222222', packageRoot: path.join('development', 'persona-a', 'frozen', 'a392bdbbbd6ed478') },
-      'old-channel': { state: 'ACTIVE', sha256: '3333333333333333', packageRoot: path.join('profiles', 'node_modules', '@asuna', 'old-channel') } } }));
+      'persona-a': { state: 'ACTIVE', sha256: 'bbbbbbbbbbbbbbbb', packageRoot: path.join('development', 'persona-a', 'frozen', 'a392bdbbbd6ed478') },
+      'old-channel': { state: 'ACTIVE', sha256: 'cccccccccccccccc', packageRoot: path.join('profiles', 'node_modules', '@asuna', 'old-channel') } } }));
     const record = await loaded(base, path.join(base, 'launch.json'));
-    assert.deepEqual(record.packages, { '@asuna/cognition-core': '59273e56719b', '@asuna/persona-a': '222222222222' });
+    assert.deepEqual(record.packages, { '@asuna/cognition-core': '59273e56719b', '@asuna/persona-a': 'bbbbbbbbbbbb' });
   } finally {
     await fs.rm(base, { recursive: true, force: true });
   }

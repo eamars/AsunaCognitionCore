@@ -242,16 +242,16 @@ test('every backend\'s snippets are capped (300 characters by default)', async (
 });
 
 test('web_search puts publication times on the conversation\'s clock; a date alone stays', async () => {
-  const zone = { timezone: 'Pacific/Auckland', utc_offset_minutes: 780 };
-  assert.equal(localStamp('2026-03-30T20:03:39.000Z', zone), '2026-03-31 09:03', 'daylight time, +13');
-  assert.equal(localStamp('2026-06-03T10:52:34Z', zone), '2026-06-03 22:52', 'standard time, +12');
-  assert.equal(localStamp('2026-10-01T00:00:00', zone), '2026-10-01 13:00', 'no offset: UTC');
+  const zone = { timezone: 'Australia/Sydney', utc_offset_minutes: 660 };  // personal-scan: ok (a real zone with daylight time, not the deployment's)
+  assert.equal(localStamp('2026-03-30T20:03:39.000Z', zone), '2026-03-31 07:03', 'daylight time, +11');
+  assert.equal(localStamp('2026-06-03T10:52:34Z', zone), '2026-06-03 20:52', 'standard time, +10');
+  assert.equal(localStamp('2026-10-01T00:00:00', zone), '2026-10-01 10:00', 'no offset: UTC');
   assert.equal(localStamp('2026-10-01', zone), '2026-10-01');
-  assert.equal(localStamp('2026-10-01T00:00:00Z', { timezone: 'Not/AZone', utc_offset_minutes: 780 }), '2026-10-01 13:00');
+  assert.equal(localStamp('2026-10-01T00:00:00Z', { timezone: 'Not/AZone', utc_offset_minutes: 660 }), '2026-10-01 11:00');
   const { scope, tools } = toolScope(async () => ({ sources: [{ url: 'https://d.example', publishedAt: '2026-03-30T20:03:39.000Z' }], truncated: false }));
   registerWebSearch(scope, { zone });
   const value = await tools.get('web_search').execute({ queries: ['q'], detail: 'titles' }, { signal: new AbortController().signal });
-  assert.equal(value.sources[0].publishedAt, '2026-03-31 09:03');
+  assert.equal(value.sources[0].publishedAt, '2026-03-31 07:03');
   assert.doesNotMatch(tools.get('web_search').output.render({}, value)[0].text, /\d{2}:\d{2}:\d{2}(\.\d+)?Z/);
 });
 

@@ -184,6 +184,19 @@ end in three places, and none of them reaches her:
    History is not back-filled (her ask, line 0276: the empty fields are the evidence of this defect): `fire_count`
    counts from the first firing after the change, and the record says from when (`fire_count_since`).
 
+4. *The same defect on her own plans, and the rhythms' lifecycle* (her reading, lines 0284 to 0286). Her `every`
+   plans were written `native_recurring: False` by `create` and `update` (only `daily` and `weekly` counted), so they
+   too never moved their shown next run or counted; DSH repeats an `every` plan by itself, so `SELF_REPEATING` is
+   `daily`, `weekly`, `every`. The next run of such a plan is DSH's own next target when it has moved on, else the
+   later of now and this firing plus `every_seconds`; no clock rule is applied. Her plan tool refuses `update` and
+   `cancel` alike on the four rhythms (`PLAN_RHYTHM`, since 2026-10-19), now in her wording:
+   「「…」是你的节律（心跳、夜间沉淀、自我改进或整理安静的群）：这四条归程序，调它们用 set_policy（快慢、时间和夜里的窗口；
+   总开关归主人）。」 The rhythm stays as it was. The two self-development plans belong to no ADR: they live while
+   `self_development.enabled` holds. She tunes them with `set_policy` (`self_development.every_min`,
+   `night_start_hour`, `night_hours`; `night_hours = 0` is `NIGHT_OFF` at each tick and keeps the plan). The owner's
+   switch now removes them as the other rhythms' switches do (`_retire`, one `rhythm.disabled` line with its
+   reason); a plan made again after that starts a new `fire_count_since`.
+
 **Not closed by this:** whether the night stage really runs inside her window (an outcome other than `STAGE_BUSY` or
 `OUTSIDE_NIGHT` between 01:07 and 05:57) is her own measurement and stays hers.
 

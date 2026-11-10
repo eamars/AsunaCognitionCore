@@ -76,6 +76,9 @@ VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send 
 # from home -- and a note from outside only when it carries the owner's own line (notes.owner_line).
 ERRAND_FROM = ('external', 'scheduled', 'note')
 # How a plan that can no longer be changed ended, in her words (one table for every plan refusal that names it).
+# Her plan tool on one of the four rhythms, update or cancel alike (her wording, ADR-119 F10, line 0285).
+PLAN_RHYTHM = ('「%s」是你的节律（心跳、夜间沉淀、自我改进或整理安静的群）：这四条归程序，调它们用 set_policy'
+               '（快慢、时间和夜里的窗口；总开关归主人）。')
 PLAN_ENDED = {'CANCELLED': '取消', 'SUSPENDED': '停', 'FIRED': '跑完', None: '失效'}
 # ADR-087 §4.4 (with her ask: the new id named, the old one plainly still fired).
 PLAN_MOVED_FIRED = ('「%s」这回合已经到点跑完了，它还是跑完的那条，没有改动；按你给的时间新建了一条：%s。'
@@ -3172,8 +3175,7 @@ class RoleTools:
                 from .schedule import RHYTHM_KINDS
                 if row.get('kind') in RHYTHM_KINDS:
                     # Her rhythms belong to the program (ADR-012 §4.3): she tunes them, never cancels or retimes them here.
-                    raise Refused('「%s」是你的节律（心跳、夜间沉淀、自我改进或整理安静的群），归程序排，plan 改不了也停不了；'
-                                  '要调快慢、时间或开关，在家里用 set_policy。' % echoed(plan_id), ['PLAN_RHYTHM'])
+                    raise Refused(PLAN_RHYTHM % echoed(plan_id), ['PLAN_RHYTHM'])
                 # A plan this turn made where the note came from is changed there, as that place's.
                 there = ({**ep, 'scene_id': row['scene_id'], 'person_id': row['person_id'],
                           'policy_epoch': row['policy_epoch']} if outside is not None else ep)

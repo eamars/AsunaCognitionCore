@@ -95,6 +95,8 @@ TITLE_CHARS = 60
 LEGACY_TITLE = 'Asuna · '
 # An in-place timing change names DSH's own timing kind (its `every` carries every_seconds).
 NATIVE_KIND = {'every_seconds': 'every'}
+# The native kinds DSH repeats by itself (ADR-119 F10): the shown next run moves on and each firing is counted.
+SELF_REPEATING = ('daily', 'weekly', 'every')
 
 
 def plan_title(plan):
@@ -224,6 +226,8 @@ class ScheduleService:
         """Register one native recurring opportunity, with no second host clock."""
         settings = self.app.config.get('self_development', {})
         if not settings.get('enabled'):
+            # Switched off, its plan goes as the other rhythms' do (ADR-119 F10), with its rhythm.disabled line.
+            self._retire('plan-asuna-self-development', 'self_development disabled')
             return
         # ADR-009 §10.3: policy > existing local every_seconds (until P7) > persona model > 1440 min.
         from .persona_model import self_development_minutes
@@ -239,6 +243,8 @@ class ScheduleService:
         so her own window and pace apply at once, with no record to re-arm."""
         settings = self.app.config.get('self_development', {})
         if not settings.get('enabled') or settings.get('night') is False:
+            # Her night_hours = 0 keeps the plan (her pace, NIGHT_OFF); the owner's switch removes it.
+            self._retire(NIGHT_PLAN, 'self_development disabled' if not settings.get('enabled') else 'night disabled')
             return
         self._ensure_development_plan(NIGHT_PLAN, NIGHT_TICK_SECONDS, '夜里分段自我开发：每段只做一件事', night=True)
 
@@ -889,7 +895,7 @@ class ScheduleService:
             raise ValueError(NATIVE_INCOMPLETE)
         current = plan_records.get(self.store, plan_id)
         return plan_records.save(self.store, {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
-            'scheduled_at': native['scheduledAt'], 'native_recurring': native.get('kind') in ('daily', 'weekly'),
+            'scheduled_at': native['scheduledAt'], 'native_recurring': native.get('kind') in SELF_REPEATING,
             'status': current['status'] if current['status'] in ('FIRED','CANCELLED') else 'ACTIVE'},
             expected=current['revision'], stream=plan_id)
 
@@ -960,7 +966,7 @@ class ScheduleService:
         record = {**current, 'rule': rule, 'intent': intent,
             'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session, 'scheduled_at': native['scheduledAt'],
             'next_fire_at': fire_at.isoformat(timespec='seconds'),
-            'native_recurring': native.get('kind') in ('daily', 'weekly'),
+            'native_recurring': native.get('kind') in SELF_REPEATING,
             'plan_version': current.get('plan_version', 1) + 1,
             'updated_at': now(), 'status': 'ACTIVE',
             'last_update': {'from_rule': current['rule'], 'from_schedule_id': stale, 'note': note,

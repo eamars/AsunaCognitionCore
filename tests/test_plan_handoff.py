@@ -146,3 +146,32 @@ def test_the_development_plans_carry_the_fields_her_plan_view_shows(service, mon
     plan = plan_records.get(service.store, 'plan-dev')
     assert plan['native_recurring'] is True and plan['next_fire_at'] and plan['fire_count_since'] == NOW.isoformat()
     assert 'fire_count' not in plan
+
+
+def test_her_every_plan_moves_its_next_run_on_and_counts_its_firings(service):
+    service.controller = type('Controller', (), {'receive': lambda self, event: None})()
+    plan = create(service, 'every', {'every_seconds': 3600})
+    assert plan['native_recurring'] is True, 'DSH repeats an every plan by itself'
+    fire(service, plan, 40)
+    plan = plan_records.get(service.store, plan['_id'])
+    assert plan['fire_count'] == 1 and plan['status'] == 'ACTIVE'
+    assert plan['next_fire_at'] == '2026-09-25T07:00:00+00:00', "DSH's own next target, not a clock time"
+
+
+def test_switching_self_development_off_removes_its_plans_and_her_night_hours_zero_does_not(service):
+    service.controller = type('Controller', (), {'settings': {'scene_id': 'dm-a', 'person_id': 'A'}})()
+    service.app.config['self_development'] = {'enabled': True}
+    service._ensure_development_plan('plan-asuna-self-development', 3600, 'grow')
+    service._ensure_development_plan(schedule.NIGHT_PLAN, schedule.NIGHT_TICK_SECONDS, 'night', night=True)
+    # Her own pace: night_hours = 0 is NIGHT_OFF at each tick; the plan stays (the switch is the owner's).
+    service.store.config['persona_policy'] = {'self_development.night_hours': {'value': 0}}
+    service.ensure_night_development()
+    assert plan_records.get(service.store, schedule.NIGHT_PLAN)['status'] == 'ACTIVE'
+    service.app.config['self_development'] = {'enabled': False}
+    service.ensure_self_development()
+    service.ensure_night_development()
+    for plan_id in ('plan-asuna-self-development', schedule.NIGHT_PLAN):
+        assert plan_records.get(service.store, plan_id)['status'] == 'CANCELLED'
+    lines = {row['stream_id']: row['payload']['reason'] for row in audits(service.store, 'rhythm.disabled')}
+    assert lines == {'plan-asuna-self-development': 'self_development disabled',
+                     schedule.NIGHT_PLAN: 'self_development disabled'}, 'each removal keeps its named line'

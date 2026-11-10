@@ -242,6 +242,8 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
 - def `stageView`
 - def `thinkingOf` — ADR-099: the model's own thinking in one response: its reasoning blocks that are neither redacted nor empty, joined, and whether any was redacted.
 - def `firstThinking` — ADR-099: with her first call of a stage that offers no think (and is not a repair), the thinking of the response that made it; undefined otherwise.
+- def `REFUSED_SILENCE`
+- def `ECHO_CHARS`
 - def `writtenSoFar`
 - class `CognitionCore`
   - `registerPersona`

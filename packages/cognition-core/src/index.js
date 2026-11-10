@@ -200,11 +200,30 @@ export function firstThinking(session, state, operation, callId) {
   return thinkingOf(holder?.data.message);
 }
 
+// ADR-119 F11 (her wording, agent line 0234): a body the turn-end check sent back is not "nothing written".
+export const REFUSED_SILENCE = '这一步正文里没写字。这一回合前面那段被打回了、还没发出去：就这样结束，它不会发出去。'
+  + '现在在正文里重写一遍才发得出去（写进 think 的不会发）。';
+export const ECHO_CHARS = 40;
+
 export function writtenSoFar(session, operation) {
   const events = session.snapshotEvents();
   const turn = events.findLast(event => event.type === 'assistant/message')?.data.turn;
   const pieces = stageView(events, operation, turn).said.length;
-  return pieces ? '这一回合正文里写了 ' + pieces + ' 段话，回合结束时照常发出。' : '这一回合正文里一个字都没写，什么都不会发出去。';
+  if (pieces) return '这一回合正文里写了 ' + pieces + ' 段话，回合结束时照常发出。';
+  // A repair stage (`<operation>:fix-N`) follows a body the check sent back: what the turn wrote before it, unsent.
+  const base = operation?.replace(/:fix-\d+$/, '');
+  if (base && base !== operation) {
+    const mark = op => events.find(event => event.type === 'asuna/stage' && event.data.operation === op)?.seq ?? -1;
+    const from = mark(base), to = mark(operation);
+    const refused = events.filter(event => event.type === 'assistant/message' && event.data.turn === turn
+      && event.seq > from && event.seq < to && !event.data.interrupted).map(event => textOf(event.data.message))
+      .filter(text => text.trim());
+    if (refused.length) {
+      const last = refused.at(-1).trim().replace(/\s+/g, ' ');
+      return REFUSED_SILENCE + '被打回的那段开头是：「' + last.slice(0, ECHO_CHARS) + (last.length > ECHO_CHARS ? '…' : '') + '」';
+    }
+  }
+  return '这一回合正文里一个字都没写，什么都不会发出去。';
 }
 
 export class CognitionCore {

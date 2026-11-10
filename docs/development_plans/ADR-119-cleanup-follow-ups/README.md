@@ -175,9 +175,9 @@ end in three places, and none of them reaches her:
    logged dispatch that is newer than its plan's `last_dispatch_seq` and was due more than `HANDOFF_LATE_SECONDS`
    (300 s) ago, through the same `_deliver` a start uses (serialised by `deliver_lock`, a seq at most once), and
    records `schedule.handoff_late`. The plan's turn reads 「这条计划 DUE 到点，HANDED 才交到你手上：中间这一截程序没交过来
-   （WHY），不是你拖的。」: WHY is the refused callback's code when this process saw one after the firing was due, else
-   「定时那一拍没把它递过来，这边看不到原因」 (a scheduler turn that ended before its hook leaves the worker nothing to
-   read); a time that cannot be read is 「时间不详」. A refused callback is picked up the same way, so case 2 needs no
+   （WHY），不是你拖的。」: WHY is 「代码 CODE」, the refused callback's code, when this process saw one after the firing
+   was due, else 「定时那一拍没把它递过来，原因没记下来」 (a scheduler turn that ended before its hook leaves no record;
+   her wording, line 0278); a time that cannot be read is 「时间不详」. A refused callback is picked up the same way, so case 2 needs no
    second path.
 3. *One writer of a native recurring plan's shown fields.* `_ensure_development_plan` writes `native_recurring` and
    `next_fire_at` as `_rhythm_plan` does, and an already-live record is completed the same way at the next ensure.

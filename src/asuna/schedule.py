@@ -31,7 +31,7 @@ NIGHT_TICK_SECONDS = 600
 # A logged firing the callback has not brought for this long is handed on by the rhythm watch (ADR-119 F10); the
 # watch runs every host.RHYTHM_WATCH_SECONDS, so a live callback, which takes seconds, is never overtaken.
 HANDOFF_LATE_SECONDS = 300
-HANDOFF_UNSEEN = '定时那一拍没把它递过来，这边看不到原因'
+HANDOFF_UNSEEN = '定时那一拍没把它递过来，原因没记下来'
 INTENT_CHARS = 1000
 NOT_IN_SCOPE = 'SCHEDULE_PLAN_NOT_IN_SCOPE: 「%s」不是这个对话里的安排（别处建的要在那里改）；照抄 plans_from_program 里的 plan_id'
 SOURCE_STALE = 'SCHEDULE_SOURCE_STALE: 这个对话的授权刚变过（不是你的错），这回合安排不了；重试也一样，下回合再安排'
@@ -459,7 +459,7 @@ class ScheduleService:
             if (moment - due).total_seconds() < HANDOFF_LATE_SECONDS:
                 continue
             refused = self.handoff_refused
-            why = refused[1] if refused and refused[0] >= due else HANDOFF_UNSEEN
+            why = '代码 ' + refused[1] if refused and refused[0] >= due else HANDOFF_UNSEEN
             self.store.audit(plan_id, 'schedule.handoff_late', {'seq': event['seq'], 'due': data['acceptedAt'],
                                                                 'why': why}, None)
             try:

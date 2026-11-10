@@ -256,15 +256,23 @@ Her choice (agent line 0302, 0303): the interval through `set_policy`, and one r
 
 1. *The parameter.* `self_development.every_min` joins her `set_policy` parameters (`CORE_WRITABLE_KEYS`):
    integer, 360 to 10,080 minutes. The owner's switches (`self_development.enabled`, `night`) stay out of it.
-2. *The retime, once per change.* The rhythm watch (every 300 s) and each start ensure the daytime plan; when the
-   interval it computes (policy, else persona model, else 1,440) differs from the live plan's `rule.every_seconds`,
-   the native record is updated in place (`/schedule/update`, as `_rhythm_plan` retimes her heartbeat), the plan's
-   `rule` and `next_fire_at` follow, and one `rhythm.retimed` line records `from` and `to`. An equal value does
-   nothing. This holds for a change in the persona model too.
+2. *The retime, once per change.* Her `set_policy` of the interval ensures the daytime plan at once; the rhythm
+   watch (every 300 s) and each start ensure it too, for a change in the persona model. When the interval it
+   computes (policy, else persona model, else `SELF_DEVELOPMENT_DEFAULT_MIN`, 1,440) differs from the live plan's
+   `rule.every_seconds`, the native record is updated in place (`/schedule/update`, as `_rhythm_plan` retimes her
+   heartbeat), the plan's `rule` and `next_fire_at` follow, and one `rhythm.retimed` line records `from` and `to`.
+   An equal value does nothing. *Where the next run falls:* DSH rebuilds an `every` task whose timing changes from
+   the moment of the change (`createEveryScheduleRecord`: now plus the interval) and takes no anchor, so the next
+   run is the moment of the change plus the new interval. With her plan as read on 11-10 (last run 18:18:44, next
+   11-11 18:18, 1,440 min): set to 360 at 19:02, the next run is 11-11 01:02; set to 10,080 at 19:02, it is 11-17
+   19:02 and tomorrow's 18:18 does not come. A shorter interval never fires at once for the time already passed.
 3. *Clearing.* For every `set_policy` parameter, `value: null` removes it from her policy, so it is read again from
-   her persona model, else the core default. Clearing one that was never set answers 「本来就没设，无改动」 and is not
-   a failure. After a clear, the parameters whose core default is empty read, when her persona model gives none:
-   `self_development.every_min` → 1,440 min (the core's own default when none is given); `rhythm.sleep_window` → no
+   her persona model, else the core default; `null` is the only clearing value. Every other value is checked by
+   the parameter's type and range as today, so `0`, an empty string or `false` for the interval is refused by
+   name (no value can be kept while having no effect). For a boolean, `false` sets the value and `null` clears it:
+   `rhythm.public_clock` set to `false` answers source `policy`, cleared answers `false` from `core`. Clearing one
+   that was never set answers 「本来就没设，无改动」 and is not a failure. After a clear, the parameters whose core default is empty read, when her persona model gives none:
+   `self_development.every_min` → 1,440 min (`SELF_DEVELOPMENT_DEFAULT_MIN`; `CORE_DEFAULTS` holds `None`); `rhythm.sleep_window` → no
    sleep window; `rhythm.public_clock` → false. Every other parameter has a core default and returns to it (or to
    her persona model's value).
 4. *The answer names the source.* A set or a clear answers one line: the value now and where it comes from
@@ -272,6 +280,8 @@ Her choice (agent line 0302, 0303): the interval through `set_policy`, and one r
 5. *Words.* The rhythm refusal's 「快慢」 and the page's sentences on her interval are made true in this landing,
    not before: the daytime interval becomes hers to set.
 
-**Landing:** one, with a restart, after F8's. Tests: the range refused outside 360 to 10,080; a change retimes the
-live plan once and an equal value does not; `null` clears and a second `null` answers 「本来就没设，无改动」; the answer
-names the source. Each run on the old code first.
+**Landing:** one, with a restart, after F8's. Tests: the range refused outside 360 to 10,080, and `0`, `''`,
+`false` refused by name; a change retimes the live plan once, its `next_fire_at` the change plus the new interval
+(shorter and longer), and an equal value does not retime; `null` clears and a second `null` answers
+「本来就没设，无改动」; `rhythm.public_clock` set `false` answers `policy`, cleared answers `core`. Each run on the
+old code first.

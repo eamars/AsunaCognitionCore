@@ -218,6 +218,8 @@ def test_the_home_turn_adds_them_beside_the_outages_and_stamps_them_with_its_com
             "                worker_restarts,restart_ids=_host_stops.restarts_block(self.store,schedule_zone,moment)\n"
             "                if worker_restarts:away={**(away or {}),'restarts':worker_restarts}\n"
             "                shown_stops+=restart_ids\n") in source
+    # What the turn showed goes to its manifest, which stamps it shown when the turn commits (coordinator._update).
+    assert "        if shown_stops:manifest.setdefault('told',{})['host_stops']=shown_stops\n" in source
 
 
 # ---- D2: the 7-day delete; the window ---------------------------------------------------------------------------

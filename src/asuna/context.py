@@ -6,6 +6,7 @@ and long text is cut to the per-turn budget with a marker.
 """
 from __future__ import annotations
 import traceback
+from types import SimpleNamespace
 from . import clock
 from .config import character_id, excerpt, redact_text
 from . import errands as _errands, visibility
@@ -559,6 +560,26 @@ class ContextBuilder:
                 'would_surface':would_surface,'held_back':held_back,'coverage':coverage_block}
 
     def _prepare(self, event, persona, recall, turn_kind):
+        """Builds her turn: each step adds its blocks to the context in this order, which is the order of its keys
+        (order_context keeps the unlisted ones as added); the locals the steps share travel in one frame."""
+        f=SimpleNamespace(event=event,persona=persona,recall=recall,turn_kind=turn_kind)
+        self._turn_frame(f)
+        self._history_rows(f)
+        self._task_and_plan_rows(f)
+        self._scene_blocks(f)
+        self._home_offers(f)
+        self._notes_and_plan(f)
+        self._group_continuity(f)
+        self._tools(f)
+        self._affect(f)
+        self._turn_cues(f)
+        return self._finish(f)
+
+    def _turn_frame(self, f):
+        """The turn's frame: the scene, its class and place, the rendered system text, the persona body, the relationship
+        and person heads, her self state and what she carries here; the memory tiers' due lapses first (not in a
+        recall)."""
+        event,persona,recall=f.event,f.persona,f.recall
         scene=scene_records.authorize(self.store, event['scene_id'], event['person_id'])
         shown_stops=[]                  # the outages this turn shows (host_from_program, home turns only)
         from . import memory_tiers
@@ -612,6 +633,16 @@ class ContextBuilder:
         for name,slug in _carried.SELF_BLOCKS:
             if (identity.get(slug) or {}).get('sections'):
                 self_state[name]=_carried.self_block(slug,carried_here[slug],memory_tiers.sources(self.store,persona,slug,scene))
+        f.age_bound,f.body,f.carried_here,f.docs,f.moment=age_bound,body,carried_here,docs,moment
+        f.over_left,f.person_entity,f.person_head,f.relation=over_left,person_entity,person_head,relation
+        f.scene,f.scope,f.self_state,f.session_class,f.shown_stops=scene,scope,self_state,session_class,shown_stops
+        f.system,f.system_ref,f.target=system,system_ref,target
+
+    def _history_rows(self, f):
+        """The conversation rows this turn shows (delivered history, her undelivered lines) and what its message brings
+        up (`_memories`)."""
+        age_bound,event,moment,persona,recall,scene=f.age_bound,f.event,f.moment,f.persona,f.recall,f.scene
+        session_class,turn_kind=f.session_class,f.turn_kind
         read,source,history,tail_sources=self._in_view(scene,event)
         self._reply_context(history, scene, keep_event=True)
         zone=schedule_rules.her_zone(self.store.config)
@@ -672,6 +703,13 @@ class ContextBuilder:
                              turn_kind=turn_kind,age_bound=age_bound,history_lines=history_lines)
         facts,memories,retrieval_manifest=found['facts'],found['memories'],found['retrieval']
         brought_up,would_surface=found['brought_up'],found['would_surface']
+        f.brought_up,f.facts,f.found,f.history,f.memories,f.read=brought_up,facts,found,history,memories,read
+        f.retrieval_manifest,f.source,f.undelivered=retrieval_manifest,source,undelivered
+        f.would_surface=would_surface
+
+    def _task_and_plan_rows(self, f):
+        """Her tasks here (every open one, the last few finished) and her plans, on her clock."""
+        event,moment,scene,scope=f.event,f.moment,f.scene,f.scope
         # A storage revision counts writes/tool calls, not conversational time.
         # Use each task's durable input timestamp, including legacy tasks, so
         # recently returned work is not hidden behind old high-write tasks.
@@ -721,6 +759,16 @@ class ContextBuilder:
         # 已暂停（SUSPENDED）也列出来：不列就等于她不知道自己有一条挂着的安排没生效。
         schedule_zone=schedule_rules.her_zone(self.store.config)
         plans=[schedule_rules.project(row,schedule_zone,moment) for row in plan_rows]
+        f.plans,f.schedule_zone,f.task_states=plans,schedule_zone,task_states
+
+    def _scene_blocks(self, f):
+        """The context itself and the blocks of the scene: the event, recent thoughts, linked scenes, the heartbeat and
+        self-development blocks, peer lines, who is speaking, media and what she can send."""
+        from . import understanding as _understanding
+        event,facts,found,history,moment,person_head=f.event,f.facts,f.found,f.history,f.moment,f.person_head
+        persona,plans,read,relation,scene,schedule_zone=f.persona,f.plans,f.read,f.relation,f.scene,f.schedule_zone
+        scope,self_state,session_class,source,target=f.scope,f.self_state,f.session_class,f.source,f.target
+        task_states,undelivered=f.task_states,f.undelivered
         held_back,coverage_block=found['held_back'],found['coverage']
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
                  # How well she knows them (familiarity.py) and what she has written about them, in words.
@@ -897,6 +945,14 @@ class ContextBuilder:
         from . import outbound_files
         files=outbound_files.offer(self.store,scene)
         if files:context['file_artifacts_from_program']=files
+        f.context,f.people=context,people
+
+    def _home_offers(self, f):
+        """Her doings elsewhere, errands, stickers, credentials, watches, the weekly review and the dice, her switches,
+        who she waits for in a group."""
+        from . import memory_tiers
+        context,event,moment,persona,scene,schedule_zone=f.context,f.event,f.moment,f.persona,f.scene,f.schedule_zone
+        session_class=f.session_class
         # ADR-017: whoever talks to her at home may send her on an errand; where it can go, and what came of the last ones
         # (program words only: nobody's reply comes home this way).
         if session_class==visibility.OWNER_PRIVATE and event.get('episode_kind') not in ('self_development','presence'):
@@ -995,6 +1051,12 @@ class ContextBuilder:
             from . import waiting as _waiting
             still=_waiting.block(self.store,[scene['_id']],moment,persona)
             if still:context['waiting_from_program']=still
+
+    def _notes_and_plan(self, f):
+        """Notes between her conversations, her questions, the host's outages and restarts at home, and the plan that
+        came due."""
+        context,event,moment,persona,scene,schedule_zone=f.context,f.event,f.moment,f.persona,f.scene,f.schedule_zone
+        scope,session_class,shown_stops=f.scope,f.session_class,f.shown_stops
         # ADR-018: notes between her conversations -- the one that opened this turn, the others written to here,
         # what came of the ones she wrote here, and where a note from here can go.
         from . import notes as _notes
@@ -1065,10 +1127,12 @@ class ContextBuilder:
                               _whose.PLAN)
             if said:plan['for']=said
             context['scheduled_plan_from_program']={**plan,**brief}
-        target_note=('只更新对当前说话人的理解：layer=person 写人那层（你在哪儿遇到他都看得到），layer=here 写这里那层'
-                     + ('（只在这个对话里看得到）' if not target['shared'] else
-                        '（配置认定他与另一个入口是同一个人，这里那层共用 %s 那一份）' % target['scope'])
-                     + '；不修改全局人格或权限。' + _understanding.ASK)
+        f.first_note,f.note_kind,f.shown_stops=first_note,note_kind,shown_stops
+
+    def _group_continuity(self, f):
+        """The host diagnostics, and a group turn's continuity: the line it answers, its topic, the speaker's last lines,
+        why she was woken."""
+        context,event,retrieval_manifest,scene,source=f.context,f.event,f.retrieval_manifest,f.scene,f.source
         if retrieval_manifest.get('error'):
             context['retrieval_diagnostic_from_host']=retrieval_manifest
         if source and source.get('failure'):
@@ -1129,6 +1193,18 @@ class ContextBuilder:
                 continuity['awaited_from_program'] = {'you_were_waiting_for': excerpt(waiting, 200) if waiting else '',
                     'note': '你上一句 @ 了他或是在回他（或你说了在等回话）；这句没 @ 你也没引用你，是不是在回你由你判断。'}
             context['group_continuity_from_program'] = continuity
+
+    def _tools(self, f):
+        """Her documents and things, the group place and members, what she may cite, the manifest, the people or the
+        understanding update, what the action brain can do, and a visit's, a note's and a group's own blocks."""
+        from . import understanding as _understanding
+        from . import memory_tiers
+        body,carried_here,context,docs,event,first_note=f.body,f.carried_here,f.context,f.docs,f.event,f.first_note
+        history,memories,moment,note_kind,over_left=f.history,f.memories,f.moment,f.note_kind,f.over_left
+        people,person_entity,person_head,persona,read=f.people,f.person_entity,f.person_head,f.persona,f.read
+        recall,relation,retrieval_manifest,scene=f.recall,f.relation,f.retrieval_manifest,f.scene
+        schedule_zone,scope,session_class,shown_stops=f.schedule_zone,f.scope,f.session_class,f.shown_stops
+        source,system_ref,target=f.source,f.system_ref,f.target
         model,policy=model_and_policy(self.store,persona)
         documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}
         ledgers=ledger_block(docs,session_class,scene)
@@ -1171,6 +1247,10 @@ class ContextBuilder:
         if doc_refs:context['doc_refs_from_program']=doc_refs
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'person_revision':person_head[0]['revision_id'] if person_head else None,'person_entity_key':person_entity+'|'+_understanding.PERSON_SCOPE,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[key for m in memories for key in m.get('joined_ids') or [m['_id']]],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         if shown_stops:manifest.setdefault('told',{})['host_stops']=shown_stops
+        target_note=('只更新对当前说话人的理解：layer=person 写人那层（你在哪儿遇到他都看得到），layer=here 写这里那层'
+                     + ('（只在这个对话里看得到）' if not target['shared'] else
+                        '（配置认定他与另一个入口是同一个人，这里那层共用 %s 那一份）' % target['scope'])
+                     + '；不修改全局人格或权限。' + _understanding.ASK)
         if scene['kind']=='group':
             # ADR-082: a group is read by people. The person who starts the turn (and whoever's @ or reply to her waits
             # behind it) comes as an entry: familiarity, stance, her shorts; the full layers come with recall's person.
@@ -1298,6 +1378,12 @@ class ContextBuilder:
             if condensed:
                 context['condensed_from_program']=condensed
         manifest['context_sha256']=sha(canonical(context))
+        f.manifest,f.model,f.policy=manifest,model,policy
+
+    def _affect(self, f):
+        """Her mood, how to record one, her feelings toward the person she is with, the proposals."""
+        context,event,model,people,persona,policy,scene=f.context,f.event,f.model,f.people,f.persona,f.policy,f.scene
+        scope,session_class=f.scope,f.session_class
         from .affect import AffectLedger
         ledger=AffectLedger(self.store,persona,model,policy)
         if ledger.enabled:
@@ -1329,6 +1415,13 @@ class ContextBuilder:
             if proposals:
                 context['affect_proposals_from_program']={'items':proposals,
                     'note':'情感评估路由给出的提案，只是建议：用 feel 逐条 accept、decline 或 edit（proposal_id 照抄）；过期的已明示，不再能采纳。'}
+        f.ledger=ledger
+
+    def _turn_cues(self, f):
+        """What this turn is for: called, rhythm, phrasing, faults, how her words leave here, settlement."""
+        from . import memory_tiers
+        context,docs,event,ledger,manifest,model,moment=f.context,f.docs,f.event,f.ledger,f.manifest,f.model,f.moment
+        persona,policy,recall,scene,session_class,source=f.persona,f.policy,f.recall,f.scene,f.session_class,f.source
         from .role_tools import called, CALLED_NOTE
         if not recall and called({'episode_kind':event.get('episode_kind','external'),'person_id':event.get('person_id'),
                                   'context':{'event':event}}):
@@ -1425,6 +1518,15 @@ class ContextBuilder:
             pool=_candidates(self.store,moment)
             if pool:
                 context['sticker_candidates_from_program']=pool
+
+    def _finish(self, f):
+        """The session class, the size, what woke her, the labels, the order, the final sha and what she carried; the
+        turn's (system, context, manifest)."""
+        from . import carried as _carried
+        from . import group_admin
+        brought_up,carried_here,context,event,manifest=f.brought_up,f.carried_here,f.context,f.event,f.manifest
+        model,moment,people,persona,policy,scene=f.model,f.moment,f.people,f.persona,f.policy,f.scene
+        session_class,system,system_ref,would_surface=f.session_class,f.system,f.system_ref,f.would_surface
         # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
         context['session_class']=session_class
         # The ceiling applies to what a turn sends, not to what is prepared (coordinator._deliver, context_budget.py).

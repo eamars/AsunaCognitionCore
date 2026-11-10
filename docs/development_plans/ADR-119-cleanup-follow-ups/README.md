@@ -64,4 +64,42 @@ reason, `test_forwards.py`); a picture read failing under `offer` raises (`test_
 list and with a stale one (refused), a recent one (scrubbed, recorded with its time), and the vault's names unreadable
 (raises; `test_credentials.py`).
 
+## 4. F4 design: one time parser (2026-11-10)
+
+**What is there** (survey of `src/asuna`, 2026-11-10; the earlier count of 44 sites was low): 64 parse calls on 62 lines
+in 39 files, with eight behaviours on text that is not a time (raise 26, None 18, the raw string 5, '' 5, False 3, 0.0 2,
+-inf 1, [] 1, plus a refusal and an omitted field). Python 3.12's `fromisoformat` reads a trailing `Z` itself, so the
+`.replace('Z', '+00:00')` calls do nothing. Eight helpers already centralise part of it (`local_time._moment`/`stamp`,
+`schedule_rules.line_stamp`/`_aware`, `affect.parse_ts`, `media_life._moment`, `places._at`, `history_query._parse`,
+`restarts._aware`) beside about a dozen private copies.
+
+**Her data** (field shapes only, the newest 2,000 records of each collection): 95 of 122 time fields hold only
+`+00:00`. `Z` comes from outside Python (platform events, the Host plugin, publications): `messages.occurred_at` 1,936
+`Z` to 64 `+00:00`, `crossing_words`, `memory_fires.latest`, `sink_receipts`, `plans.scheduled_at`. Times without an
+offset are only the wall-clock `plans.rule.at` and `last_update.from_rule.at`, as intended. No stored instant lacks
+its offset, so the sites that read an offsetless time as the machine's local time change nothing she has.
+
+**The broken invariants and the design:**
+
+1. *One reading of a stored instant.* `clock.moment(value)`: a `datetime` or ISO text (`Z`, any offset, none = UTC)
+   to an aware UTC `datetime`; anything else, `None` included, raises `clock.BadTime` (a `ValueError`). Every parse
+   site and every helper above calls it; the private copies go. A wall-clock time (a plan's `at`, her local query
+   text in `dbread`, the fault hour key) is not an instant and keeps its own named parser.
+2. *A time that cannot be read is never shown as another value.* Where she reads it (`local_time.stamp`/`for_model`,
+   `schedule_rules.line_stamp` and the sites that word their own result), it says one thing in her wording (asked:
+   「时间不详」), never the raw text, never an empty string, never a substitute such as 「刚才」. Where a time is computed
+   on (an age, a duration, a sort key, a due check), `BadTime` propagates (F1's rule) unless the site states why
+   another answer is right; 0.0, -inf, False and [] as answers for "unreadable" go.
+3. *One written form for anything compared as text.* Stored instants are written with `clock.stamp()` (`+00:00`,
+   microseconds); the strftime/`timespec` variants and `history_query`'s `Z` bounds use it. Text comparison of mixed
+   forms misplaces a value only within the same second (`Z` sorts after `.` and `+`); stored `Z` values are not
+   converted (no history conversion), new writes at ingress are normalised, and the page records that a bound can
+   misplace a line written in the same second as the bound, for records older than this landing.
+4. *Two defects found in the survey:* `self_review.py:264` shows her a UTC date (`strftime('%m-%d')` on a UTC time),
+   not her zone's; `native_api.py:381` writes the machine's own offset. Both use her zone and UTC.
+
+**Landings**, each its own restart: (a) the parser and every read through it, with 「时间不详」 where she reads;
+(b) the written form and the ingress normalisation; (c) the two defects. Tests: the parser's cases (`Z`, offset, none,
+bad, None), the one shown wording, and a bound comparison across the two forms.
+
 One landing at a time; tests only where a failure would be silent and costly.

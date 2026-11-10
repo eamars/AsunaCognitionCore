@@ -1,15 +1,18 @@
 """Report paths only; never print configured secret values or matching bytes.
 
-Default mode (no ``--personal``) scans staged blobs for configured secrets; its output and exit code are unchanged.
+Default mode (no ``--personal``) scans staged blobs for configured secrets; it takes no options (anything given is
+refused, exit 2, so no forgotten flag turns it into a pass on nothing).
 
-``--personal [--all | --paths FILE...]`` (ADR-009) is a stdlib-only, report-only personal-data scan; it
+``--personal [--all | --paths FILE...]`` (ADR-009) is a stdlib-only personal-data scan; it
 needs neither config/local.json, Mongo nor the asuna package. Source: staged blobs by default, the working-tree copy
 of every tracked file with ``--all``, the given files with ``--paths``. Each hit prints ``path:line:category`` (line 0
 means the file name; for --paths files outside the repo only the base name is checked) and never the matched value.
-Hits are deduplicated per path, line and category. The last line is ``personal-scan: <n> hit(s)``; exit code is 0,
-or 1 with ``--strict`` when n is not 0 or when there is no private-words list (a gate that checked nothing is not
-a pass; the denylist stays optional) (the form a push gate uses; the default stays report-only). ``--strict``
-without ``--personal`` is refused (exit 2): the secret scan takes no options and would pass on nothing.
+Hits are deduplicated per path, line and category. The last line is ``personal-scan: <n> hit(s)``.
+
+Exit codes, both modes (ADR-119 F7): 0 when something was read and nothing counted was found; 1 on a counted hit;
+UNCHECKED (3) when nothing was read (nothing staged, no file), or the private-words list (personal) or every
+configured secret (secret mode) is missing, so nothing it is asked to look for was looked for. The denylist stays
+optional: its absence is printed and changes no code.
 
 Categories:
   account_id       >=7 consecutive ASCII digits in content or file name.
@@ -54,6 +57,8 @@ ROOT=Path(__file__).resolve().parent.parent
 # Model parameter names describe token accounting, not authentication material.
 NON_SECRET_KEYS={'token_counter','maxTokensField','thinkingTokenBudgetField'}
 
+UNCHECKED = 3                 # nothing was read, or nothing it was asked to look for could be looked for
+
 def staged_blobs(root):
     paths=subprocess.check_output(['git','diff','--cached','--name-only','--diff-filter=ACM','-z'],cwd=root).decode().split('\0')
     # Read exactly the staged blobs through one Git process. Thousands of preserved
@@ -86,6 +91,9 @@ def secret_scan():
     for name in ('operator-ssh.json','embedding-ssh.json'):
         path=ROOT/'.runtime'/name
         if path.exists():collect(json.loads(path.read_text(encoding='utf-8')))
+    if not secrets:
+        print(json.dumps({'checked':0,'matching_paths':[],'status':'UNCHECKED','why':'no configured secret to look for'}))
+        raise SystemExit(UNCHECKED)
     patterns=[re.compile(r'(?<![A-Za-z0-9_.:/\\-])'+re.escape(s)+r'(?![A-Za-z0-9_.:/\\-])') for s in secrets]
     matches=[];checked=0
     for name,raw in staged_blobs(ROOT):
@@ -97,8 +105,9 @@ def secret_scan():
         values += [base64.b64decode(m,validate=True).decode('utf-8') for value in list(values) for m in re.findall(r'data:application/json;base64,([A-Za-z0-9+/=]+)',value)]
         if any(p.search(value) for value in values for p in patterns):matches.append(name)
         checked+=1
-    print(json.dumps({'checked':checked,'matching_paths':matches,'status':'FAIL' if matches else 'PASS'}))
-    raise SystemExit(bool(matches))
+    status='FAIL' if matches else 'UNCHECKED' if not checked else 'PASS'
+    print(json.dumps({'checked':checked,'matching_paths':matches,'status':status}))
+    raise SystemExit(1 if matches else UNCHECKED if not checked else 0)
 
 # ---- --personal (ADR-009) ----
 OK_MARK=re.compile('personal-scan: '+'ok'+r'(?![A-Za-z0-9_])')  # the word ok itself; built so this line is no marker
@@ -203,11 +212,10 @@ def personal_sources(args):
 def personal_scan(argv):
     ap=argparse.ArgumentParser(prog='check_staged_secrets.py --personal')
     ap.add_argument('--personal',action='store_true')
-    ap.add_argument('--strict',action='store_true')
     g=ap.add_mutually_exclusive_group();g.add_argument('--all',action='store_true');g.add_argument('--paths',nargs='+')
     args=ap.parse_args(argv)
     sys.stdout.reconfigure(errors='backslashreplace')
-    allow=set(load_list('ASUNA_PERSONAL_ALLOWLIST',ROOT/'tools'/'personal_scan_allow.txt'));deny=denylist();n=0
+    allow=set(load_list('ASUNA_PERSONAL_ALLOWLIST',ROOT/'tools'/'personal_scan_allow.txt'));deny=denylist();n=0;read=0
     if deny is None:
         print('personal-scan: denylist UNCHECKED: no list (ASUNA_PERSONAL_DENYLIST, else <data>/private/personal-denylist.txt)')
         deny=[]
@@ -217,6 +225,7 @@ def personal_scan(argv):
         words=[]
     for shown,key,raw in personal_sources(args):
         if SKIP.search(key):continue
+        read+=1
         found={(0,c) for _,c in scan_lines(key,key,allow,deny,words)}
         if key.rsplit('/',1)[-1] not in LOCKFILES and b'\0' not in raw:
             try:found|=set(scan_lines(raw.decode('utf-8'),key,allow,deny,words))
@@ -225,20 +234,21 @@ def personal_scan(argv):
             prefix='report-only:' if report_only(key) and c!='private_word' else ''
             print(f'{prefix}{shown}:{no}:{c}')
             n+=not prefix
-    print(f'personal-scan: {n} hit(s)')
-    if args.strict and unchecked:
-        print('personal-scan: FAIL: --strict with no private-words list checked nothing it is asked to check')
+    print(f'personal-scan: {n} hit(s) in {read} file(s)')
+    if n:
         return 1
-    return 1 if args.strict and n else 0
+    if unchecked or not read:
+        print('personal-scan: UNCHECKED: %s' % ('no private-words list' if unchecked else 'no file was read'))
+        return UNCHECKED
+    return 0
 
 def main(argv=None):
     argv=sys.argv[1:] if argv is None else list(argv)
     if '--personal' in argv:return personal_scan(argv)
-    if '--strict' in argv:
-        # The secret scan takes no options: without --personal, --strict and the files given would be dropped and the
-        # scan would answer PASS on nothing (her finding); a gate must not pass by a forgotten flag.
-        print('STRICT_NEEDS_PERSONAL: --strict belongs to --personal; write --personal --strict --paths FILE...',
-              file=sys.stderr)
+    if argv:
+        # The secret scan takes no options: anything given would be dropped and the scan would answer on what it was
+        # not asked (her finding); a gate must not pass by a forgotten flag.
+        print('SECRET_SCAN_TAKES_NO_OPTIONS: for files, write --personal --paths FILE...', file=sys.stderr)
         return 2
     secret_scan()
 

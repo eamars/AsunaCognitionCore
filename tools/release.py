@@ -16,7 +16,6 @@ files from that folder.
 import argparse
 import hashlib
 import json
-import re
 import shutil
 import subprocess
 import sys
@@ -59,9 +58,11 @@ def check(path, version, names):
         scanned = [f for f in files if not Path(f).relative_to(package).as_posix().startswith('integration/vendor/')]
         scan = subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--personal', '--paths', *scanned],
                               capture_output=True, text=True, encoding='utf-8', errors='replace')
-        hits = re.search(r'personal-scan: (\d+) hit', scan.stdout)
-        if not hits or int(hits.group(1)):
-            problems.append('personal-data scan: ' + (hits.group(0) if hits else 'did not run'))
+        # The scan's own verdict (ADR-119 F7): 0 clean, 1 a counted hit, 3 nothing it was asked to look for was looked
+        # for (no private list, or no file read); anything else, it did not run.
+        if scan.returncode:
+            last = (scan.stdout.strip().splitlines() or ['no output'])[-1]
+            problems.append('personal-data scan (exit %d): %s' % (scan.returncode, last))
         for file in files:
             try:
                 text = Path(file).read_text(encoding='utf-8')

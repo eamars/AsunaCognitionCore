@@ -54,7 +54,7 @@ description: 改进她自己的唯一做法（ADR-011）：改什么走哪一层
 
 **数从落件回执取**：字节数、sha12、artifact_id 照写盘那一步的回执抄，不让执行侧凭记忆或心算报；我验收时用同一把尺（再读一遍盘上文件算一次）对，对不上就是没交。交代里的“形状断言”（哪一行是末行、LF／CR 数、目标文件是否真的不存在）让它落笔前先实测一遍，不符就停下报现状。
 
-**如果写完要推 GitHub**：再加一句“临时 clone／临时提交点那条道不经仓里的推送闸，走它就当没过闸，先跑 `check_staged_secrets.py --personal`”，并按上「推 GitHub」一节交代报号口径。
+**如果写完要推 GitHub**：再加一句“临时 clone／临时提交点那条道不经仓里的推送闸，走它就当没过闸，先跑 `check_staged_secrets.py --personal --paths <要推的文件>`”，并按上「推 GitHub」一节交代报号口径。
 
 ## 读自己的项目
 
@@ -168,9 +168,10 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 - 用它读全号。本机检出里的 `origin/main` 只在宿主 fetch 时才动，可能是旧的；`git status` 的 ahead／behind **不可信**（推成后它照样显示 ahead，那是本地跟踪引用没更新，不是没推上去）。
 - 要推什么一律问 `git log --oneline <远端号>..HEAD`（“我要推出去什么”，写反成 `HEAD..<远端号>` 会得空），逐笔读 `--stat`；多一笔少一笔就停。快进判：`git merge-base --is-ancestor <远端号> HEAD` 退出码 0。
 
-**2. 推前闸：`python tools/check_staged_secrets.py --personal`**
-- 这把工具自己读私密词名单（`ASUNA_PRIVATE_WORDS`，不设就是 `<data>/private/personal-words.txt`），命中记成 `private_word`，在 `docs/development_plans/` 里也算数，和套件里 `tests/test_personal_words.py` 拦的是同一份、同一种匹配；临时 clone 里 `<data>` 是那个 clone 的 `.runtime`，要把 `ASUNA_PRIVATE_WORDS` 指到本机名单（路径现读，不抄）。另一份 `ASUNA_PERSONAL_DENYLIST` 照旧能加。私密词名单不在会写 `private words UNCHECKED`，带 `--strict` 时退出码是 1，不叫过闸；`denylist UNCHECKED` 只说明那份可选的名单不在，不影响退出码。
-- **0 命中要分清扫了什么**：发布已经把改动提交掉、暂存区是空的时候，默认口径扫的是暂存区，那个 0 是“没东西可扫”，不是干净。要真扫内容用 `--paths <要推的文件>`（或 `--all`；`--all` 带有既有基线命中，只看要推的文件有没有新增命中）。
+**2. 推前闸：`python tools/check_staged_secrets.py --personal --paths <要推的文件>`**
+- 退出码就是判词：0＝读到了文件、没命中；1＝有命中，不能推；3＝什么都没读到或没有私密词名单（输出里写 `UNCHECKED`），不叫过闸。没有只报不拦的口径。
+- 这把工具自己读私密词名单（`ASUNA_PRIVATE_WORDS`，不设就是 `<data>/private/personal-words.txt`），命中记成 `private_word`，在 `docs/development_plans/` 里也算数，和套件里 `tests/test_personal_words.py` 拦的是同一份、同一种匹配；临时 clone 里 `<data>` 是那个 clone 的 `.runtime`，要把 `ASUNA_PRIVATE_WORDS` 指到本机名单（路径现读，不抄）。另一份 `ASUNA_PERSONAL_DENYLIST` 照旧能加。私密词名单不在会写 `private words UNCHECKED`、退出码 3，不叫过闸；`denylist UNCHECKED` 只说明那份可选的名单不在，不影响退出码。
+- **不写 `--paths` 时扫的是暂存区**：发布已经把改动提交掉、暂存区是空的时候，一个文件都没读到，会写 `UNCHECKED: no file was read`、退出码 3。要扫内容就写 `--paths <要推的文件>`；`--all` 会把仓里既有的命中一起列出来（退出码 1），只看要推的文件有没有新增命中。
 - **临时 clone／临时提交点（pinrepo 一类）绕开仓里的推送闸，走它就当没过闸**，先手跑这一步（实例：三笔提交走临时 clone，把名单上的一个主机词推进了公开仓）。
 - **纯数字形状规则**：孤立站着的 7–11 位纯数字＝账号形状，一律不进仓；前面紧贴 `-` 或字母的（如 `restart-` 前缀的台账号）、`call_` 前缀的调用号、40 位十六进制号内部算出的数字段，单列成“非账号形状”，照旧列出来给说话那一半过目再放行（护住它的是前缀不是位数）。
 

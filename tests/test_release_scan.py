@@ -9,6 +9,8 @@ import re
 import subprocess
 import sys
 
+import pytest
+
 from asuna.config import ROOT
 
 sys.path.insert(0, str(ROOT / 'tools'))
@@ -101,9 +103,10 @@ def test_only_the_exact_marker_exempts_a_line_and_a_number_without_it_is_reporte
         assert scan('member %s joined  # %s' % (number, wrong)) == ['account_id'], wrong
 
 
-def test_strict_exits_1_on_a_counted_hit_and_the_default_stays_report_only(tmp_path, monkeypatch):
-    """`--strict` is the form a push gate uses: exit 1 when anything counted was found, 0 when nothing was; without it
-    the scan only reports (exit 0). A file outside the repository is checked by its name."""
+def test_a_counted_hit_fails_a_clean_file_passes_and_no_mode_only_reports(tmp_path, monkeypatch):
+    """ADR-119 F7: the scan is a gate in every form: exit 1 on a counted hit, 0 on a clean read; the old report-only
+    default and its `--strict` are gone (a leftover `--strict` is refused). A file outside the repository is checked
+    by its name."""
     flagged = tmp_path / ('n' + '1' + '2' * 8 + '.txt')
     clean = tmp_path / 'clean.txt'
     flagged.write_text('x\n', encoding='utf-8')
@@ -112,13 +115,13 @@ def test_strict_exits_1_on_a_counted_hit_and_the_default_stays_report_only(tmp_p
     monkeypatch.setenv('ASUNA_PRIVATE_WORDS', str(tmp_path / 'words.txt'))
     run = lambda *args: subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--personal', *args],
                                        cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=60)
-    assert run('--strict', '--paths', str(flagged)).returncode == 1
-    assert run('--paths', str(flagged)).returncode == 0
-    assert run('--strict', '--paths', str(clean)).returncode == 0
+    assert run('--paths', str(flagged)).returncode == 1
+    assert run('--paths', str(clean)).returncode == 0
+    assert run('--strict', '--paths', str(clean)).returncode == 2
 
 
-def test_strict_counts_only_counted_hits_never_report_only_ones(tmp_path, monkeypatch, capsys):
-    """`--strict` exits 1 on a counted hit only: a hit printed as report-only (docs/development_plans/) leaves it at 0,
+def test_the_gate_counts_only_counted_hits_never_report_only_ones(tmp_path, monkeypatch, capsys):
+    """The scan exits 1 on a counted hit only: a hit printed as report-only (docs/development_plans/) leaves it at 0,
     so the gate does not stop a push for what the scan itself does not count (Xiaoman's review of --strict)."""
     (tmp_path / 'words.txt').write_text('host|demo-host-zz|a placeholder\n', encoding='utf-8')
     monkeypatch.setenv('ASUNA_PRIVATE_WORDS', str(tmp_path / 'words.txt'))
@@ -126,18 +129,18 @@ def test_strict_counts_only_counted_hits_never_report_only_ones(tmp_path, monkey
     def sources(key):
         return lambda args: iter([(key, key, b'member ' + number + b' joined\n')])
     monkeypatch.setattr(check_staged_secrets, 'personal_sources', sources('docs/development_plans/ADR-900-x/README.md'))
-    assert check_staged_secrets.personal_scan(['--personal', '--strict', '--all']) == 0
+    assert check_staged_secrets.personal_scan(['--personal', '--all']) == 0
     assert 'report-only:docs/development_plans/ADR-900-x/README.md:1:account_id' in capsys.readouterr().out
     monkeypatch.setattr(check_staged_secrets, 'personal_sources', sources('src/asuna/x.py'))
-    assert check_staged_secrets.personal_scan(['--personal', '--strict', '--all']) == 1
+    assert check_staged_secrets.personal_scan(['--personal', '--all']) == 1
 
 
-def test_strict_without_personal_is_refused_never_a_silent_pass():
-    """Without --personal the secret scan took over and dropped --strict and the files, answering PASS on nothing with
-    exit 0; now it is refused with exit 2 and says what to write (Xiaoman's check of 0df21227)."""
-    done = subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--strict', 'tests/x.py'],
+def test_the_secret_scan_refuses_options_never_a_silent_pass():
+    """Given options, the secret scan used to drop them and answer PASS on nothing with exit 0; it refuses them with
+    exit 2 and says what to write (Xiaoman's check of 0df21227)."""
+    done = subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--paths', 'tests/x.py'],
                           cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=60)
-    assert done.returncode == 2 and 'STRICT_NEEDS_PERSONAL' in done.stderr and 'PASS' not in done.stdout
+    assert done.returncode == 2 and 'SECRET_SCAN_TAKES_NO_OPTIONS' in done.stderr and 'PASS' not in done.stdout
 
 
 def test_the_denylist_reads_the_private_words_form_and_says_when_it_has_no_list(tmp_path, monkeypatch, capsys):
@@ -147,7 +150,7 @@ def test_the_denylist_reads_the_private_words_form_and_says_when_it_has_no_list(
     probe = tmp_path / 'probe.txt'
     probe.write_text('demo-word-zz here\n', encoding='utf-8')
     monkeypatch.setenv('ASUNA_PERSONAL_DENYLIST', str(listed))
-    assert check_staged_secrets.main(['--personal', '--strict', '--paths', str(probe)]) == 1
+    assert check_staged_secrets.main(['--personal', '--paths', str(probe)]) == 1
     monkeypatch.setenv('ASUNA_PERSONAL_DENYLIST', str(tmp_path / 'absent.txt'))
     check_staged_secrets.main(['--personal', '--paths', str(probe)])
     assert 'denylist UNCHECKED' in capsys.readouterr().out
@@ -163,7 +166,7 @@ def test_a_private_word_counts_in_the_adrs_too_and_matches_as_the_suite_test_mat
     line = b'see DEMO-HOST-ZZ and \xe7\xa4\xba\xe4\xbe\x8b\xe5\x9c\xb0\xe5\x90\x8d; not demo-host-zzz\n'
     monkeypatch.setattr(check_staged_secrets, 'personal_sources',
                         lambda args: iter([(key, key, line) for key in ('docs/development_plans/ADR-900-x/progress.md',)]))
-    assert check_staged_secrets.personal_scan(['--personal', '--strict', '--all']) == 1
+    assert check_staged_secrets.personal_scan(['--personal', '--all']) == 1
     assert 'docs/development_plans/ADR-900-x/progress.md:1:private_word' in capsys.readouterr().out.splitlines()
     text = line.decode('utf-8')
     for _, _, word, _ in private_words.load(listed):
@@ -171,8 +174,28 @@ def test_a_private_word_counts_in_the_adrs_too_and_matches_as_the_suite_test_mat
         assert ours and bool(ours[0].search(text)) == bool(private_words.pattern(word).search(text)), word
     assert not check_staged_secrets.private_words()[0].search('demo-host-zzz')
     monkeypatch.setenv('ASUNA_PRIVATE_WORDS', str(tmp_path / 'absent.txt'))
-    assert check_staged_secrets.personal_scan(['--personal', '--all']) == 0
+    assert check_staged_secrets.personal_scan(['--personal', '--all']) == check_staged_secrets.UNCHECKED
     assert 'private words UNCHECKED' in capsys.readouterr().out
-    # 11-08, her finding: with no list --strict still exited 0, so a gate that goes by the code passed on nothing.
+    # 11-08, her finding: with no list a gate that goes by the code passed on nothing; it is UNCHECKED (3).
     monkeypatch.setattr(check_staged_secrets, 'personal_sources', lambda args: iter([('x.txt', 'x.txt', b'x\n')]))
-    assert check_staged_secrets.personal_scan(['--personal', '--strict', '--all']) == 1
+    assert check_staged_secrets.personal_scan(['--personal', '--all']) == check_staged_secrets.UNCHECKED
+
+
+def test_a_scan_that_read_nothing_is_unchecked_never_a_pass(tmp_path, monkeypatch, capsys):
+    """ADR-119 F7: nothing staged, or no secret configured to look for, was exit 0 (PASS); it is UNCHECKED (3)."""
+    (tmp_path / 'words.txt').write_text('host|demo-host-zz|a placeholder\n', encoding='utf-8')
+    monkeypatch.setenv('ASUNA_PRIVATE_WORDS', str(tmp_path / 'words.txt'))
+    monkeypatch.setattr(check_staged_secrets, 'personal_sources', lambda args: iter([]))
+    assert check_staged_secrets.personal_scan(['--personal']) == check_staged_secrets.UNCHECKED
+    assert 'no file was read' in capsys.readouterr().out
+    import asuna.config
+    monkeypatch.setattr(asuna.config, 'ROOT', tmp_path)       # no operator key files of this machine
+    monkeypatch.setattr(check_staged_secrets, 'staged_blobs', lambda root: iter([]))
+    monkeypatch.setattr(asuna.config, 'load', lambda *a, **k: {'demo_token': 'demo-secret-value'})
+    with pytest.raises(SystemExit) as nothing_staged:
+        check_staged_secrets.secret_scan()
+    assert nothing_staged.value.code == check_staged_secrets.UNCHECKED and '"UNCHECKED"' in capsys.readouterr().out
+    monkeypatch.setattr(asuna.config, 'load', lambda *a, **k: {})
+    with pytest.raises(SystemExit) as no_secret:
+        check_staged_secrets.secret_scan()
+    assert no_secret.value.code == check_staged_secrets.UNCHECKED

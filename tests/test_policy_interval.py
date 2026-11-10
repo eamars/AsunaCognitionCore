@@ -67,7 +67,7 @@ def test_a_change_retimes_the_live_plan_once_from_the_moment_of_the_change(her):
     longer = set_policy(her, 10080)
     plan = plan_records.get(her.store, DAY)
     assert longer['now'] == 10080 and plan['next_fire_at'] == (NOW + timedelta(days=7)).isoformat()
-    rows = [row['payload'] for row in audits(her.store, 'rhythm.retimed')]
+    rows = [row['payload'] for row in sorted(audits(her.store, 'rhythm.retimed'), key=lambda row: row['seq'])]
     assert rows == [{'from': {'every_seconds': 86400}, 'to': {'every_seconds': 21600}},
                     {'from': {'every_seconds': 21600}, 'to': {'every_seconds': 604800}}], 'no drift key'
     updates = len([c for c in her.service.lane.calls if c[0] == '/schedule/update'])

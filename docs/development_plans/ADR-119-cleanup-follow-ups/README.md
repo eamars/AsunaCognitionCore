@@ -297,8 +297,9 @@ name promises. Proof, three ways:
 2. *Built twice, compared.* The whole suite and a module of synthetic volume ran with every `prepare` built by
    main's code and by the branch's from the same in-memory database, clock, ids and process state: 37 turns
    (home private 3, group 9, agent line 1, scheduled plan 3, task result 1, note wake 3, heartbeat 4, other 13),
-   0 mismatches in content, key order, store writes (24 turns wrote 132 records), raises or process state. The
-   harness found no noise running main against main, and caught three planted changes on every turn.
+   0 mismatches in content, key order, store writes (24 turns wrote 132 records), raises or process state. Main
+   against main over the same 37 turns: 0 (the harness adds no noise); three planted changes (a string, a moved
+   manifest key, an extra audit) were caught on all 15 turns of a smaller run.
 3. *Not seen by the comparison:* 41 of the 80 `*_from_program` blocks never appeared in a compared turn (among
    them credentials, errands, places, notes, night stage, faults, stickers, switches, peer asides); five
    truncation branches were not reached (progress notes, recent experience, the ideas "more" line, the quote

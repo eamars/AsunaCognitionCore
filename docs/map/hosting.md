@@ -640,6 +640,8 @@ The owner of `scenes`: a conversation's record (its kind, members, scope and epo
 - def `set_character_context`
 - def `forget_name` — An erasure of the conversation's lines takes the name they carried with them.
 - def `note_fault`
+- def `note_plan_fault` — A due plan here did not run (ADR-119 F10): the newest failure's fields, and one more in its count.
+- def `clear_plan_fault` — The plan-fault mark she was shown goes.
 - def `clear_fault` — The fault mark goes, if it is still the one shown (`fault.at`).
 - def `hold_unsent`
 - def `clear_unsent` — The unsent mark goes, if it is still that turn's.

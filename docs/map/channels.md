@@ -135,6 +135,9 @@ When one of her turns fails in the program (FAILED_RUNTIME), nobody may be left 
 
 - def `cause` — The failure's name: its error code if it carries one, else the exception's class.
 - def `turn_failed` — Report a failed turn to the developer and mark its conversation for her next turn there.
+- def `plan_failed` — A due plan that did not run: its conversation is marked for her next turn there (apart from the turn-fault mark), and the developer is told once a day per failure, counted.
+- def `plan_line` — The once-only line for her next turn where a due plan of hers did not run, or None.
+- def `late_line` — The line in a plan's turn that reached her late, the times on her clock (「时间不详」 when unreadable).
 - def `her_line` — The once-only line for her next turn where a turn of hers failed, or None.
 - def `told` — A turn ran to its end: the once-only marks its context showed (manifest `told`) are cleared, each only if it is still the mark that was shown (a newer one set meanwhile stays for the next turn).
 

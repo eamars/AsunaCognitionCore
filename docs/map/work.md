@@ -169,6 +169,7 @@ Business ownership for native DSH reminders; no host time wheel.
   - `ensure_presence` — Heartbeat needs the persona model (heartbeat.enabled) and the owner's local target scene.
   - `pause_presence` — Her heartbeat.pause_min: beats keep ticking but skip until then, and resume by themselves.
   - `watch_rhythm` — Watchdog (ADR-012 §4.3): a heartbeat that went quiet for two beats is rebuilt, and she is told.
+  - `hand_on_late` — Each firing DSH logged that its callback has not brought within HANDOFF_LATE_SECONDS is delivered now, by the path a start uses (ADR-119 F10): a scheduler turn that ended before its hook, or a refused callback, no longer waits for the next 
   - `ensure_settlement` — Nightly settlement: native daily at rhythm.settle_at in an explicit IANA zone; once per local date.
   - `ensure_condense` — ADR-049: a home plan that looks every few minutes while she is in any group (marked ones, size floor).
   - `condense_notes_visit` — ADR-049's size floor: before a group past it is condensed, a notes visit there (not one of her own visits: it is not in her plan's ledger and has no daily limit).

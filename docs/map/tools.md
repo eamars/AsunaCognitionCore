@@ -120,7 +120,8 @@ Report paths only; never print configured secret values or matching bytes.
 - def `staged_blobs`
 - def `secret_scan`
 - def `report_only`
-- def `private_words` — The private-words list's patterns, matched as asuna.private_words.pattern matches them, or None when there is no list.
+- def `private_words` — The private-words list's patterns as asuna.private_words reads and matches them, or None when there is no list.
+- def `personas` — The persona packages' names, matched as a listed word is (asuna.private_words.persona_names).
 - def `load_list`
 - def `denylist` — The denylist's patterns, or None when there is no list (the category is then unchecked, and said so).
 - def `account_id`
@@ -381,7 +382,7 @@ Refusal probe (ADR-080): can the model under test do what the character brain ne
 
 Build and check a GitHub Release of the distributable plugins (ADR-010 D10).
 
-- def `persona_names`
+- def `persona_names` — The persona packages' names (asuna.private_words.persona_names, the one reader; matched as a listed word).
 - def `check`
 - def `main`
 

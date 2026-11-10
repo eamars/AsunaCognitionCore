@@ -27,17 +27,17 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = ROOT / '.runtime/adr008/packages'
 
 
+sys.path.insert(0, str(ROOT / 'src'))
+from asuna import private_words  # noqa: E402
+
 # The packages a release ships (the core and the NapCat channel); tests/test_release_scan.py and
 # tools/publication_scan.py check what these pack.
 RELEASED = ['packages/cognition-core', 'packages/channels/napcat-qq']
 
 
 def persona_names():
-    names = set()
-    for model in ROOT.glob('packages/personas/*/persona-model.json'):
-        persona = json.loads(model.read_text(encoding='utf-8')).get('persona') or {}
-        names |= {str(value) for key, value in persona.items() if key in ('id', 'display_name', 'name') and value}
-    return {name for name in names if len(name) >= 2}
+    """The persona packages' names (asuna.private_words.persona_names, the one reader; matched as a listed word)."""
+    return private_words.persona_names(ROOT)
 
 
 def check(path, version, names):
@@ -69,7 +69,7 @@ def check(path, version, names):
             except (UnicodeDecodeError, OSError):
                 continue
             for name in names:
-                if name in text:
+                if private_words.pattern(name).search(text):
                     problems.append('persona name in ' + Path(file).relative_to(package).as_posix())
     return manifest['name'], problems
 

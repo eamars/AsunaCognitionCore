@@ -93,6 +93,28 @@ def pattern(word):
     return re.compile(escaped)
 
 
+def text_of(raw):
+    """A file's bytes as every scanner reads them (ADR-119 F7): None when it is binary (a NUL anywhere), else UTF-8
+    with undecodable bytes replaced, so a mostly-text file is still read rather than skipped."""
+    if b'\0' in raw:
+        return None
+    return raw.decode('utf-8', errors='replace')
+
+
+def persona_names(root):
+    """The names the persona packages under `root` carry: each package's folder, and its model's `id`, `display_name`
+    and `name`. Core files name none of them; the scanners read them here, never from a copy in the code."""
+    import json
+    names = set()
+    for folder in Path(root).glob('packages/personas/*/'):
+        names.add(folder.name)
+        model = folder / 'persona-model.json'
+        if model.is_file():
+            persona = json.loads(model.read_text(encoding='utf-8')).get('persona') or {}
+            names |= {str(value) for key, value in persona.items() if key in ('id', 'display_name', 'name') and value}
+    return {name for name in names if len(name) >= MIN_OTHER}
+
+
 def find(entries, text):
     """[(entry line number, category)] of the entries found in a text, each once."""
     return [(number, category) for number, category, word, _ in entries if pattern(word).search(text)]

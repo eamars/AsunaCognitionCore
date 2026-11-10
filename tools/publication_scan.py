@@ -108,7 +108,7 @@ def scan(root, prefix, paths, checks=None, unread=None):
         def released(text, line):
             for _number, category in secrets.scan_lines(text, key, allow, deny):
                 found.add((line, category, None))
-            if any(word in text for word in names):
+            if any(private_words.pattern(word).search(text) for word in names):
                 found.add((line, 'persona_name', None))
         listed(key, 0)
         if ships:

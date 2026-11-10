@@ -127,27 +127,30 @@ PLACEHOLDER=re.compile(r'900000[0-9]{1,3}')
 O=r'(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])'
 PRIVATE=re.compile(rf'(?<![\w.])(?:10\.{O}\.{O}\.{O}|172\.(?:1[6-9]|2[0-9]|3[01])\.{O}\.{O}|192\.168\.{O}\.{O})(?!\w|\.[0-9])')
 TZ=re.compile(r'\b(?:Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific)/[A-Z][A-Za-z_]+(?:/[A-Z][A-Za-z_]+)?\b')
-PERSONA=re.compile('xiao'+'man|'+chr(0x5c0f)+chr(0x6ee1),re.I)  # built at runtime so this file never matches itself
 CORE=('src/asuna/','packages/cognition-core/','config/','tools/')
 SKIP=re.compile(r'(?:^|/)(?:node_modules|\.venv)/|^packages/channels/[^/]+/integration/vendor/')
 LOCKFILES={'package-lock.json','uv.lock'}
 
 def report_only(key):return key.startswith('docs/development_plans/') and not key.startswith('docs/development_plans/ADR-009-persona_residency/')
 
+def _words():
+    """asuna.private_words, the one reader of the list (ADR-119 F7); stdlib-only, imported from this tree's src."""
+    if str(ROOT/'src') not in sys.path:sys.path.insert(0,str(ROOT/'src'))
+    from asuna import private_words as words
+    return words
+
 def private_words():
-    """The private-words list's patterns, matched as asuna.private_words.pattern matches them, or None when there is
-    no list. This scan is stdlib-only, so the rule is repeated here; tests/test_release_scan.py holds the two equal."""
-    data=Path(os.environ.get('ASUNA_DATA_ROOT') or ROOT/'.runtime')
-    where=Path(os.environ.get('ASUNA_PRIVATE_WORDS') or data/'private'/'personal-words.txt')
-    if not where.is_file():return None
-    out=[]
-    for entry in load_list('ASUNA_PRIVATE_WORDS',where):
-        parts=entry.split('|',2)
-        word=parts[1].strip() if len(parts)==3 else ''
-        if not word:continue
-        escaped=re.escape(word)
-        out.append(re.compile(r'(?<![A-Za-z0-9_])'+escaped+r'(?![A-Za-z0-9_])',re.I) if word.isascii() else re.compile(escaped))
-    return out
+    """The private-words list's patterns as asuna.private_words reads and matches them, or None when there is no list."""
+    words=_words();entries=words.load()
+    return None if entries is None else [words.pattern(word) for _,_,word,_ in entries]
+
+_PERSONAS=None
+def personas():
+    """The persona packages' names, matched as a listed word is (asuna.private_words.persona_names)."""
+    global _PERSONAS
+    if _PERSONAS is None:
+        words=_words();_PERSONAS=[words.pattern(name) for name in sorted(words.persona_names(ROOT))]
+    return _PERSONAS
 
 def load_list(env,default):
     try:lines=Path(os.environ.get(env) or default).read_text(encoding='utf-8').splitlines()
@@ -191,7 +194,7 @@ def scan_lines(text,key,allow,deny,words=()):
         if private_address(line,allow):yield no,'private_address'
         if any(p.search(line) for p in deny):yield no,'denylist'
         if any(m.group() not in allow for m in TZ.finditer(line)):yield no,'timezone'
-        if persona and PERSONA.search(line):yield no,'persona_name'
+        if persona and any(p.search(line) for p in personas()):yield no,'persona_name'
 
 def personal_sources(args):
     """Yield (shown path, repo-relative key or base name, raw bytes)."""
@@ -227,9 +230,8 @@ def personal_scan(argv):
         if SKIP.search(key):continue
         read+=1
         found={(0,c) for _,c in scan_lines(key,key,allow,deny,words)}
-        if key.rsplit('/',1)[-1] not in LOCKFILES and b'\0' not in raw:
-            try:found|=set(scan_lines(raw.decode('utf-8'),key,allow,deny,words))
-            except UnicodeDecodeError:pass
+        text=_words().text_of(raw) if key.rsplit('/',1)[-1] not in LOCKFILES else None
+        if text is not None:found|=set(scan_lines(text,key,allow,deny,words))
         for no,c in sorted(found):
             prefix='report-only:' if report_only(key) and c!='private_word' else ''
             print(f'{prefix}{shown}:{no}:{c}')

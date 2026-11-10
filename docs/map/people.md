@@ -489,6 +489,8 @@ Words that point at real people and places, kept per deployment and never commit
 - def `load` — The entries, or None when the deployment has no list.
 - def `problem` — Why an entry can't be kept, in words; None when it can.
 - def `pattern` — A Latin word matches as a whole word (case-insensitive); other text matches where it appears.
+- def `text_of` — A file's bytes as every scanner reads them (ADR-119 F7): None when it is binary (a NUL anywhere), else UTF-8 with undecodable bytes replaced, so a mostly-text file is still read rather than skipped.
+- def `persona_names` — The names the persona packages under `root` carry: each package's folder, and its model's `id`, `display_name` and `name`.
 - def `find` — [(entry line number, category)] of the entries found in a text, each once.
 - def `add` — Keep an entry; the same word is kept once (at home its category and reason are replaced).
 - def `remove`

@@ -199,3 +199,15 @@ def test_a_scan_that_read_nothing_is_unchecked_never_a_pass(tmp_path, monkeypatc
     with pytest.raises(SystemExit) as no_secret:
         check_staged_secrets.secret_scan()
     assert no_secret.value.code == check_staged_secrets.UNCHECKED
+
+
+def test_a_persona_is_found_by_its_package_folder_and_in_any_case():
+    """ADR-119 F7: the release and the publication scan matched a persona's model names case-sensitively and never its
+    package folder, so a released file naming her as a capitalised word passed. One reader now (asuna.private_words):
+    every package folder is a name, and a Latin name matches as a listed word does, in any case."""
+    from asuna import private_words
+    names = release.persona_names()
+    folders = {folder.name for folder in (ROOT / 'packages/personas').iterdir() if folder.is_dir()}
+    assert folders and folders <= names
+    latin = sorted(name for name in names if name.isascii())[0]
+    assert private_words.pattern(latin).search('from %s own build' % latin.title())

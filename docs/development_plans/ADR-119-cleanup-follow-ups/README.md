@@ -260,11 +260,18 @@ Her choice (agent line 0302, 0303): the interval through `set_policy`, and one r
    schema's minimum, 60, stays; it is every persona's). The owner's switches (`self_development.enabled`,
    `night`) stay out of it. `set_policy` is a home, owner-private turn's tool (`POLICY_SET_REQUIRES_OWNER_PRIVATE`
    elsewhere); its description says so beside the `null` sentence.
-2. *The retime, once per change.* Her `set_policy` of the interval ensures the daytime plan at once; the rhythm
+2. *The retime, once per change.* Her `set_policy` of the interval ensures the daytime plan at once (the tool
+   ensures today only after a `heartbeat.` or `rhythm.` key; `self_development.every_min` joins them, through
+   `ensure_self_development`). If the policy is written but the retime fails, the answer says both: the value is
+   set, the plan is not yet moved, with the code (`NATIVE_SCHEDULE_UPDATE_FAILED` or
+   `NATIVE_SELF_DEVELOPMENT_CREATE_INCOMPLETE`), and the rhythm watch tries again within 300 s, since the plan's
+   interval still differs; the rhythm
    watch (every 300 s) and each start ensure it too, for a change in the persona model. When the interval it
    computes (policy, else persona model, else `SELF_DEVELOPMENT_DEFAULT_MIN`, 1,440) differs from the live plan's
    `rule.every_seconds`, the native record is updated in place (`/schedule/update`, as `_rhythm_plan` retimes her
-   heartbeat), the plan's `rule` and `next_fire_at` follow, and one `rhythm.retimed` line records `from` and `to`.
+   heartbeat), the plan's `rule` and `next_fire_at` follow, and one `rhythm.retimed` audit row (`audit_events`, on the plan's stream) records `from` and `to`: the
+   development plan's own, written in `_ensure_development_plan`, without the heartbeat's `drift` key (a retime
+   here happens only when the value differs, so it would always be false and say nothing).
    An equal value does nothing. Every path that writes the native record uses the computed interval: today a
    live plan returns early and a missing native record is rebuilt from the plan's old `rule.every_seconds`
    (`_ensure_development_plan`); both take the new one. The plan record, its `fire_count` and
@@ -274,7 +281,9 @@ Her choice (agent line 0302, 0303): the interval through `set_policy`, and one r
    run is the moment of the change plus the new interval. With her plan as read on 11-10 (last run 18:18:44, next
    11-11 18:18, 1,440 min): set to 360 at 19:02, the next run is 11-11 01:02; set to 10,080 at 19:02, it is 11-17
    19:02 and tomorrow's 18:18 does not come. A shorter interval never fires at once for the time already passed.
-3. *Clearing.* For every `set_policy` parameter, `value: null` removes it from her policy, so it is read again from
+3. *Clearing.* For every `set_policy` parameter (the core's `CORE_WRITABLE_KEYS`, the private `PRIVATE_KEYS` and
+   a package's `policy_keys`: whatever `key_spec` accepts), `value: null` removes the key from her policy (the
+   key leaves the stored params; no `null` is written, so the source never reads `policy` for a cleared one), so it is read again from
    her persona model, else the core default; `null` is the only clearing value. Every other value is checked by
    the parameter's type and range as today, so `0`, an empty string or `false` for the interval is refused by
    name (no value can be kept while having no effect). For a boolean, `false` sets the value and `null` clears it:
@@ -291,5 +300,6 @@ Her choice (agent line 0302, 0303): the interval through `set_policy`, and one r
 **Landing:** one, with a restart, after F8's. Tests: the range refused outside 360 to 10,080, and `0`, `''`,
 `false` refused by name; a change retimes the live plan once, its `next_fire_at` the change plus the new interval
 (shorter and longer), and an equal value does not retime; `null` clears and a second `null` answers
-「本来就没设，无改动」; `rhythm.public_clock` set `false` answers `policy`, cleared answers `core`. Each run on the
+「本来就没设，无改动」; the interval cleared answers its value from `model` or `core`; `rhythm.public_clock` set
+`false` answers `policy`, cleared answers `core`; a set of the interval retimes at once (not at the watch). Each run on the
 old code first.

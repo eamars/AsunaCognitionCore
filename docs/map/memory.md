@@ -195,7 +195,6 @@ Local embeddings and server-side, prefiltered Mongo vector retrieval.
 
 查宿主保存的授权消息（P1-b）：字面检索覆盖完整 messages，原文整条回读。
 
-- def `identity_status` — 身份解析接上了没有、缺哪些名字——降级要看得见，不能静默少信息。
 - def `person_terms` — By-person: (the authors the person resolved to (people.py), None) when resolved, never a name match; else (None, the values a person may be known by, person_values) for standalone use; (None, None) for no person.
 - def `bind_people` — Resolve a person argument to one person's author ids and label hits by people.py.
 - def `sink_bounds` — 送达回执那一侧的范围（receipt_records.sink_window 的边界）：时间窗下沉 + 游标下推（决胜位不下推，见下）。
@@ -222,7 +221,6 @@ Low-priority, source-bound summaries for new dialogue batches (DM and authorized
 
 ADR-005 P1-c：按需整理当前授权群里指定时间／主题的讨论（同一来源、同一授权）。
 
-- def `identity_status` — 本模块自己的身份解析状态：不替 P1-b 那份说话，也不另存一份会漂移的副本。
 - def `read_linkage` — {message_id: 文档片段}。读不到就说 digest_linkage_unavailable，不静默少信息。
 - def `reply_target_of` — 这一行真实回复了哪条（宿主记录 id）；没有就空字符串。
 - def `read_thread_continuations` — 沿真实 reply 链把同一讨论流补齐：命中项的回复、被它回复的那条，以及它们后续的链。

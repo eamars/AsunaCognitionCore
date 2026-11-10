@@ -46,18 +46,6 @@ from .peer_context import peer_from_message, verify_peer, channel_of
 from .ingress import PROGRAM_AUTHOR
 from .state import Denied
 
-IDENTITY_NAMES = ("peer_from_message", "verify_peer", "channel_of")
-
-
-def identity_status():
-    """本模块自己的身份解析状态：不替 P1-b 那份说话，也不另存一份会漂移的副本。"""
-    have = [name for name in IDENTITY_NAMES if callable(globals().get(name))]
-    return {"resolver": sorted(have), "complete": len(have) == len(IDENTITY_NAMES),
-            "missing": [name for name in IDENTITY_NAMES if name not in have],
-            "source": ("peer_context" if len(have) == len(IDENTITY_NAMES)
-                       else ("peer_context_partial" if have else "none"))}
-
-
 # ── 字面线索：标注看得见依据，不假装理解语义 ──────────────────────────────
 CORRECTION_CUES = ("更正", "纠正", "说错", "说反了", "口误", "打错", "笔误", "写错", "记错",
                    "搞错", "弄错", "应该是", "应是", "改成", "改一下", "撤回", "划掉",
@@ -602,12 +590,8 @@ def _coverage(rows, meta, undated):
 
 def _notes(meta, participants, undated):
     notes = []
-    ident = meta.get("identity") or {}
-    if ident and not ident.get("complete"):
-        notes.append("身份解析没接上（缺 %s），参与者只按记录作者归并"
-                     % "/".join(ident.get("missing") or []))
     degraded = [person for person in participants.values() if person["identity"] != "peer"]
-    if degraded and ident.get("complete", True):
+    if degraded:
         notes.append("%d 位发言人没有身份块或身份块没通过校验，按已认证记录作者标注" % len(degraded))
     semantic = meta.get("semantic") or {}
     if not semantic.get("ok") and semantic.get("why") != "not_attempted":
@@ -979,7 +963,7 @@ class DiscussionDigestService:
                 "policy_epoch": scene_doc["policy_epoch"], "topic": topic, "person": person,
                 "window": result.get("window") or [], "more": more,
                 "fallback": result.get("fallback") or {}, "semantic": result.get("semantic") or {},
-                "dropped": result.get("dropped") or {}, "identity": identity_status(),
+                "dropped": result.get("dropped") or {},
                 "excluded": excluded, "excluded_why": excluded_why,
                 "linkage_why": linkage_why or excluded_why, "thread": thread}
         digest = build_digest(page_hits, docs, meta)
@@ -1007,7 +991,6 @@ class DiscussionDigestService:
                    "source_ids": digest["source_ids"], "more": more,
                    "next_cursor": wrapped, "window": result.get("window"),
                    "limit": result.get("limit"), "scope": result.get("scope"),
-                   "identity": identity_status(),
                    "semantic": {key: (result.get("semantic") or {}).get(key)
                                 for key in ("ok", "why", "candidates")},
                    "dropped": result.get("dropped") or {}, "fallback": result.get("fallback"),

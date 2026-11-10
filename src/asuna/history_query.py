@@ -56,29 +56,8 @@ from . import channel_kinds
 # 宿主那份没有 _group_token / _norm_person，两个纯字符串解析在本模块内自带。
 from .peer_context import peer_from_message, verify_peer, channel_of
 
-IDENTITY_CONTRACT = ("peer_from_message(doc) -> dict|None；channel_of(doc) -> dict|None；"
-                     "verify_peer(peer, channel) -> (bool, reason)")
-IDENTITY_NAMES = ("peer_from_message", "verify_peer", "channel_of")
-
-
-def identity_status():
-    """身份解析接上了没有、缺哪些名字——降级要看得见，不能静默少信息。
-
-    状态直接从模块名字读，不另存一份内部副本：少一个可漂移的状态，就少一处
-    “导入其实成功了但状态说没接上”的假象。
-    """
-    have = [name for name in IDENTITY_NAMES if callable(globals().get(name))]
-    return {"resolver": sorted(have), "complete": len(have) == len(IDENTITY_NAMES),
-            "missing": [name for name in IDENTITY_NAMES if name not in have],
-            "source": ("peer_context" if len(have) == len(IDENTITY_NAMES)
-                       else ("peer_context_partial" if have else "none")),
-            "contract": IDENTITY_CONTRACT}
-
-
 def _identity_of(doc):
-    """(peer, ok, reason)。三个函数没齐就 (None, False, "identity_unavailable")。"""
-    if not (callable(peer_from_message) and callable(verify_peer) and callable(channel_of)):
-        return None, False, "identity_unavailable"
+    """(peer, ok, reason)。"""
     try:
         peer = peer_from_message(doc)
         ok, reason = verify_peer(peer, channel_of(doc))
@@ -515,9 +494,8 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
         who = labeler(doc)
         return dict(base, who=who, speaker=who, person_id="", names=[])
     if not ok:
-        # 身份块不可信、或身份解析根本没接上，都得说清是谁说的：退回已认证 author。
-        note = ("身份解析没接上，缺 %s" % "/".join(identity_status()["missing"])
-                if reason == "identity_unavailable" else "身份块没通过校验：%s" % reason)
+        # 身份块不可信，得说清是谁说的：退回已认证 author。
+        note = "身份块没通过校验：%s" % reason
         return dict(base, who="记录作者 %s（%s）" % (author or "?", note),
                     person_id="", names=sorted(({author.lower()} if author else set()) | same_person))
     card, nickname = _text(peer.get("card"), 60), _text(peer.get("nickname"), 60)
@@ -828,7 +806,6 @@ def query_history(retrieval, store, scene, query="", *, person=None, author=None
             "fallback": literal["fallback"],
             "time_fields": {INBOUND: INBOUND_TIME_FIELD, OUTBOUND: OUTBOUND_TIME_FIELD,
                             OUTBOUND_VIA_RECEIPT: SINK_TIME_FIELD},
-            "identity": identity_status(),
             "scope": {"scene_id": parts["scene_id"], "scope_key": parts["scope_key"],
                       "group_id": parts["group_id"], EPOCH_FIELD: parts["epoch"],
                       "linked_scenes": parts["linked_scenes"],
@@ -855,9 +832,6 @@ def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET, zone=
         return "[%s] 没查成（%s），这条回答没用到历史" % (header, why)
     hits = result.get("hits") or []
     notes = []
-    ident = result.get("identity") or {}
-    if ident and not ident.get("complete"):
-        notes.append("身份解析没接上（缺 %s），只按记录作者标注" % "/".join(ident.get("missing") or []))
     semantic = result.get("semantic") or {}
     if not semantic.get("ok") and semantic.get("why") != "not_attempted":
         notes.append("语义检索没成（%s），只按字面查了 messages" % semantic.get("why"))

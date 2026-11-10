@@ -32,6 +32,7 @@ Left as is by the owner: the four channel API clients (ADR-118 §7.2).
 | F11 | A silence after a body the turn-end check sent back said 「这一回合正文里一个字都没写」 (her agent line, 2026-11-10 13:22): the receipt counted only the repair stage, so her refused reply was lost while the receipt said nothing was written | **Built 2026-11-10** (her wording, line 0234): on a line whose body is sent at the turn's end, silence after a refused body says 「这一步正文里没写字。这一回合前面那段被打回了、还没发出去：就这样结束，它不会发出去。现在在正文里重写一遍才发得出去（写进 think 的不会发）。」 and echoes the refused text's first 40 characters. Where only `speak` sends, the worker already says what the whole turn sent (`sent`). The check that sends a body back is unchanged. Covered by `stage-view.test.js` "ADR-119 F11: silence after a body the check sent back…"; she reports the first real one |
 | F12 | `summary_batch_id` read two ways (her finding, line 0246): the query of lines still to summarise (`records/messages.said`, `Exists(False)`) took a null as summarised, while the writer and every reader (`dialogue_summary`, `summary_attribution`, `retrieval`) take a falsy id as not; the catalog allows null, so only "nobody writes null" kept them agreeing | **Built 2026-11-10**: the query takes absent, null and empty as not summarised, the readers' rule; `tests/test_summary_batch_id.py` covers the four shapes |
 | F13 | `check_staged_secrets.py --personal --all` counts 50 hits on main (2026-11-10, after F7 b: 43 account-number shapes, 2 time zones, 1 persona name), nearly all synthetic numbers in test fixtures and the scanner's own tests; three are in her image skill's files; with every persona's names read (F7 b) four more, persona names in two core tests | Each hit fixed, or allowed where it is a fixture's placeholder (`personal_scan_allow.txt` or the line's `personal-scan: ok` mark); hers are hers to judge; `--all` then exits 0 on main **Built 2026-11-10**: every hit judged, none personal: test fixtures' numbers now the placeholder form or built at runtime, scanner tests' account-shaped numbers marked, digit-only fake hashes made hex, persona names used as test data replaced (the persona paths a test reads marked); real constants (a millisecond hour, the platform's 30-day mute, the QQ bot intents mask and two error codes) and her two image seeds (her judgment) on `tools/personal_scan_allow.txt`; two daylight-saving tests moved off the deployment's own zone to another with the same switch dates. `--all` exits 0 on main. This machine has no denylist (`<data>/private/personal-denylist.txt`), so that dimension is not checked here: `--all` exiting 0 covers the private-words list, account-number shapes and persona names, not the denylist. The denylist is the owner's own list of literals; it is not drafted from her private-words list, and each list keeps its own words |
+| F14 | Her daytime self-development interval has no way in (her reading, lines 0301 to 0303): `self_development.every_min` is read from her policy first but is not a `set_policy` parameter, and a live development plan is never retimed, so a changed interval (policy or persona model) never reaches the plan; no policy parameter can be cleared back to its default | She sets it with `set_policy` (360 to 10,080 min), a live plan is retimed once when the value changes (`rhythm.retimed`), a parameter written `null` returns to the persona model or the core default, and each set or clear answers the value now and where it comes from Design §9 |
 
 ## 3. F1 design (her wording, agent line 0222 to 0225, 2026-11-10)
 
@@ -248,3 +249,29 @@ of fields, no content):
 **Landing:** one, with a restart. Test: none new; each removal is checked by the counts above, read again on her
 data just before the landing, and by the suite (a test that leaned on a removed path is changed with it, named in
 the landing).
+
+## 9. F14 design: her daytime interval, and clearing a parameter (2026-11-10)
+
+Her choice (agent line 0302, 0303): the interval through `set_policy`, and one rule for clearing every parameter.
+
+1. *The parameter.* `self_development.every_min` joins her `set_policy` parameters (`CORE_WRITABLE_KEYS`):
+   integer, 360 to 10,080 minutes. The owner's switches (`self_development.enabled`, `night`) stay out of it.
+2. *The retime, once per change.* The rhythm watch (every 300 s) and each start ensure the daytime plan; when the
+   interval it computes (policy, else persona model, else 1,440) differs from the live plan's `rule.every_seconds`,
+   the native record is updated in place (`/schedule/update`, as `_rhythm_plan` retimes her heartbeat), the plan's
+   `rule` and `next_fire_at` follow, and one `rhythm.retimed` line records `from` and `to`. An equal value does
+   nothing. This holds for a change in the persona model too.
+3. *Clearing.* For every `set_policy` parameter, `value: null` removes it from her policy, so it is read again from
+   her persona model, else the core default. Clearing one that was never set answers 「本来就没设，无改动」 and is not
+   a failure. After a clear, the parameters whose core default is empty read, when her persona model gives none:
+   `self_development.every_min` → 1,440 min (the core's own default when none is given); `rhythm.sleep_window` → no
+   sleep window; `rhythm.public_clock` → false. Every other parameter has a core default and returns to it (or to
+   her persona model's value).
+4. *The answer names the source.* A set or a clear answers one line: the value now and where it comes from
+   (`policy`, `model`, `core`).
+5. *Words.* The rhythm refusal's 「快慢」 and the page's sentences on her interval are made true in this landing,
+   not before: the daytime interval becomes hers to set.
+
+**Landing:** one, with a restart, after F8's. Tests: the range refused outside 360 to 10,080; a change retimes the
+live plan once and an equal value does not; `null` clears and a second `null` answers 「本来就没设，无改动」; the answer
+names the source. Each run on the old code first.

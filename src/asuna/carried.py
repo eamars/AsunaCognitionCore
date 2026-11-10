@@ -289,9 +289,10 @@ def room_ranges():
 
 def _local(store, persona, moment):
     try:
-        when = datetime.fromisoformat(str(moment).replace('Z', '+00:00'))
-    except ValueError:
-        return str(moment)
+        when = clock.moment(moment)
+    except clock.BadTime:
+        from .local_time import UNKNOWN
+        return UNKNOWN
     return when.astimezone(_zone(store)).strftime('%Y-%m-%d %H:%M')
 
 
@@ -573,7 +574,7 @@ def count_days(store, persona, moment=None):
     first = memory_tiers.items(store, persona, by='added').first(fields=['added'])
     if not first or not first.get('added'):
         return {'days': 0, 'rows': 0, 'deleted': deleted}
-    began = datetime.fromisoformat(str(first['added']).replace('Z', '+00:00')).astimezone(zone).date()
+    began = clock.moment(first['added']).astimezone(zone).date()
     done = counted_days(store, persona)
     day, days, written = max(oldest, began), 0, 0
     while day < today:

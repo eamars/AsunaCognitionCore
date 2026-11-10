@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import timezone
 
 from . import clock
 from . import key_words
@@ -148,9 +148,10 @@ def query_words(store, persona, here, query):
 
 def _day(value, zone):
     try:
-        moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    except ValueError:
-        return ''
+        moment = clock.moment(value)
+    except clock.BadTime:
+        from .local_time import UNKNOWN
+        return UNKNOWN
     local = moment.astimezone(zone['tz'] if zone else timezone.utc)
     current = clock.now().astimezone(local.tzinfo)
     return ('%d/' % local.year if local.year != current.year else '') + '%d/%d' % (local.month, local.day)
@@ -427,10 +428,8 @@ def _said_at(store, units):
 
 
 def _seconds(value):
-    try:
-        return datetime.fromisoformat(str(value).replace('Z', '+00:00')).timestamp()
-    except ValueError:
-        return 0.0
+    """Epoch seconds, sorted newest first by its negative; an undated line is 0.0, so it ranks after every dated one."""
+    return 0.0 if value is None else clock.moment(value).timestamp()
 
 
 def fetch(store, here, ref, zone):
@@ -474,15 +473,14 @@ def fetch(store, here, ref, zone):
 # ── past versions of her notes ─────────────────────────────────────
 def _excluded(value, zone, ranges):
     day = _local_date(value, zone)
-    return bool(day) and any(start <= day <= end for start, end in ranges)
+    return day is not None and any(start <= day <= end for start, end in ranges)
 
 
 def _local_date(value, zone):
-    try:
-        moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    except ValueError:
-        return ''
-    return moment.astimezone(zone['tz'] if zone else timezone.utc).date().isoformat()
+    """The local date of a time; None for an undated text, which no excluded range holds."""
+    if value is None:
+        return None
+    return clock.moment(value).astimezone(zone['tz'] if zone else timezone.utc).date().isoformat()
 
 
 _versions = {}      # (database, persona, slug) -> (the newest revision ids, the history)
@@ -746,9 +744,10 @@ def _episode(event):
 
 def _month_day(value, zone):
     try:
-        moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    except ValueError:
-        return ''
+        moment = clock.moment(value)
+    except clock.BadTime:
+        from .local_time import UNKNOWN
+        return UNKNOWN
     local = moment.astimezone(zone['tz'] if zone else timezone.utc)
     return '%02d-%02d' % (local.month, local.day)
 
@@ -819,7 +818,7 @@ def report(store, since, compactions=None):
         if kind_ in ('cue', 'note') and compactions is not None:
             session = (episodes.get(fire.get('episode_id')) or {}).get('native_session_id') or (
                 episode_records.get(store, fire.get('episode_id'), fields=['native_session_id']) or {}).get('native_session_id')
-            at = datetime.fromisoformat(fire['at'].replace('Z', '+00:00')).timestamp() * 1000
+            at = clock.moment(fire['at']).timestamp() * 1000
             ends = [end for end in compactions.get(session, []) if end <= at]
             minutes = (at - max(ends)) / 60000 if ends else None
             for target in (entry, every):

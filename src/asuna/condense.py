@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import sessions as session_records
@@ -62,14 +62,6 @@ FUNCTION_CHARS = frozenset('的了吗呢吧啊呀哦嗯我你他她它们都也�
 _MARKUP = re.compile(r'\[[^\]]{0,40}\]|@\S+|https?://\S+|att-[0-9a-f]+')
 
 
-def _at(stamp):
-    try:
-        moment = datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))
-    except ValueError:
-        return None
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
-
-
 def _tier(table, value):
     for limit, word in table:
         if limit is None or value < limit:
@@ -93,7 +85,7 @@ def last_line(store, scene_id):
     """When someone other than her last spoke there; her own lines never restart the wait."""
     row = message_records.inbound(store, scene_id, by='received_at').first(newest_first=True,
                                                                            fields=['received_at'])
-    return _at(row['received_at']) if row and row.get('received_at') else None
+    return clock.moment(row['received_at']) if row and row.get('received_at') else None
 
 
 
@@ -185,7 +177,7 @@ def _past_floor(store, scene, found, size, moment):
     last = last_line(store, scene['_id'])
     measured = scene.get('conversation_size') or {}
     if (measured.get('at') and measured.get('floor') and measured.get('tokens', 0) < measured['floor']
-            and (last is None or last <= _at(measured['at']))):
+            and (last is None or last <= clock.moment(measured['at']))):
         return False
     try:
         answer = size(found[0], scene['_id'], found[1]) or {}
@@ -236,7 +228,8 @@ def look(store, persona, compact, moment=None, size=None, offer_notes=None):
             store.audit('condense', 'condense.notes_visit_failed', {'scene_id': scene['_id'], 'event_id': floor['visit']})
             scene_records.set_condense_floor(store, scene['_id'], {'failed_at': moment.isoformat()})
             continue
-        if floor.get('failed_at') and moment - _at(floor['failed_at']) < timedelta(minutes=OFFER_AGAIN_MINUTES):
+        failed = floor.get('failed_at')
+        if failed and moment - clock.moment(failed) < timedelta(minutes=OFFER_AGAIN_MINUTES):
             continue
         if not _past_floor(store, scene, found, size, moment):
             continue
@@ -258,7 +251,7 @@ def condensed_block(store, scene, event_id, moment=None):
         scene_records.told_condensed(store, scene['_id'], scene['condensed_at'], event_id)
     from .config import ago
     moment = moment or clock.now()
-    hours = max(0.0, (moment - _at(scene['condensed_at'])).total_seconds() / 3600)
+    hours = max(0.0, (moment - clock.moment(scene['condensed_at'])).total_seconds() / 3600)
     return CONDENSED_NOTE % (ago(hours), CONDENSED_BY.get(scene.get('condensed_by'), CONDENSED_BY['mark']))
 
 
@@ -266,9 +259,8 @@ def condensed_block(store, scene, event_id, moment=None):
 def last_look(store, scene_id, current_event_id=None):
     """When she last visited this group before this visit (the heartbeat plan's ledger), or None."""
     plan = plan_records.get(store, 'plan-asuna-presence', fields=['visits']) or {}
-    times = [_at(visit.get('at')) for visit in plan.get('visits') or []
-             if visit.get('scene_id') == scene_id and visit.get('event_id') != current_event_id]
-    times = [moment for moment in times if moment]
+    times = [clock.moment(visit['at']) for visit in plan.get('visits') or []
+             if visit.get('at') and visit.get('scene_id') == scene_id and visit.get('event_id') != current_event_id]
     return max(times) if times else None
 
 

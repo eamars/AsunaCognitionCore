@@ -464,7 +464,7 @@ class Coordinator:
         ep_id=ep['_id']
         model,policy=model_and_policy(self.store,ep['persona'])
         earlier=message_records.turn_parts(self.store,ep_id,by=None).rows(fields=['segment_index','not_before','text'])
-        start=max([_dt.now(_tz.utc)]+[_dt.fromisoformat(row['not_before']) for row in earlier if row.get('not_before')])
+        start=max([_dt.now(_tz.utc)]+[clock.moment(row['not_before']) for row in earlier if row.get('not_before')])
         texts=([max(earlier,key=lambda row:row.get('segment_index') or 0).get('text') or ''] if earlier else [])+[part['text'] for part in planned]
         times=pacing(texts,start,effective(model,'speak.chars_per_second',policy) or 12,
                      effective(model,'speak.min_gap_s',policy) or 1,effective(model,'speak.max_gap_s',policy) or 5)[-len(planned):]

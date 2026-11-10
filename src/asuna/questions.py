@@ -23,7 +23,7 @@ audit line without text (question.asked / answered / lapsed / closed). Words com
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from . import clock
 from .config import excerpt
@@ -157,10 +157,8 @@ def save(store, row, **kwargs):
 
 
 def _at(value):
-    if not value:
-        return None
-    moment = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    """A stored time (clock.moment); None when there is none, which each caller words."""
+    return clock.moment(value) if value else None
 
 
 def question_id(key):

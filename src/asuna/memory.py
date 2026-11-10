@@ -6,7 +6,7 @@ Every write goes through the store's revision check. role_tools.py, memory_index
 """
 from __future__ import annotations
 import copy
-from datetime import datetime,timedelta,timezone
+from datetime import timedelta
 from . import clock
 from .config import character_id
 from .evidence import canonical,sha
@@ -268,12 +268,7 @@ def settled(row,epoch,moment):
     if row.get('delivery_state') in TERMINAL_STATES:
         return True
     left=row.get('receipt_at') or row.get('claimed_at') or row.get('queued_at')
-    try:
-        since=datetime.fromisoformat(str(left).replace('Z','+00:00')) if left else None
-    except ValueError:
-        since=None
-    if since is not None and since.tzinfo is None:
-        since=since.replace(tzinfo=timezone.utc)
+    since=clock.moment(left) if left else None
     return since is not None and moment-since>LEFT_SETTLES
 
 

@@ -7,7 +7,6 @@ ADR-005 P3 起，这里同时是"自然语言安排"的落点：角色在 DECIDE
 from __future__ import annotations
 
 import re
-from datetime import datetime
 import threading
 
 from . import clock
@@ -162,7 +161,7 @@ class ScheduleService:
                     timing = schedule_rules.native_payload(rule,
                         schedule_rules.next_fire(rule, schedule_rules.plan_zone(plan, self.her())['tz'], moment), moment)
                 else:
-                    due = datetime.fromisoformat(plan['scheduled_at'].replace('Z', '+00:00'))
+                    due = clock.moment(plan['scheduled_at'])
                     if due <= moment:
                         plan_records.save(self.store, {**plan, 'status': 'SUSPENDED',
                             'migration_note': 'Legacy one-shot is overdue; no delivery replay. Replan explicitly.'},

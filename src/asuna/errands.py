@@ -7,7 +7,7 @@ prefix (same system prompt, same tool list). The tools that conversation lists a
 the copy, which is retired when the errand ends. The destination's next turn hears once that home sent her and what
 she said there (`told_block`); the request itself never goes there.
 """
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from . import clock
 from .evidence import sha
@@ -77,11 +77,7 @@ def late(row, moment=None):
     """Whether an errand waited past its patience before its turn came (row: its input message)."""
     if not is_errand_visit((row or {}).get('event')):
         return False
-    try:
-        queued = datetime.fromisoformat(str(row.get('received_at')).replace('Z', '+00:00'))
-    except ValueError:
-        return False
-    return (moment or clock.now()) - queued > timedelta(minutes=PATIENCE_MINUTES)
+    return (moment or clock.now()) - clock.moment(row.get('received_at')) > timedelta(minutes=PATIENCE_MINUTES)
 
 
 def skipped(event, source, previous, moment=None):

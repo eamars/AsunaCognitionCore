@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import collections
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 
 from . import clock
 from .config import excerpt
@@ -38,11 +38,6 @@ NOTE = ('这是你现在有的东西的一张图：每样一行，多少、上�
 
 def _iso(moment):
     return moment.astimezone(timezone.utc).isoformat()
-
-
-def _at(value):
-    moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
 def _heads(store, prefix):
@@ -109,13 +104,13 @@ def block(store, persona, moment=None, *, tag=None):
     from . import audit as audit_trail
     last = audit_trail.events(store, SHOWN, persona=persona).first(newest_first=True)
     floor = moment - timedelta(days=WINDOW_DAYS)
-    since_at = max(_at(last['occurred_at']), floor) if last else floor
+    since_at = max(clock.moment(last['occurred_at']), floor) if last else floor
     since = _iso(since_at)
     if not last:
         # Her review: seen for the first time is not new, so the first map counts nothing as changed.
         window = '这是第一张图：没有上一张可比，现有的都是基线·首次入图，不算改过；从下一张起才数改了什么。'
-    elif _at(last['occurred_at']) < floor:
-        gap = (moment - _at(last['occurred_at'])).days
+    elif clock.moment(last['occurred_at']) < floor:
+        gap = (moment - clock.moment(last['occurred_at'])).days
         window = '上次地图在 %d 天前，最早的 %d 天没进这张图（只看最近 %d 天）。' % (gap, gap - WINDOW_DAYS, WINDOW_DAYS)
     else:
         window = None

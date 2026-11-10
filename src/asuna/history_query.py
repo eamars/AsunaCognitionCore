@@ -141,24 +141,7 @@ def _stamp(value):
 
 def _archive_stamp(value):
     """Archive timestamps retain microseconds in one UTC representation."""
-    try:
-        date = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    except (ValueError, TypeError):
-        return str(value)              # Preserve the existing reader's handling of undated legacy live rows.
-    if date.tzinfo is None:
-        date = date.replace(tzinfo=timezone.utc)
-    return date.astimezone(timezone.utc).isoformat(timespec='microseconds')
-
-
-def _parse(value):
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, str) and value:
-        try:
-            return datetime.strptime(value[:19], "%Y-%m-%dT%H:%M:%S")
-        except ValueError:
-            return None
-    return None
+    return clock.moment(value).isoformat(timespec='microseconds')
 
 
 def _scene_parts(scene):
@@ -731,7 +714,7 @@ def query_history(retrieval, store, scene, query="", *, person=None, author=None
                 "more": False, "semantic": {"ok": False, "why": "not_attempted", "candidates": 0,
                                             "manifest": None}, "dropped": {},
                 "fallback": _fallback_state()}
-    ref = _parse(now) or clock.now().replace(tzinfo=None)
+    ref = clock.moment(now) if now else clock.now()
     low = since or _iso(ref - timedelta(days=max(int(window_days), 1)))
     window = (low, until or "9999-12-31T23:59:59Z")
     page = max(1, min(int(limit or DEFAULT_LIMIT), MAX_LIMIT))
@@ -817,7 +800,8 @@ def query_history(retrieval, store, scene, query="", *, person=None, author=None
 def _clock(value, zone):
     """A time in a rendered line: on the conversation's local clock when its zone is known (local_time.py)."""
     if zone is None:
-        return str(value)[:16].replace("T", " ")
+        from .local_time import utc_face
+        return utc_face(value)
     from .local_time import stamp
     return stamp(value, zone)
 
@@ -962,15 +946,15 @@ def _bad_stamp(prefix, name, value):
                       % (prefix, name, name.lower(), value[:40]))
 
 
-def _utc(value, zone):
+def _utc(value, zone, name):
     """A since/until she wrote: without an offset it is a local time, compared against stored UTC as ISO-Z."""
     if not value:
         return value
     text = value.strip().replace(" ", "T")
     try:
-        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        moment = datetime.fromisoformat(text)
     except ValueError:
-        return value
+        raise _bad_stamp("INVALID_HISTORY_", name, value) from None
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=zone["tz"])
     return _iso(moment.astimezone(timezone.utc))
@@ -1078,7 +1062,7 @@ class HistoryQueryService:
         # She reads times on the local clock (local_time.py), so a time without an offset is read in that zone.
         from .local_time import her_zone
         zone = her_zone(self.store)
-        since, until = _utc(since, zone), _utc(until, zone)
+        since, until = _utc(since, zone, "SINCE"), _utc(until, zone, "UNTIL")
         window_days = _bounded_int(args.get("window_days"), 1, 90, "WINDOW_DAYS")
         limit = _bounded_int(args.get("limit"), 1, MAX_LIMIT, "LIMIT")
         cursor = _bounded_text(args.get("cursor"), 1024, "CURSOR")

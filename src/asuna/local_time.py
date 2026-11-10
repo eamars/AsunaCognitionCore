@@ -11,12 +11,13 @@ that is then near reads without one. `clock_from_program` always carries the yea
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from . import clock
 
 FULL = re.compile(r'^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}')
 KEYS = ('at', 'until', 'since')
 NEAR = timedelta(days=90)              # a date this close to the moment it is written reads without its year
+UNKNOWN = '时间不详'                     # what she reads where a stored time cannot be read
 
 
 def is_time_key(key):
@@ -24,17 +25,9 @@ def is_time_key(key):
     return key in KEYS or key.endswith('_at') or key.endswith('_until')
 
 
-def _moment(value):
-    if isinstance(value, datetime):
-        moment = value
-    elif isinstance(value, str) and FULL.match(value):
-        try:
-            moment = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
-        except ValueError:
-            return None
-    else:
-        return None
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)       # stored naive times are UTC
+def _is_time(value):
+    """A timestamp field's value: a datetime or text in the shape of a full ISO date-time (read or not)."""
+    return isinstance(value, datetime) or (isinstance(value, str) and bool(FULL.match(value)))
 
 
 def face(moment, tz, now=None, year=False):
@@ -49,17 +42,32 @@ def face(moment, tz, now=None, year=False):
 
 
 def stamp(value, zone, now=None):
-    """One time on the local clock face (`face`); the value as it was when it is no time."""
-    moment = _moment(value)
-    if moment is None:
-        return value
+    """One time on the local clock face (`face`). A time there is none of is '' (nothing to show); one that is
+    there and cannot be read is UNKNOWN (ADR-119 F4: never its raw text, never an empty answer)."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return ''
+    try:
+        moment = clock.moment(value)
+    except clock.BadTime:
+        return UNKNOWN
     return face(moment, zone['tz'], now)
+
+
+def utc_face(value):
+    """A time shown where no zone is known: on the UTC clock, said so (「（UTC）」, her ask: the offset named, nothing
+    guessed); '' when there is none, UNKNOWN when it does not read."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return ''
+    try:
+        return clock.moment(value).strftime('%Y-%m-%d %H:%M') + '（UTC）'
+    except clock.BadTime:
+        return UNKNOWN
 
 
 def for_model(node, zone, now=None):
     """A copy of a context block or tool result with every timestamp field on the local clock."""
     if isinstance(node, dict):
-        return {key: (stamp(value, zone, now) if is_time_key(key) and _moment(value) is not None
+        return {key: (stamp(value, zone, now) if is_time_key(key) and _is_time(value)
                       else for_model(value, zone, now)) for key, value in node.items()}
     if isinstance(node, list):
         return [for_model(value, zone, now) for value in node]

@@ -17,7 +17,7 @@ A file someone sent her (`received_files`) keeps its bytes `received_files.KEEP_
 let go (`days_from`, else `created_at`); a kept one (`kept_at`) is not removed. Its row stays, as a task file's does.
 `sweep` deletes the rest once at start and then daily; it reports what it removed and never raises for one bad row.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from . import clock
 
 PULLED_DAYS = 7
@@ -133,24 +133,12 @@ def _older(value, cutoff, removed):
     in `undated`: a time not known is never old. A stored Date and an ISO string compare as moments, not as text; a
     stored time should carry its offset, and one without it (a naive Date, a string with no offset) is read as UTC,
     as the writers' `state.now()` gives it, never as undated."""
-    moment = _moment(value)
-    if moment is None:
+    try:
+        moment = clock.moment(value)
+    except clock.BadTime:                       # not known, so never old: kept and counted (above)
         removed['undated'] += 1
         return False
     return moment < cutoff
-
-
-def _moment(value):
-    if isinstance(value, datetime):
-        moment = value
-    elif isinstance(value, str) and value:
-        try:
-            moment = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        except ValueError:
-            return None
-    else:
-        return None
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
 # Written out on purpose, apart from the keys `sweep` returns: the test holds the two lists equal, so a count added to

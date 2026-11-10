@@ -21,7 +21,7 @@ turn's notes, and the lists of notes received and sent leave it out (the questio
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from . import clock
 from .config import ago, character_id, excerpt, over, soft, echoed
@@ -202,10 +202,8 @@ def save(store, note, **kwargs):
 
 
 def _at(value):
-    if not value:
-        return None
-    moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    """A stored time (clock.moment); None when there is none, which each caller words."""
+    return clock.moment(value) if value else None
 
 
 def trust_of(cls):
@@ -343,7 +341,7 @@ def copied_words(store, persona, scene_id, match):
     from .people import People
     scene = scene_records.get(store, scene_id) or {'_id': scene_id}
     who = People(store, persona).speaker(scene, match['author'])
-    when = local_time.stamp(match['at'], local_time.her_zone(store)) if match.get('at') else '刚才'
+    when = local_time.stamp(match.get('at'), local_time.her_zone(store)) or local_time.UNKNOWN
     return NOT_OWN_WORDS % (match['first'], match['last'], who, when)
 
 

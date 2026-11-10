@@ -8,7 +8,7 @@ tables below; she reads no counts, ids or timestamps. Nothing here calls a model
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from .channels import route_members
 from .config import ago, character_id, excerpt
@@ -56,10 +56,9 @@ def _tier(table, value):
 
 
 def _at(value):
-    if not value:
-        return None
-    moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    """A stored time (clock.moment); None when there is none, which each caller words."""
+    from . import clock
+    return clock.moment(value) if value else None
 
 
 def _stamp(value):

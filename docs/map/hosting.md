@@ -215,6 +215,8 @@ The core's one clock: the time now, in UTC, never the same twice in this process
 
 - def `now` — An aware UTC datetime later than every one this process was given before.
 - def `stamp` — now() as the ISO text records keep, always with its microseconds, so that text order is time order.
+- class `BadTime` — A value that should be a stored instant and cannot be read as one.
+- def `moment` — A stored instant as an aware UTC datetime.
 
 ## `audit`
 
@@ -341,7 +343,8 @@ Times a model reads are on her one clock (owner 2026-10-08; one clock in every c
 
 - def `is_time_key`
 - def `face` — An aware moment on the clock face she reads: `10/14 14:28`, or `2025/9/27 14:00` when `year` is asked, when it is another year, or when it is more than 90 days from now.
-- def `stamp` — One time on the local clock face (`face`); the value as it was when it is no time.
+- def `stamp` — One time on the local clock face (`face`).
+- def `utc_face` — A time shown where no zone is known: on the UTC clock, said so (「（UTC）」, her ask: the offset named, nothing guessed); '' when there is none, UNKNOWN when it does not read.
 - def `for_model` — A copy of a context block or tool result with every timestamp field on the local clock.
 - def `her_zone` — Her one clock (schedule_rules.her_zone): the same in every conversation.
 

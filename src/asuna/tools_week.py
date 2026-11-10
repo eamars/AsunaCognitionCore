@@ -11,7 +11,7 @@ import collections
 import json
 import re
 import statistics
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 
 from . import clock
 from .config import excerpt
@@ -66,8 +66,7 @@ def due(store, persona, moment=None):
     if not last:                        # never shown: the floor counts from the first time it was asked about
         store.audit('review:' + persona, STARTED, {'persona': persona})
         return 'week'
-    at = datetime.fromisoformat(str(last['occurred_at']).replace('Z', '+00:00'))
-    at = at if at.tzinfo else at.replace(tzinfo=timezone.utc)
+    at = clock.moment(last['occurred_at'])
     if moment - at >= timedelta(days=FLOOR_DAYS):
         return 'floor'
     return 'week' if moment - at >= timedelta(days=WEEK_DAYS) else None

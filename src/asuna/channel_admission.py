@@ -1,10 +1,10 @@
 """Channel admission: who may speak to her. The core decides, once (ADR-107); a channel package asks and acts on the
 answer. Platform events never grant owner access."""
 from copy import deepcopy
-from datetime import datetime, timezone
 import re
 
 from . import channel_kinds
+from . import clock
 from .config import DATA
 from .evidence import canonical, sha
 from .state import Denied, now
@@ -77,12 +77,8 @@ def _checked(channel, platform, body):
 
 
 def _moment(text):
-    """A UTC time from an ISO 8601 text, or None."""
-    try:
-        moment = datetime.fromisoformat(str(text).replace('Z', '+00:00'))
-    except ValueError:
-        return None
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    """A UTC time (clock.moment), or None when there is none: an undated line, a departure the platform did not date."""
+    return None if text is None else clock.moment(text)
 
 
 def _member(route, sender, at=None):
@@ -257,7 +253,7 @@ def depart(controller, channel_id, body):
     if not prior:
         return {'status': 'unchanged'}
     left = _moment(body.get('occurred_at'))
-    moment = left.astimezone(timezone.utc).isoformat() if left else now()      # when the platform says they left
+    moment = left.isoformat() if left else now()      # when the platform says they left
     stored = deepcopy(prior['route'])
     stored.setdefault('members', {}).setdefault(sender, deepcopy(grant))['ended_at'] = moment
     artifact_records.save(store, {**prior, 'route': stored}, expected=prior['revision'], stream=key)

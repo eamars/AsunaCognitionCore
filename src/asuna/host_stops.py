@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from .records import scenes as scene_records
 from .records.view import View, is_text, pinned
 from .store.words import And, AnyOf, IsNull, Or, Range, Set
@@ -108,10 +108,6 @@ def missed(store, since):
     return View(store, MISSED_LOOKS, {'at': Range(gte=since)} if is_text(since) else None)
 
 
-def _aware(value):
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-
-
 def crash_code(alive_until, root=None):
     """The exit code of a Host that exited on its own, when the supervisor's record of this start says so: a restart
     nobody asked for, not back yet, that went down within one planned-stop window of the lease's last renewal."""
@@ -121,8 +117,8 @@ def crash_code(alive_until, root=None):
     code = record.get('exit_code')
     if record.get('asked') != 'nobody' or record.get('back_at') or not isinstance(code, int) or not record.get('down_at'):
         return None
-    down = datetime.fromisoformat(str(record['down_at']).replace('Z', '+00:00'))
-    return code if abs((down - _aware(alive_until)).total_seconds()) <= PLANNED_SECONDS else None
+    down = clock.moment(record['down_at'])
+    return code if abs((down - clock.moment(alive_until)).total_seconds()) <= PLANNED_SECONDS else None
 
 
 def record(store, alive_until, back_at=None, planned=False, exit_code=None, by=None):
@@ -131,7 +127,7 @@ def record(store, alive_until, back_at=None, planned=False, exit_code=None, by=N
     from .state import now
     back_at = back_at or now()
     how = 'planned' if planned else 'crashed' if exit_code is not None else 'killed'
-    row = {'_id': 'stop-' + uuid.uuid4().hex[:16], 'how': how, 'alive_until': _aware(alive_until).isoformat(),
+    row = {'_id': 'stop-' + uuid.uuid4().hex[:16], 'how': how, 'alive_until': clock.moment(alive_until).isoformat(),
            'back_at': back_at, 'scope_key': 'operator', 'shown_at': None,
            **({'exit_code': exit_code} if how == 'crashed' else {}), **({'by': by} if how == 'planned' else {})}
     save(store, row, stream=row['_id'])
@@ -176,11 +172,7 @@ def span_of(value):
     """An open span as the Host plugin hands it over, checked: {since (ISO or None), cause (the closed list, else
     unknown), tries (at least 1), inside (Host stops folded into it), opened (ISO, when since is not known)}."""
     value = value if isinstance(value, dict) else {}
-    def moment(text):
-        try:
-            return _aware(datetime.fromisoformat(str(text).replace('Z', '+00:00'))).isoformat()
-        except ValueError:
-            return None
+    moment = _moment                     # a time that does not read is not known, as one the plugin did not send
     def count(key, least):
         number = value.get(key)
         return max(least, min(int(number), 100000)) if isinstance(number, int) and not isinstance(number, bool) else least
@@ -244,7 +236,7 @@ def missed_look(store, ep, cause='error'):
 
 def missed_looks(store, persona, since):
     """'某群 3 次、某群 1 次' for the gate's failed looks since then, or None."""
-    old = (datetime.fromisoformat(since) - timedelta(days=MISSED_KEPT_DAYS)).isoformat()
+    old = (clock.moment(since) - timedelta(days=MISSED_KEPT_DAYS)).isoformat()
     forget_missed(store, old)
     counts, causes = {}, {}
     for row in missed(store, since).each(fields=['scene_id', 'cause']):
@@ -300,7 +292,7 @@ def stop_words(row, zone, newest=True):
         what = CRASHED if row['how'] == 'crashed' else WHAT
         if not newest:
             what = what.replace('上次', EARLIER, 1)
-    gone = (datetime.fromisoformat(row['back_at']) - datetime.fromisoformat(row['alive_until'])).total_seconds()
+    gone = (clock.moment(row['back_at']) - clock.moment(row['alive_until'])).total_seconds()
     who = '你' if row['how'] == 'worker_down' else '宿主'         # the Host ran on while her worker was down
     if gone < 0:                        # the clock moved between the two moments: how long is not known
         return {'what': what, 'when': '最后确认还在运行约是 %s，重新起来是 %s，中间多久不知道（时钟对不上）'
@@ -368,9 +360,13 @@ RUN_NOT_HELD = '；每一次都没有挂'
 
 
 def _moment(text):
+    """A handed-over time as ISO UTC, or None when it is missing or does not read: the row keeps it as None and her
+    line says it is not known (held_of, _readable, span_of), since the handover is the only copy of it."""
+    if not text:
+        return None
     try:
-        return _aware(datetime.fromisoformat(str(text).replace('Z', '+00:00'))).isoformat() if text else None
-    except ValueError:
+        return clock.moment(text).isoformat()
+    except clock.BadTime:
         return None
 
 
@@ -431,7 +427,7 @@ def restart_window(store, moment=None):
 
 
 def _seconds(later, earlier):
-    return (datetime.fromisoformat(later) - datetime.fromisoformat(earlier)).total_seconds()
+    return (clock.moment(later) - clock.moment(earlier)).total_seconds()
 
 
 def _readable(row):

@@ -24,8 +24,6 @@ own conversation is not touched, so its cached prefix stays as it was.
 """
 from __future__ import annotations
 
-from datetime import datetime
-
 from . import clock
 from .caught_up import said_at
 from .config import ago, character_id, excerpt, prompt_path
@@ -88,7 +86,7 @@ def take_passed(store, scene, persona=None):
             continue
         # Her words as the gate stored them; a non-answer's stand-in is the program's, not hers.
         reason = '' if 'unparsed' in row['attend'] else str(row['attend'].get('reason') or '').strip()
-        items.append('%s %s：看过，没接%s' % (people.speaker(scene, row['author'], row), line_stamp(zone, said_at(row)) or '',
+        items.append('%s %s：看过，没接%s' % (people.speaker(scene, row['author'], row), line_stamp(zone, said_at(row)),
                                          '（%s）' % reason if reason else ''))
     if not items:
         return None
@@ -111,10 +109,8 @@ def addressed(event):
 
 
 def _seconds(stamp):
-    try:
-        return datetime.fromisoformat(str(stamp).replace('Z', '+00:00')).timestamp()
-    except ValueError:
-        return None
+    """A stored time as epoch seconds; None when there is none (her callers word that: not yet spoken here)."""
+    return None if stamp is None else clock.moment(stamp).timestamp()
 
 
 def _amount(count):

@@ -4,7 +4,6 @@ from . import clock
 from .visibility import is_owner_private_scope
 from .config import character_id
 import math
-from datetime import datetime
 import re
 import time
 from collections import Counter,OrderedDict
@@ -176,10 +175,8 @@ class Retrieval:
                 continue
             used = row.get('salience') or {}
             stamp = used.get('last_ref_at') or row.get('occurred_at') or row.get('generated_at') or row.get('formed_at')
-            try:
-                days = max(0.0, (moment - datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))).total_seconds() / 86400) if stamp else 0.0
-            except ValueError:
-                days = 0.0
+            # A unit with no time cannot age: forgetting it by a guessed age would lose it. A bad time raises.
+            days = max(0.0, (moment - clock.moment(stamp)).total_seconds() / 86400) if stamp else 0.0
             source = sources.get((row.get('source_event_ids') or [None])[-1]) or {}
             window = row.get('source_window') if isinstance(row.get('source_window'), dict) else {}
             anchor = used.get('last_ref_seq') or row.get('scene_seq') or window.get('to_seq') or window.get('to') or source.get('scene_seq')

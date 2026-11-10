@@ -344,7 +344,7 @@ What her night turns changed, for her first heartbeat after them.
 
 Affect ledger and projection (ADR-009 ARCHITECTURE §6).
 
-- def `parse_ts` — ISO-8601 → aware UTC; a timestamp without an offset is refused.
+- def `parse_ts` — ISO-8601 → aware UTC (clock.moment); an affect time carries its own offset, so one without is refused.
 - def `fold` — Copies of the events with void / close / fix_ts / fix_kind applied in amendment time order.
 - def `half_life`
 - def `project` — Projection at a moment: sum then clamp; future events excluded; void counts as never counted.

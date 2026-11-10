@@ -14,7 +14,7 @@ turn of its own: her next turn carries one line on how it went. A why she wrote 
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from . import clock
 from . import visibility
@@ -89,11 +89,8 @@ def save(store, row, **kwargs):
 
 
 def _at(value):
-    try:
-        moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    except (TypeError, ValueError):
-        return None
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    """A stored time (clock.moment); None when there is none (never seen, no end), which each caller words."""
+    return clock.moment(value) if value else None
 
 
 def _tier(table, value):

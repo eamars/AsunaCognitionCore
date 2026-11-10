@@ -50,7 +50,8 @@ def her_line(store, scene, zone):
     if not fault:
         return None
     from .schedule_rules import line_stamp
-    return HER_LINE % (line_stamp(zone, fault.get('at')) or '刚才', fault.get('cause') or '原因不明')
+    from .local_time import UNKNOWN
+    return HER_LINE % (line_stamp(zone, fault.get('at')) or UNKNOWN, fault.get('cause') or '原因不明')
 
 
 def told(store, ep):

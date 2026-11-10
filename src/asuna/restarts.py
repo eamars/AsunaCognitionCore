@@ -59,11 +59,6 @@ def last(root=None):
         return None
 
 
-def _aware(value):
-    moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
-
-
 def _zone(zone):
     """line_stamp's zone from a context's zone or an IANA name."""
     from zoneinfo import ZoneInfo
@@ -127,7 +122,7 @@ class Desk:
         record = last(self.root)
         took = None
         if record and record.get('down_at') and record.get('back_at'):
-            took = _span((_aware(record['back_at']) - _aware(record['down_at'])).total_seconds())
+            took = _span((core_clock.moment(record['back_at']) - core_clock.moment(record['down_at'])).total_seconds())
         return {'interrupts': items or ['现在没有在跑的任务、排队的消息或马上要响的计划'],
                 'also': 'QQ 适配器会跟着停，起来后自动恢复；网页和家里·私聊这段时间都不在。',
                 **({'last_restart_took': took} if took else {}),
@@ -182,11 +177,11 @@ class Desk:
         if not pending:
             return False
         moment = self.clock()
-        if moment < _aware(pending['not_before']):
+        if moment < core_clock.moment(pending['not_before']):
             return False
         if pending['when'] == 'now':
             return True
-        waited = (moment - _aware(pending['not_before'])).total_seconds() / 60
+        waited = (moment - core_clock.moment(pending['not_before'])).total_seconds() / 60
         return self.quiet() or waited >= QUIET_MINUTES
 
     def go(self):
@@ -258,7 +253,7 @@ def planned_mark(store, down_at):
     if not down_at:
         return None
     from . import host_stops
-    return host_stops.last_back(store, 'planned', _aware(down_at).isoformat())
+    return host_stops.last_back(store, 'planned', core_clock.moment(down_at).isoformat())
 def block(store, zone, moment=None, root=None, integration_state=None):
     """restart_from_program for a home turn: a request waiting at the desk, and the supervisor's latest record, for a
     day."""
@@ -267,10 +262,11 @@ def block(store, zone, moment=None, root=None, integration_state=None):
     moment = moment or core_clock.now()
     zone = _zone(zone)
     pending = waiting(root)
-    if not record or not record.get('back_at') or moment - _aware(record['back_at']) > timedelta(hours=SHOWN_HOURS):
+    if (not record or not record.get('back_at')
+            or moment - core_clock.moment(record['back_at']) > timedelta(hours=SHOWN_HOURS)):
         return {'waiting': waiting_words(pending, zone)} if pending else None
     asked = ASKED_WORDS.get(record.get('asked'), str(record.get('asked')))
-    down = _span((_aware(record['back_at']) - _aware(record['down_at'])).total_seconds())
+    down = _span((core_clock.moment(record['back_at']) - core_clock.moment(record['down_at'])).total_seconds())
     tries = record.get('attempts') or []
     launched = record.get('asked') == LAUNCHER
     mark = planned_mark(store, record.get('down_at')) if launched else None
@@ -310,7 +306,7 @@ def _adapter_since(back_at, root=None):
         seen = datetime.fromtimestamp(health.stat().st_mtime, timezone.utc)
     except OSError:
         return None
-    return '起来了，在跑' if seen >= _aware(back_at) else ADAPTER_NOT_SEEN
+    return '起来了，在跑' if seen >= core_clock.moment(back_at) else ADAPTER_NOT_SEEN
 
 
 ADAPTER_NOT_SEEN = '健康记录还停在重启前：可能还没起来，也可能只是还没刷新；过几分钟再看'
@@ -322,7 +318,7 @@ def call_after_fallback(store, controller, config, root=None, moment=None):
     moment = moment or core_clock.now()
     if not record or record.get('result') != 'fell_back' or not record.get('back_at'):
         return False
-    if moment - _aware(record['back_at']) > timedelta(minutes=30):
+    if moment - core_clock.moment(record['back_at']) > timedelta(minutes=30):
         return False
     from . import audit as audit_trail
     if audit_trail.events(store, 'restart.called', ref=record['id'], by=None).first(fields=['_id']):

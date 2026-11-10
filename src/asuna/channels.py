@@ -154,9 +154,9 @@ def awaited_answer(store, scene, person_id, mentions, reply):
     if not mine or not mine.get('receipt_at'):
         return False
     try:
-        since = clock.now() - datetime.fromisoformat(str(mine['receipt_at']).replace('Z', '+00:00'))
-    except ValueError:
-        return False
+        since = clock.now() - clock.moment(mine['receipt_at'])
+    except clock.BadTime:
+        return False                    # on the intake path: a time that does not read never refuses a line
     if since.total_seconds() > AWAIT_SECONDS:
         return False
     choice = (episode_records.get(store, mine.get('episode_id'), fields=['await_answer']) or {}).get('await_answer')
@@ -174,13 +174,13 @@ def awaited_answer(store, scene, person_id, mentions, reply):
 def reply_parent(store, scene, reply, at=None, *, outbound_author=None):
     """A reused platform id resolves within this scene to the latest line no later than the reply.
 
-    A line without a readable time cannot be shown to be later, so it stays a candidate, ranked below every dated one.
+    A line without a readable time cannot be shown to be later, so it stays a candidate, ranked below every dated one
+    (on the intake path a time never refuses a line).
     """
     def moment(value):
         try:
-            date = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-            return date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date
-        except (ValueError, TypeError):
+            return None if value is None else clock.moment(value)
+        except clock.BadTime:
             return None
     ceiling = moment(at) or clock.now()
     undated = datetime.min.replace(tzinfo=timezone.utc)

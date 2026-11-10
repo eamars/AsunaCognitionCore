@@ -7,7 +7,6 @@ longer wakes her by itself: it asks her through the relevance gate (`catchup_men
 """
 from __future__ import annotations
 
-from datetime import datetime
 from . import clock
 
 CATCHUP_KEY = 'asuna_catchup'
@@ -38,11 +37,10 @@ def said_at(row):
 
 def stale(raw, occurred_at, now=None):
     """Whether an incoming line is caught up and older than STALE_SECONDS."""
-    if not mark(raw) or not isinstance(occurred_at, str):
-        return False
+    if not mark(raw) or occurred_at is None:
+        return False                    # a caught-up line the platform gave no time: nothing says it is old
     try:
-        moment = datetime.fromisoformat(occurred_at.replace('Z', '+00:00'))
-    except ValueError:
-        return False
-    now = now or clock.now()
-    return (now - moment).total_seconds() > STALE_SECONDS
+        moment = clock.moment(occurred_at)
+    except clock.BadTime:
+        return False                    # a line is never refused for its time: one that does not read is not shown old
+    return ((now or clock.now()) - moment).total_seconds() > STALE_SECONDS

@@ -27,3 +27,26 @@ def now():
 def stamp():
     """now() as the ISO text records keep, always with its microseconds, so that text order is time order."""
     return now().isoformat(timespec='microseconds')
+
+
+class BadTime(ValueError):
+    """A value that should be a stored instant and cannot be read as one."""
+
+
+def moment(value):
+    """A stored instant as an aware UTC datetime.
+
+    A datetime (naive is UTC, aware is converted) or ISO text (`Z`, any offset, none = UTC). Anything else, None and
+    '' included, raises BadTime."""
+    if isinstance(value, datetime):
+        found = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            found = datetime.fromisoformat(value.strip())
+        except ValueError:
+            raise BadTime('not an ISO time: %r' % value[:64]) from None
+    else:
+        raise BadTime('not a time: %r' % (value,))
+    if found.tzinfo is None:
+        return found.replace(tzinfo=timezone.utc)
+    return found.astimezone(timezone.utc)

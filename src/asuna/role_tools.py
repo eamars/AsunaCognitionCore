@@ -2216,11 +2216,9 @@ class RoleTools:
         limit = getattr(channel_kinds.of(scene['_id']), 'OWN_RECALL_SECONDS', None)
         if limit and not (scene.get('kind') == 'group' and People(self.store, ep['persona']).self_role(scene) in ('owner', 'admin')):
             sent = row.get('receipt_at')
-            from datetime import datetime
-            try:
-                age = (clock.now() - datetime.fromisoformat(str(sent).replace('Z', '+00:00'))).total_seconds()
-            except ValueError:
-                age = None
+            # A delivered line without its receipt time cannot be shown to be inside the limit; one that does not
+            # read raises.
+            age = None if sent is None else (clock.now() - clock.moment(sent)).total_seconds()
             if age is None or age > limit:
                 raise Refused(RECALL_TOO_LATE % (limit // 60), ['RECALL_TOO_LATE'])
         if not row.get('platform_message_id'):
@@ -3663,23 +3661,18 @@ def idea_rows(store, persona, search=None):
 
 def ideas_block(store, persona, moment, limit=None, page=1, search=None):
     """Her notebook in words, one page (ideas_left counts what the first page leaves out)."""
-    from datetime import datetime
     from .people import People
     people = People(store, persona)
     limit = limit or IDEAS_PAGE
     rows = idea_rows(store, persona, search)[(page - 1) * limit:page * limit]
     items = []
     for row in rows:
-        try:
-            hours = (moment - datetime.fromisoformat(row['created_at'])).total_seconds() / 3600
-        except (KeyError, TypeError, ValueError):
-            hours = None
         source = row.get('source') or {}
         where = idea_place(store, people, source)
         items.append({'_id': row['_id'], 'idea': row['idea'], 'why': row['why'],
                       'from': '你自己' if source.get('by') == 'character' else '行动脑做事时',
                       **({'where': where} if where else {}),                          # ADR-018 §5.8
-                      **({'at': row['created_at']} if hours is not None else {}),
+                      **({'at': row['created_at']} if row.get('created_at') else {}),     # for_model shows it
                       **({'deferred_before': row['decisions'][-1]['why']} if row.get('state') == 'deferred' and row.get('decisions') else {})})
     return items
 

@@ -6,7 +6,7 @@ instead of waking her; her own words still go out, since speaking is her choice.
 program maps it to a time and shows her the state in words. The owner may also close the bridge itself
 (its ``closedUntil``); that is a separate switch she does not see.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 
 from . import clock
 from . import channel_kinds
@@ -96,7 +96,7 @@ def closed_until(store, scene_id, moment=None):
         return None
     if row.get('until_reopened'):
         return 'reopen'
-    until = datetime.fromisoformat(row['closed_until'])
+    until = clock.moment(row['closed_until'])
     return until if until > (moment or clock.now()) else None
 
 

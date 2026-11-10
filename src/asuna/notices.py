@@ -157,7 +157,7 @@ def take(store, scene, persona=None, keep=False):
         who = people.speaker(scene, row['author'], row)
         if who not in item['who']:
             item['who'].append(who)
-        item['at'] = line_stamp(zone, said_at(row)) or item['at']
+        item['at'] = line_stamp(zone, said_at(row))
     items = ['%s %s%s%s' % ('、'.join(item['who']), item['at'], MARK, body) for (_, body), item in folded.items()]
     if reactions:
         shown = ['%s %s' % ('、'.join(item['who']), body) for (_, body), item in reactions.items()]

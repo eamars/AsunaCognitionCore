@@ -215,7 +215,7 @@ ADR-005 P3：把自然语言里的时间换算成 DSH 的那一次钟点——�
 - def `moved_note` — What an update that has just put a plan written on another clock onto hers tells her (None when it did not).
 - def `plan_brief` — `project` cut to what a view of another place's plan, or the plan that has just come due, shows her.
 - def `local_clock` — 给角色的现场钟面：她换算"明天下午三点"要用。只有钟面和星期，不报时区名。
-- def `line_stamp` — When one stored line was said, on her clock face (local_time.face); '' when unknown.
+- def `line_stamp` — When one stored line was said, on her clock face (local_time.stamp); local_time.UNKNOWN when it does not read, '' when there is none.
 
 ## `sandbox`
 

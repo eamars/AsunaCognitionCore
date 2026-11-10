@@ -8,7 +8,7 @@ The projection yields bands and behaviour slots, never a line of dialogue.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from . import clock
 from .evidence import canonical, sha
@@ -48,11 +48,11 @@ PERSON_FEELINGS_SHOWN = 2
 
 # ── pure projection ─────────────────────────────────────────────────
 def parse_ts(value):
-    """ISO-8601 → aware UTC; a timestamp without an offset is refused."""
-    moment = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    if moment.tzinfo is None:
+    """ISO-8601 → aware UTC (clock.moment); an affect time carries its own offset, so one without is refused."""
+    moment = clock.moment(value)
+    if (value if isinstance(value, datetime) else datetime.fromisoformat(value.strip())).tzinfo is None:
         raise ValueError(f'TIMESTAMP_REQUIRES_OFFSET: {echoed(value)}')
-    return moment.astimezone(timezone.utc)
+    return moment
 
 
 def fold(events, amendments):

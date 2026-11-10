@@ -32,11 +32,12 @@ import hashlib
 import json
 import re
 from datetime import timedelta
+from . import clock
 from .records import scenes as scene_records
 from .records import messages as message_records
 
 from .history_query import (DEFAULT_LIMIT, DEFAULT_WINDOW_DAYS, MAX_LIMIT, HISTORY_TOOL_NAME,
-                            query_history, _parse as _parse_stamp, _text as _norm,
+                            query_history, _text as _norm,
                             _scene_parts, _row_allowed, _outbound_time, _sink_times,
                             _stamp, _hit as _history_hit, person_values,
                             _link_fields, bind_people,
@@ -96,11 +97,11 @@ def _flat(text, limit=SNIPPET):
 
 
 def _shift(stamp, seconds):
-    """把 ISO 时间挪几秒，给来源回读圈一个能命中该条的小窗口；解析不了就空。"""
-    moment = _parse_stamp(stamp)
-    if moment is None:
+    """把 ISO 时间挪几秒，给来源回读圈一个能命中该条的小窗口；这条没有时间就空（示例参数不带窗口也能照抄），
+    有却读不出来就抛 clock.BadTime。"""
+    if not stamp:
         return ""
-    return (moment + timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return (clock.moment(stamp) + timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _group_id_of(scene_id):
@@ -688,7 +689,8 @@ def _correction_line(item):
 
 def render(digest, header="群讨论整理"):
     cov = digest["coverage"]
-    stamp = lambda value: (value or "?")[:16].replace("T", " ")
+    from .local_time import utc_face
+    stamp = lambda value: utc_face(value) or "?"
     window = " → ".join([stamp(v) for v in cov["window"]]) or "?"
     if cov["complete"]:
         state = "覆盖完整"

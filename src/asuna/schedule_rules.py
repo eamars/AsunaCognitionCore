@@ -36,15 +36,7 @@ def now_utc():
     return clock.now()
 
 
-def _aware(moment):
-    """任何进来的时刻都换成 aware UTC：naive 一律按 UTC 读，不当成本地。"""
-    if isinstance(moment, str):
-        moment = datetime.fromisoformat(moment)
-    if not isinstance(moment, datetime):
-        raise ValueError('INVALID_MOMENT')
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc)
+_aware = clock.moment        # the one instant parser, under a name `clock = rule['clock']` below cannot shadow
 
 
 # ── 时区：她只有一个钟面 ───────────────────────────────────────────────
@@ -352,11 +344,13 @@ def _local_text(moment, tz):
 
 
 def _wall_text(at, tz):
-    """A plan's `at` as written (a local wall time, or UTC when marked) on her clock face."""
+    """A plan's `at` as written (a local wall time, or UTC when marked) on her clock face; local_time.UNKNOWN when it
+    cannot be read."""
     try:
-        moment = datetime.fromisoformat(str(at).replace('Z', '+00:00'))
+        moment = datetime.fromisoformat(str(at))
     except ValueError:
-        return str(at)
+        from .local_time import UNKNOWN
+        return UNKNOWN
     return _local_text(moment if moment.tzinfo else moment.replace(tzinfo=tz), tz)
 
 
@@ -408,12 +402,16 @@ def project(plan, her, moment=None):
         row['why_no_next'] = {'CANCELLED': '已取消', 'FIRED': '已经到期过（一次性安排）',
                               'SUSPENDED': plan.get('last_outcome') or '已暂停'}[plan['status']]
         return row
+    # The time set when it was armed (kept in step with the native scheduler), not recomputed: "N seconds after"
+    # counted from now would move later at every read.
+    stored = plan.get('next_fire_at')
     try:
-        # The time set when it was armed (kept in step with the native scheduler), not recomputed: "N seconds
-        # after" counted from now would move later at every read.
-        stored = plan.get('next_fire_at')
-        fire = (_aware(datetime.fromisoformat(str(stored).replace('Z', '+00:00'))) if stored
-                else next_fire(plan['rule'], tz, moment))
+        fire = _aware(stored) if stored else next_fire(plan['rule'], tz, moment)
+    except clock.BadTime:
+        from .local_time import UNKNOWN
+        row['next_fire_at'] = UNKNOWN
+        row['why_no_next'] = '存着的下一次时间读不出来'
+        return row
     except ValueError as exc:
         row['next_fire_at'] = plan.get('scheduled_at')
         row['why_no_next'] = str(exc)
@@ -485,12 +483,6 @@ def local_clock(zone, moment=None):
 
 
 def line_stamp(zone, value):
-    """When one stored line was said, on her clock face (local_time.face); '' when unknown."""
-    if not value:
-        return ''
-    try:
-        moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    except ValueError:
-        return ''
-    from .local_time import face
-    return face(_aware(moment), zone['tz'])
+    """When one stored line was said, on her clock face (local_time.stamp); local_time.UNKNOWN when it does not read, '' when there is none."""
+    from .local_time import stamp
+    return stamp(value, zone)

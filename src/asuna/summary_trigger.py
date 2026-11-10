@@ -23,13 +23,11 @@ sink_receipts.received_at），直接复用 history_query 里那几个解析函�
 from __future__ import annotations
 
 import statistics
-from datetime import datetime, timezone
 from . import clock
 
 from .discussion_digest import (CONFIRM_CUES, CORRECTION_CUES, QUESTION_CUES, QUESTION_MARKS,
                                 _first_cue)
-from .history_query import (OUTBOUND, _outbound_time, _receipt_ref,
-                           _sink_times, _stamp)
+from .history_query import OUTBOUND, _outbound_time, _receipt_ref, _sink_times
 from .records import messages as message_records
 
 # 形状参数与安全上下界：它们决定「怎么算」和「别算飞了」，不决定「第几条／第几秒触发」。
@@ -45,19 +43,9 @@ MAX_ITEMS = 12              # 返回体里列表的有界长度
 
 
 def _epoch(value):
-    """行上的时间戳读成 UTC epoch 秒；读不出来就返回 None，不拿 scene_seq 或写入时间冒充。"""
-    text = _stamp(value)
-    if not text:
-        return None
-    if text.endswith('Z'):
-        text = text[:-1] + '+00:00'
-    try:
-        moment = datetime.fromisoformat(text[:32])
-    except ValueError:
-        return None
-    if moment.tzinfo is None:            # 宿主自己写的都带时区；裸时间按 UTC 认
-        moment = moment.replace(tzinfo=timezone.utc)
-    return moment.timestamp()
+    """行上的时间戳读成 UTC epoch 秒（clock.moment）；行上没有时间就返回 None（记进 no_time），不拿 scene_seq 或写入
+    时间冒充；有却读不出来就抛 clock.BadTime。"""
+    return clock.moment(value).timestamp() if value else None
 
 
 def _gaps(times):

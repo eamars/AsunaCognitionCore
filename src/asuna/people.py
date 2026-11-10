@@ -114,12 +114,11 @@ def name_key(value):
 
 
 def _hours_since(stamp, moment):
-    from datetime import datetime
-    try:
-        then = datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))
-        return (datetime.fromisoformat(moment.replace('Z', '+00:00')) - then).total_seconds() / 3600
-    except ValueError:
+    """Hours from a stored time to `moment`; None when there is none (an old name with no end gets no note)."""
+    from . import clock
+    if stamp is None:
         return None
+    return (clock.moment(moment) - clock.moment(stamp)).total_seconds() / 3600
 
 
 class People:
@@ -561,7 +560,8 @@ class People:
         if anchor['scene'] != (scene or {}).get('_id'):
             from .caught_up import said_at
             from .schedule_rules import line_stamp, her_zone
-            return self.SOURCE_ELSEWHERE % (line_stamp(her_zone(self.config), said_at(row)) or '时间不详')
+            from .local_time import UNKNOWN
+            return self.SOURCE_ELSEWHERE % (line_stamp(her_zone(self.config), said_at(row)) or UNKNOWN)
         return self.pointed(scene, row, words=False)
 
     def thought_then(self, row, once_in=None):

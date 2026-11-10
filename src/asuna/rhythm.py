@@ -62,7 +62,7 @@ def episode_dates(store, episode_ids, zone):
     from . import audit as audit_trail
     for row in audit_trail.events(store, 'context.prepared', streams=list(episode_ids), by=None).each(
             fields=['stream_id', 'occurred_at']):
-        moment = datetime.fromisoformat(row['occurred_at'].replace('Z', '+00:00')).astimezone(ZoneInfo(zone))
+        moment = clock.moment(row['occurred_at']).astimezone(ZoneInfo(zone))
         out[row['stream_id']] = moment.date().isoformat()
     return out
 

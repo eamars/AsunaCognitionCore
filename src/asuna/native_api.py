@@ -7,7 +7,6 @@ Words of the page are the client's (ADR-011 §2.8): a label is `{'key', 'params'
 `asuna` locale namespace, and a list of parts is joined as paragraphs. Content (her documents, her
 memories, people's messages, names, her persona's own words for feelings) is sent as it is.
 """
-from datetime import datetime
 import re
 
 from . import clock
@@ -164,10 +163,8 @@ class NativeMemory:
 
     @staticmethod
     def timestamp(row):
-        try:
-            return datetime.fromisoformat(row.get('updated_at') or '').timestamp()
-        except (TypeError, ValueError):
-            return float('-inf')
+        # A row never updated sorts last; a time that does not read raises (clock.BadTime).
+        return clock.moment(row['updated_at']).timestamp() if row.get('updated_at') else float('-inf')
 
     def self_documents(self):
         """Her self as her turns read it (ADR-062): {old head name: (document, its sections placed)} for each of

@@ -18,7 +18,6 @@ One-to-one conversations keep the `relationship` block as before.
 """
 from __future__ import annotations
 
-from datetime import datetime
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import heads as head_records
@@ -58,11 +57,15 @@ def _written(store, revision, moment):
     from .people import People
     origin = revision.get('origin') or {}
     scene = scene_records.get(store, origin.get('scene_id')) if origin.get('scene_id') else None
+    at = origin.get('at')
+    if not at:
+        return None                     # no time kept: nothing to say where or when
     try:
-        datetime.fromisoformat(origin['at'])
-    except (KeyError, TypeError, ValueError):
-        return None
-    return ('最后是在%s里改的' % (People(store).scene_title(scene) if scene else '一个现在已经没有的对话'), origin['at'])
+        clock.moment(at)
+    except clock.BadTime:
+        from .local_time import UNKNOWN
+        at = UNKNOWN                    # she reads it: a time that does not read is shown as not known
+    return ('最后是在%s里改的' % (People(store).scene_title(scene) if scene else '一个现在已经没有的对话'), at)
 
 
 def person_view(store, person_id, here_scope, head, moment=None):

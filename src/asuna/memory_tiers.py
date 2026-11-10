@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 
 from . import clock
 from .evidence import canonical, sha
@@ -167,10 +167,8 @@ def _iso(moment):
 
 
 def _at(value):
-    try:
-        return datetime.fromisoformat(str(value).replace('Z', '+00:00')) if value else None
-    except ValueError:
-        return None
+    """A stored time (clock.moment); None when there is none, which each caller words (never used, not yet shown)."""
+    return clock.moment(value) if value else None
 
 
 def _without(found, keys):

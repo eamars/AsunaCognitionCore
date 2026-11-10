@@ -351,7 +351,7 @@ class ContextBuilder:
     def when(self, unit, zone, moment):
         """A recalled record's time as her history lines show it: '10/11 19:16'. A stamp, not "how long ago",
         which would change with every turn and read on the speaker's terms (ADR-056 rule 2, her ask 2026-10-14)."""
-        return schedule_rules.line_stamp(zone,self.said_at(unit)) or None
+        return schedule_rules.line_stamp(zone,self.said_at(unit))
 
     def prepare(self, event: dict, persona='P1', recall=False, turn_kind=None):
         """`turn_kind`: a recall's own turn kind, for the shadow pilot's row only. A turn of a kind whose message is

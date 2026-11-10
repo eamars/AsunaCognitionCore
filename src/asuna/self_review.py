@@ -120,11 +120,6 @@ def _zone(name):
         return timezone.utc
 
 
-def _at(value):
-    moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
-
-
 def _plain(text):
     return re.sub(r'\s+', '', str(text or ''))
 
@@ -144,7 +139,7 @@ def exchanges(store, persona, zone_name, moment=None):
     from . import audit as audit_trail
     last = audit_trail.events(store, SHOWN, persona=persona).first(newest_first=True)
     floor = moment - timedelta(days=WINDOW_DAYS)
-    since = max(_at(last['occurred_at']), floor) if last else floor
+    since = max(clock.moment(last['occurred_at']), floor) if last else floor
     store.audit('review:' + persona, SHOWN, {'persona': persona})
     mine = message_records.spoken(store, delivered=False, speech=True, receipt_since=since.isoformat(),
                                   by='receipt_at').rows(
@@ -172,12 +167,12 @@ def exchanges(store, persona, zone_name, moment=None):
                        == line['_id']]
             reacted = [r for r in following if _notice(r).get('kind') == 'reaction'
                        and str((_notice(r).get('line') or {}).get('message_id')) == str(line.get('platform_message_id'))]
-            sent = _at(line['receipt_at'])
+            sent = clock.moment(line['receipt_at'])
             earlier = {(r.get('author'), _plain(r.get('text'))) for r in before + [r for r in rows if (r.get('scene_seq') or 0) < seq]
                        if r['direction'] == 'inbound' and len(_plain(r.get('text'))) >= 4
-                       and timedelta(0) <= sent - _at(r.get('occurred_at') or r.get('received_at')) <= timedelta(minutes=AGAIN_MINUTES)}
+                       and timedelta(0) <= sent - clock.moment(r.get('occurred_at') or r.get('received_at')) <= timedelta(minutes=AGAIN_MINUTES)}
             again = [r for r in following if (r.get('author'), _plain(r.get('text'))) in earlier
-                     and _at(r.get('occurred_at') or r.get('received_at')) - sent <= timedelta(minutes=AGAIN_MINUTES)]
+                     and clock.moment(r.get('occurred_at') or r.get('received_at')) - sent <= timedelta(minutes=AGAIN_MINUTES)]
             talk = [r for r in following if not _notice(r) and (nxt is None or (r.get('scene_seq') or 0) < nxt)]
             public = scene_id not in home
 
@@ -192,7 +187,7 @@ def exchanges(store, persona, zone_name, moment=None):
             if again:
                 after.append('之后同一个问题又被问了一遍：' + said(again[0]))
             if talk:
-                gap = int((_at(talk[0].get('occurred_at') or talk[0].get('received_at')) - sent).total_seconds() // 60)
+                gap = int((clock.moment(talk[0].get('occurred_at') or talk[0].get('received_at')) - sent).total_seconds() // 60)
                 to_me = sum(1 for r in talk if r in replies)
                 after.append('之后 %d 分钟有人说话；在你下一句之前别人说了 %d 行%s' % (
                     max(gap, 0), len(talk), '' if to_me else '，没有回你这句的'))
@@ -261,7 +256,7 @@ def cared(store, persona, tag, *, whole=False):
                 continue
             row = memory_tiers.Tiers(store, persona).item(slug, section['sid']) or {}
             when = row.get('rewritten_at') or row.get('added')
-            day = when and _at(when).strftime('%m-%d')
+            day = when and clock.moment(when).strftime('%m-%d')
             heading = section.get('heading') or section['sid']
             if whole:
                 out.append({'heading': heading, 'text': section['body'], **({'written': day} if day else {})})

@@ -21,11 +21,11 @@ fits; a picture she made herself may go on the shelf too. Only stickers can be k
 """
 from __future__ import annotations
 
-from datetime import datetime
 import hashlib
 import re
 
 from . import channel_kinds
+from . import clock
 from .context_budget import ROUGH_AGO, STICKER_REVIEW, STICKER_SHELF, _tier
 from .evidence import sha
 from .state import Denied, now
@@ -239,10 +239,8 @@ def refuse_erased(store, persona, name, scene_id):
 
 
 def _hours(moment, when):
-    try:
-        return (moment - datetime.fromisoformat(when)).total_seconds() / 3600
-    except (TypeError, ValueError):
-        return None
+    """Hours since a stored time; None when there is none (never offered, never sent), which each caller words."""
+    return None if when is None else (moment - clock.moment(when)).total_seconds() / 3600
 
 
 def _name(value, what='name'):

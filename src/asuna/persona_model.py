@@ -36,7 +36,7 @@ CORE_WRITABLE_KEYS = {
     'heartbeat.dice_awake': {'type': 'string', 'what': '醒着时心跳掷骰子的分布，带名字写：歇着 40、有趣 31、自我开发 10、自我评估 12、复盘 2、找人 5、待着 0'},
     'heartbeat.dice_asleep': {'type': 'string', 'what': '作息窗里心跳掷骰子的分布，带名字写（含 待着），漏写的算 0；整夜安静就写 歇着 100'},
     # Her night self-development stages (ADR-021): when and how often; the owner can switch them off.
-    # Her daytime self-development interval (ADR-119 F14): set_policy's own bounds; a persona model may default lower.
+    # Her daytime self-development interval (ADR-119 F14); the schema holds a persona model's default to the same bounds.
     'self_development.every_min': {'type': 'integer', 'min': 360, 'max': 10080,
                                    'what': '白天自我开发的间隔（分钟）'},
     'self_development.night_start_hour': {'type': 'integer', 'min': 0, 'max': 23,

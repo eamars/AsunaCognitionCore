@@ -317,8 +317,9 @@ Her choice (agent line 0302, 0303): the interval through `set_policy`, and one r
 
 1. *The parameter.* `self_development.every_min` joins the core's `set_policy` parameters (`CORE_WRITABLE_KEYS`,
    for every persona; not a package's own `policy_keys`): integer, 360 to 10,080 minutes, its spec shaped as
-   `heartbeat.every_min`'s. The 360 bound is `set_policy`'s alone: a persona model's own default may be lower (the
-   schema's minimum, 60, stays; it is every persona's). The owner's switches (`self_development.enabled`,
+   `heartbeat.every_min`'s. The same bounds hold a persona model's default: the schema's
+   `self_development.every_min` is 360 to 10,080 (it was a minimum of 60), because `tests/test_persona_model.py`
+   holds every key a package may default to one set of limits; the packages that set it set 1,440. The owner's switches (`self_development.enabled`,
    `night`) stay out of it. `set_policy` is a home, owner-private turn's tool (`POLICY_SET_REQUIRES_OWNER_PRIVATE`
    elsewhere); its description says so beside the `null` sentence.
 2. *The retime, once per change.* Her `set_policy` of the interval ensures the daytime plan at once (the tool
@@ -357,7 +358,9 @@ Her choice (agent line 0302, 0303): the interval through `set_policy`, and one r
    her persona model's value).
 4. *The answer names the source.* A set or a clear answers one line: the value now and where it comes from
    (`policy`, `model`, `core`).
-5. *Words.* The rhythm refusal's 「快慢」 and the page's sentences on her interval are made true in this landing,
+5. *Cost.* The character brain's tool descriptions grow by 30 characters (the `null` and home-only sentence of
+   `set_policy`; its budget in `tests/test_tool_budget.py` is 21,122).
+6. *Words.* The rhythm refusal's 「快慢」 and the page's sentences on her interval are made true in this landing,
    not before: the daytime interval becomes hers to set.
 
 **Landing:** one, with a restart, after F8's. Tests: the range refused outside 360 to 10,080, and `0`, `''`,

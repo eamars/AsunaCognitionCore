@@ -364,10 +364,9 @@ TOOLS = {
     'set_policy': {
         'description': ('调整你自己声明过的一个参数（persona-model 里的 policy key）。也管开关：key=tools_off 把 place 那个对话的一些工具关掉（value 是工具名列表，'
                          '空列表全部恢复；hours 默认 24，最多 168）；key=switch_off 提前结束一个开关（value 写它的 id）'
-                         '。value 写 null 清掉这一项，回到人格模型或核心的默认；回执说现在的值和它来自哪一级'
-                         '（policy、model、core）。只在家里的私聊里能改。'),
+                         '。value 写 null 清掉，回到默认。只在家里私聊能改。'),
         'parameters': {'key': _s('参数名，或 tools_off、switch_off', required=True),
-                       'value': {'type': 'json', 'description': '新的值；null 清掉', 'required': True},
+                       'value': {'type': 'json', 'description': '新的值', 'required': True},
                        'reason': _s(limit=2000, description='为什么改', required=True),
                        'place': _s('tools_off：哪个对话，照抄 place'),
                        'hours': {'type': 'integer', 'description': 'tools_off：关多少小时'}},

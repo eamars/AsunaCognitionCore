@@ -575,7 +575,8 @@
       "properties": {
         "every_min": {
           "type": "integer",
-          "minimum": 60
+          "minimum": 360,
+          "maximum": 10080
         },
         "night_start_hour": {"type": "integer", "minimum": 0, "maximum": 23},
         "night_hours": {"type": "integer", "minimum": 0, "maximum": 8},

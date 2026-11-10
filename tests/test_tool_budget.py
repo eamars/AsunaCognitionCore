@@ -18,7 +18,7 @@ from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TO
 # 20,990 characters (tiered memory on: 21,426), against 21,915 (22,211) measured on the definitions before: the aim and the line
 # stated for her prose (D4a) and the new `line` field (D2) cost, the enum arrays and the nested part schema they replace save more.
 # Her tools as she is sent them, tiered memory's (ADR-062 phase 2: let_go, nature, from, about, the recall sentence).
-CHARACTER = (30, 21092)                  # ADR-117 L4: correction -47; ADR-112 §12.10: task's settle +103; §12.2: task's more +34; ADR-103: 贴纸 -> 表情包 +1, 表情名 -> 小黄脸名 +1; ADR-106: place_timezone removed, 31 -> 30 tools, -426 declared (21,426 -> 21,000); ADR-102: received_file +499; ADR-097: recall's bare word +19, elsewhere and past notes +19; ADR-096: pin and what each place carries +49; ADR-092 D1: speak's file part +49
+CHARACTER = (30, 21122)                  # ADR-119 F14: set_policy null clears, home only +30; ADR-117 L4: correction -47; ADR-112 §12.10: task's settle +103; §12.2: task's more +34; ADR-103: 贴纸 -> 表情包 +1, 表情名 -> 小黄脸名 +1; ADR-106: place_timezone removed, 31 -> 30 tools, -426 declared (21,426 -> 21,000); ADR-102: received_file +499; ADR-097: recall's bare word +19, elsewhere and past notes +19; ADR-096: pin and what each place carries +49; ADR-092 D1: speak's file part +49
 ACTION = (27 + len(ACTION_DSH_CAPABILITIES), 16490)        # the worker's tools, plus DSH's own (skill, todo, web);
                                                            # ADR-102: received_file, 26 -> 27 tools, +291; its copy (part 3) +58;
                                                            # ADR-092 D2: offer_file, 25 -> 26 tools, +441 (15,467 -> 15,908 measured)

@@ -375,7 +375,7 @@ class NativeMemory:
         view = ledger.description('owner_private')
         # "Now" sorts first: the mood is computed for this moment.
         rows = [{'id': 'affect:state', 'kind': 'affect', 'title': label('title.mood'), 'excerpt': mood_line(view),
-                 'updated_at': clock.now().astimezone().isoformat()}]
+                 'updated_at': clock.stamp()}]
         from .affect import amendments_of, events_of
         events = events_of(self.store, self.persona, by='ts').rows(newest_first=True, limit=20)
         closed = {row['target'] for row in amendments_of(

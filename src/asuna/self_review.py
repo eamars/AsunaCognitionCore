@@ -17,7 +17,7 @@ import json
 import re
 from datetime import datetime, time, timedelta, timezone
 
-from . import clock
+from . import clock, local_time
 from .config import excerpt
 from .evidence import sha
 from .records import scenes as scene_records
@@ -256,7 +256,8 @@ def cared(store, persona, tag, *, whole=False):
                 continue
             row = memory_tiers.Tiers(store, persona).item(slug, section['sid']) or {}
             when = row.get('rewritten_at') or row.get('added')
-            day = when and clock.moment(when).strftime('%m-%d')
+            # Her date, on her clock (ADR-119 F4 c): a UTC date is a day off around her midnight.
+            day = when and clock.moment(when).astimezone(local_time.her_zone(store)['tz']).strftime('%m-%d')
             heading = section.get('heading') or section['sid']
             if whole:
                 out.append({'heading': heading, 'text': section['body'], **({'written': day} if day else {})})

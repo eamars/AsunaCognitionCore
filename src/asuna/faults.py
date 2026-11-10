@@ -24,6 +24,7 @@ PLAN_MORE = '从上次告诉你以来，这里没排上的计划一共 %d 次。
 # A due plan handed to her late (ADR-119 F10): the two times and the cause as known, her wording.
 LATE_LINE = '这条计划 %s 到点，%s 才交到你手上：中间这一截程序没交过来（%s），不是你拖的。'
 INTENT_CHARS = 40
+NO_CAUSE = '原因没记下来'          # a cause with no record, one word for it (her F4 rule, line 0281)
 KINDS = {'self_development': '自我改进', 'task_feedback': '收任务结果', 'external': '回话', 'scheduled': '计划到点',
          'visit': '出门', 'note': '便条', 'settlement': '夜间沉淀', 'presence': '心跳', 'consult': '回答行动脑',
          'task_time': '定到点的事'}
@@ -78,7 +79,7 @@ def plan_line(store, scene, zone):
     from .schedule_rules import line_stamp
     from .local_time import UNKNOWN
     line = PLAN_LINE % (fault.get('intent') or '', line_stamp(zone, fault.get('at')) or UNKNOWN,
-                        fault.get('cause') or '原因不明', GOES_ON[fault.get('goes_on') is not False])
+                        fault.get('cause') or NO_CAUSE, GOES_ON[fault.get('goes_on') is not False])
     return line + (PLAN_MORE % fault['count'] if fault['count'] > 1 else '')
 
 

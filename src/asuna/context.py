@@ -1058,7 +1058,7 @@ class ContextBuilder:
             if late:                      # ADR-119 F10: handed on by the rhythm watch, not by the firing itself
                 from . import faults
                 plan['handed_late']=faults.late_line(schedule_zone,late.get('due'),late.get('handed'),
-                                                     late.get('why') or '原因不明')
+                                                     late.get('why') or faults.NO_CAUSE)
             # ADR-111 §3.6: whose work the plan is for, and where that person stands now.
             from . import whose as _whose
             said=_whose.words(self.store,persona,_whose.of_plan(self.store,{**stored,'source_episode_id':source_episode}),

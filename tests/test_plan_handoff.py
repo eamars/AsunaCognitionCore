@@ -115,6 +115,25 @@ def test_a_logged_firing_never_handed_over_is_handed_on_by_the_watch_once(servic
     assert len(audits(service.store, 'schedule.handoff_late')) == 1
 
 
+def test_one_late_firing_that_fails_does_not_hold_the_others_back(service, monkeypatch):
+    received = []
+    service.controller = type('Controller', (), {'receive': lambda self, event: received.append(event)})()
+    first, second = create(service, 'bad', {'after_seconds': 600}), create(service, 'good', {'after_seconds': 900})
+    due(service, first, 30, ago=schedule.HANDOFF_LATE_SECONDS + 60)
+    due(service, second, 31, ago=schedule.HANDOFF_LATE_SECONDS + 60)
+    real = service._deliver_locked
+
+    def deliver(seq, schedule_id, creates, late=None):
+        if seq == 30:
+            raise RuntimeError('BROKEN_HANDOFF')
+        return real(seq, schedule_id, creates, late)
+    monkeypatch.setattr(service, '_deliver_locked', deliver)
+    service.hand_on_late()
+    assert [event['scheduled_plan_id'] for event in received] == [second['_id']]
+    failed = audits(service.store, 'schedule.handoff_failed')
+    assert [row['stream_id'] for row in failed] == [first['_id']] and 'BROKEN_HANDOFF' in failed[0]['payload']['error']
+
+
 def test_the_development_plans_carry_the_fields_her_plan_view_shows(service, monkeypatch):
     service.controller = type('Controller', (), {'settings': {'scene_id': 'dm-a', 'person_id': 'A'}})()
     service._ensure_development_plan('plan-dev', 3600, 'grow')

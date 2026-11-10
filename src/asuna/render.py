@@ -37,6 +37,12 @@ def readable_sections(content, cls, *, inject=('always',), place=None):
     to other places (ADR-032) is left out."""
     if not content:
         return []
+    if 'sections' not in content:
+        # Every write keeps its sections (documents.py); a revision without them is named, never rendered as
+        # its body or as nothing (ADR-119 F9).
+        from .documents import DocumentError
+        raise DocumentError('DOC_SECTIONS_MISSING', '「%s」（%s）这份文档的修订里没有 sections'
+                            % (content.get('title') or '?', content.get('kind') or '?'))
     chosen = [s for s in content['sections'] if s['inject'] in inject and visibility.readable(s['visibility'], cls)
               and (place is None or not visibility.section_places(s) or place in visibility.section_places(s))]
     return [s for s in chosen if s['visibility'] == 'public'] + [s for s in chosen if s['visibility'] != 'public']
@@ -45,8 +51,6 @@ def readable_sections(content, cls, *, inject=('always',), place=None):
 def _document_text(content, cls, place=None):
     if content is None:
         return ''
-    if 'sections' not in content:              # a pre-conversion legacy persona head revision
-        return content.get('body', '')
     return render_markdown(readable_sections(content, cls, place=place))
 
 

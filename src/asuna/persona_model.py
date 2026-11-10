@@ -237,13 +237,10 @@ def effective(model: dict, key: str, policy: dict | None = None):
     return None
 
 
-def self_development_minutes(model: dict, policy: dict | None, config: dict) -> tuple:
-    """policy > existing local self_development.every_seconds (compat until P7) > model > 1440."""
+def self_development_minutes(model: dict, policy: dict | None) -> tuple:
+    """policy > model > 1440."""
     if policy and 'self_development.every_min' in policy:
         return policy['self_development.every_min']['value'], 'policy'
-    seconds = ((config or {}).get('self_development') or {}).get('every_seconds')
-    if isinstance(seconds, int) and not isinstance(seconds, bool) and seconds > 0:
-        return max(1, round(seconds / 60)), 'config'
     value = lookup(model or {}, 'self_development.every_min')
     if value is not _MISSING and value:
         return value, 'model'

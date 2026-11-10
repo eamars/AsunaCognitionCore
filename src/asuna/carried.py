@@ -130,7 +130,7 @@ def placed(store, persona, slug, content, placements=None):
 def sections(content, cls, place=None):
     """Of a placed document, the sections carried in a turn of this class and place."""
     from .render import readable_sections
-    if not content or 'sections' not in content:
+    if not content:
         return []
     return readable_sections(content, cls, place=place)
 

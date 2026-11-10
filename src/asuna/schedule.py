@@ -128,7 +128,6 @@ class ScheduleService:
         self.lane = lane
         if lane is None:
             raise ValueError('NATIVE_HOST_SCHEDULE_REQUIRED')
-        self._migrate_native_links()
         self.reconcile()
         self.ensure_self_development()
         self.ensure_night_development()
@@ -147,46 +146,6 @@ class ScheduleService:
         if not isinstance(events, list):
             raise ValueError('INVALID_NATIVE_SCHEDULE_LOG')
         return events
-
-    def _migrate_native_links(self):
-        """One explicit cutover; retain old IDs and never replay old deliveries."""
-        events = self._native_events()
-        creates, _, _ = self._grouped(events)
-        for plan in plan_records.in_status(self.store, statuses=['ACTIVE', 'CREATING']).each():
-            if plan.get('native_scheduler_session') == self.lane.scheduler_session:
-                continue
-            native = creates.get(plan.get('schedule_id'))
-            if not native:
-                live = [row for row in creates.values() if row.get('prompt') == 'ASUNA_PLAN:' + plan['_id']]
-                native = live[-1] if live else None
-            if not native:
-                rule = plan['rule']
-                scene_records.authorize(self.store, plan['scene_id'], plan['person_id'])      # still hers to arm
-                moment = clock.now()
-                if 'every_seconds' in rule:
-                    timing = {'every_seconds': rule['every_seconds']}
-                elif 'clock' in rule:
-                    timing = schedule_rules.native_payload(rule,
-                        schedule_rules.next_fire(rule, schedule_rules.plan_zone(plan, self.her())['tz'], moment), moment)
-                else:
-                    due = clock.moment(plan['scheduled_at'])
-                    if due <= moment:
-                        plan_records.save(self.store, {**plan, 'status': 'SUSPENDED',
-                            'migration_note': 'Legacy one-shot is overdue; no delivery replay. Replan explicitly.'},
-                            expected=plan['revision'], stream=plan['_id'])
-                        continue
-                    timing = {'after_seconds': max(1, int((due - moment).total_seconds()))}
-                native = self._create_native(plan['_id'], timing)
-            legacy = {k: plan[k] for k in ('schedule_id', 'scheduled_at', 'last_dispatch_seq',
-                                           'native_scheduler_session') if k in plan}
-            plan_records.save(self.store, {**plan, 'legacy_schedule_binding': legacy,
-                'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session, 'scheduled_at': native['scheduledAt'],
-                'last_dispatch_seq': -1,
-                'migration_note': 'Native Host owns future occurrences; legacy history remains read-only.'},
-                expected=plan['revision'], stream=plan['_id'])
-            self.store.audit(plan['_id'], 'schedule.native_migrated', {
-                'previous': legacy, 'native_schedule_id': native['id'],
-                'native_session_id': self.lane.scheduler_session, 'replayed_deliveries': 0}, plan['scope_key'])
 
     def _grouped(self, events):
         """原生事件日志分三份：建过哪些、派发过哪些、删过哪些——认领与版本护栏只看这三样。"""
@@ -229,10 +188,10 @@ class ScheduleService:
             # Switched off, its plan goes as the other rhythms' do (ADR-119 F10), with its rhythm.disabled line.
             self._retire('plan-asuna-self-development', 'self_development disabled')
             return
-        # ADR-009 §10.3: policy > existing local every_seconds (until P7) > persona model > 1440 min.
+        # ADR-009 §10.3: policy > persona model > 1440 min.
         from .persona_model import self_development_minutes
         from .render import model_and_policy
-        minutes, _ = self_development_minutes(*model_and_policy(self.store, self.controller.settings['persona']), self.app.config)
+        minutes, _ = self_development_minutes(*model_and_policy(self.store, self.controller.settings['persona']))
         interval = int(minutes) * 60
         if type(interval) is not int or not schedule_rules.MIN_INTERVAL_SECONDS <= interval <= schedule_rules.MAX_INTERVAL_SECONDS:
             raise ValueError('SELF_DEVELOPMENT_INTERVAL_INVALID')

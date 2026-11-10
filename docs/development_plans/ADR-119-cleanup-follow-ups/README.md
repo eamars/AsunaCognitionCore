@@ -245,3 +245,35 @@ of fields, no content):
 **Landing:** one, with a restart. Test: none new; each removal is checked by the counts above, read again on her
 data just before the landing, and by the suite (a test that leaned on a removed path is changed with it, named in
 the landing).
+
+## 8. F8 design: the long functions (2026-11-10)
+
+**What is there** (survey 2026-11-10). The row names four; the fourth is `CognitionCore` (there is no `AsunaCore`).
+
+| Function | Size | Shape | Decision |
+|---|---|---|---|
+| `context._prepare` (`context.py`) | 888 lines | one pass that builds her turn's `system`, `context` and `manifest` in about twenty blocks sharing some fifteen locals; a few blocks write (memory-tier lapses, three audits, `shown_stops`, `manifest.told`) | split |
+| `native_worker.dispatch` | 369 lines | a flat `if method ==` table of about 37 methods sharing only `method`, `args`, `self` | dropped: it is already a dispatch table; handlers in a dict add indirection and change nothing she reads |
+| `client.js` | 1,467 lines | the settings card and other owner UI: a word table, helpers, `apply(ctx)` registrations | dropped: nothing in it reaches a model; a split into files needs DSH's client loader (the owner's); no unit test covers the card, so a proof would be a manual session |
+| `CognitionCore` (`index.js`) | 1,377 lines, about 60 methods | the longest, `attachPreset` (197 lines), is an ordered list of about 20 registrations whose order DSH depends on, with model-facing prompt sections | dropped: already a readable list; extracting from it gains little and touches what feeds her prompt |
+
+**The split of `_prepare`.** `_prepare` stays as the ordered list of calls: `_turn_frame` (scene, class, place,
+rendered system, the identity heads), `_history_rows`, `_task_and_plan_rows`, then appenders in today's order:
+scene blocks, home offers, notes and the scheduled plan, group continuity, tools, affect, turn cues, and `_finish`
+(size, wake reason, relabel, `order_context`, the final sha, `manifest.carried`). The shared locals travel in one
+small frame object. Nothing is renamed or reworded: no literal she reads and no field changes (her rule, line
+0298); key insertion order is part of what she reads (`order_context` keeps unlisted keys in insertion order), so
+blocks run in exactly today's order, the three context-sha writes stay, and the names shadowed today (`people`,
+`read`) keep their meaning where they are used.
+
+**The proof, at her layer.** A pytest plugin outside the tree (`-p`, nothing tracked changes) wraps
+`ContextBuilder.prepare` during the whole suite: at each call it freezes the clock and seeds ids, copies the
+in-memory database, runs main's `_prepare` (loaded from `git show main:src/asuna/context.py`) on the copy and the
+new one on the real store, and compares `system`, the canonical `context`, the `manifest` and every record the two
+runs wrote. Process-level throttles (the tier tick, `anchors_shown`) are saved and restored between the two runs.
+The report states how many turns were compared and which `*_from_program` blocks never appeared in them: those are
+the blocks this proof did not see, named, not claimed. One existing test changes with it:
+`tests/test_adr113_restarts.py:216` matches four lines of `context.py` by their indentation.
+
+**Landing:** one, with a restart; the comparison's report (turns compared, mismatches 0, blocks unseen) goes with
+it. A mismatch stops the landing.

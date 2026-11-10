@@ -1,0 +1,63 @@
+{
+ "_": "ADR-119 F7 (c): one table both readers of the private list are held to (asuna/private_words.py and the plugin's private-words.js). Placeholder words only.",
+ "list": "# a comment\n\nperson|demo-name-zz|a placeholder\nnot an entry\nunknown|demo-word|an unknown category is not an entry\nhost| |no word\nother|示例地名|a placeholder\naccount|a.b-c|dots and dashes are literal\n",
+ "entries": [
+  [
+   3,
+   "person",
+   "demo-name-zz"
+  ],
+  [
+   7,
+   "other",
+   "示例地名"
+  ],
+  [
+   8,
+   "account",
+   "a.b-c"
+  ]
+ ],
+ "matches": [
+  {
+   "word": "demo-name-zz",
+   "text": "see DEMO-NAME-ZZ here",
+   "hit": true
+  },
+  {
+   "word": "demo-name-zz",
+   "text": "demo-name-zzz",
+   "hit": false
+  },
+  {
+   "word": "demo-name-zz",
+   "text": "xdemo-name-zz",
+   "hit": false
+  },
+  {
+   "word": "demo-name-zz",
+   "text": "(demo-name-zz)",
+   "hit": true
+  },
+  {
+   "word": "示例地名",
+   "text": "去示例地名玩",
+   "hit": true
+  },
+  {
+   "word": "示例地名",
+   "text": "示例地点",
+   "hit": false
+  },
+  {
+   "word": "a.b-c",
+   "text": "at a.b-c.",
+   "hit": true
+  },
+  {
+   "word": "a.b-c",
+   "text": "axb-c",
+   "hit": false
+  }
+ ]
+}

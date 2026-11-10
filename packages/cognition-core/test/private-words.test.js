@@ -42,3 +42,21 @@ test('a number shaped like a QQ or group number is found; hashes, commit ids, re
     '1.5 秒，3.14159265，12345 只有五位'];
   for (const line of clean) assert.deepEqual(findings(line, []), [], line);
 });
+
+// ADR-119 F7 (c): the same table the Python reader is held to (tests/test_private_words_parity.py); either side drifting fails.
+test('the list and the matches agree with the table both readers are held to', async t => {
+  const cases = JSON.parse(await fs.readFile(new URL('../../../tests/fixtures/private_words_cases.json', import.meta.url), 'utf8'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-parity-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(path.join(root, 'private'));
+  await fs.writeFile(path.join(root, 'private', 'personal-words.txt'), cases.list);
+  const saved = process.env.ASUNA_PRIVATE_WORDS;
+  delete process.env.ASUNA_PRIVATE_WORDS;
+  try {
+    assert.deepEqual(load(root).map(entry => [entry.line, entry.category, entry.word]), cases.entries);
+  } finally { if (saved !== undefined) process.env.ASUNA_PRIVATE_WORDS = saved; }
+  for (const item of cases.matches) {
+    const found = findings(item.text, [{ line: 1, category: 'other', word: item.word }]).filter(hit => hit.kind === 'listed');
+    assert.equal(found.length > 0, item.hit, JSON.stringify(item));
+  }
+});

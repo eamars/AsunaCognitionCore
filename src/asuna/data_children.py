@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 
 from . import data_worker
-from .media_children import Busy, Child, Died, JobError, StartFailed, Timeout
+from .media_children import Busy, Child, Closed, Died, JobError, StartFailed, Timeout
 
 DEADLINE = 30                # one job (history and digest measured at most 3.4 s)
 LOCK_WAIT = 30               # behind another job or a start
@@ -29,7 +29,11 @@ MODULE = 'asuna.data_worker'
 
 TIMEOUT = 'QUERY_TIMEOUT: 这次查询超过 30 秒被停下了，没有结果；把范围收窄（时间窗、人、话题、limit）再试'
 BUSY = 'QUERY_BUSY: 做查询的后台程序这会儿腾不出来，这次没有结果；过一会儿再试'
-UNAVAILABLE = 'QUERY_UNAVAILABLE: 做这次查询的后台程序这会儿没起来，这次没有结果；过一会儿再试'
+# A child that will not start stays so until a fix (an import break): never the words of a passing fault (ADR-119 F2).
+CANNOT_START = ('QUERY_CANNOT_START: 做查询的后台程序起不来（已经记给开发者了），这次没有结果；一分钟内重试也一样，'
+                '过一分钟会再试着启动，但多半要等修好。')
+CLOSING = 'QUERY_CLOSING: 宿主正在停下，做查询的后台程序不接活了，这次没有结果；等重启回来再查。'
+UNAVAILABLE = 'QUERY_UNAVAILABLE: 做查询的后台程序做到一半停了，这次没有结果；过一会儿再试。'
 
 DATA = None                  # the data child while the Host runs; None: jobs run in this process
 
@@ -85,7 +89,11 @@ def run(tool, task, args, config, database, evidence):
             return {'error': BUSY}
         except Timeout:
             return {'error': TIMEOUT}
-        except (StartFailed, Died):
+        except Closed:
+            return {'error': CLOSING}
+        except StartFailed:
+            return {'error': CANNOT_START}
+        except Died:
             return {'error': UNAVAILABLE}
         except JobError as exc:
             # Database addresses and credentials never reach the evidence, as with every traceback recorded here.

@@ -200,7 +200,8 @@ def test_a_call_the_child_did_not_finish_closes_failed_with_its_words(world, tmp
     finally:
         if case == 'busy':
             child.lock.release()
-    words = {'timeout': data_children.TIMEOUT, 'busy': data_children.BUSY, 'unavailable': data_children.UNAVAILABLE}
+    # A child that will not start says so, never as a passing fault (ADR-119 F2).
+    words = {'timeout': data_children.TIMEOUT, 'busy': data_children.BUSY, 'unavailable': data_children.CANNOT_START}
     assert str(failed.value) == words[case]
     receipt = next(row for row in world.collection('artifacts').find() if row.get('task_id') == task['_id'])
     assert receipt['state'] == 'FAILED' and receipt['error'] == words[case]

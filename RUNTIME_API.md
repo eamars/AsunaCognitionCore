@@ -847,7 +847,9 @@ by. Elsewhere it is refused in words (`TaskService.settle`).
 |---|---|
 | past 30 seconds (the child is killed; the next call starts a fresh one) | `QUERY_TIMEOUT: 这次查询超过 30 秒被停下了，没有结果；把范围收窄（时间窗、人、话题、limit）再试` |
 | behind another call or the child's start for 30 seconds | `QUERY_BUSY: 做查询的后台程序这会儿腾不出来，这次没有结果；过一会儿再试` |
-| the child will not start, has stopped with the worker, or died in the call | `QUERY_UNAVAILABLE: 做这次查询的后台程序这会儿没起来，这次没有结果；过一会儿再试` |
+| the child will not start (a lane fault is recorded; the next try to start it is a minute later) | `QUERY_CANNOT_START: 做查询的后台程序起不来（已经记给开发者了），这次没有结果；一分钟内重试也一样，过一分钟会再试着启动，但多半要等修好。` |
+| the worker is stopping | `QUERY_CLOSING: 宿主正在停下，做查询的后台程序不接活了，这次没有结果；等重启回来再查。` |
+| the child died in the call | `QUERY_UNAVAILABLE: 做查询的后台程序做到一半停了，这次没有结果；过一会儿再试。` |
 
 - A task keeps the grants of the turn that handed it over; her later words never add one.
 - A tool call that did not happen is an error, and its tool record is `FAILED` with the same words (`tasks.py`

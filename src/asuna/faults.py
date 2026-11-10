@@ -98,7 +98,7 @@ def her_line(store, scene, zone):
         return None
     from .schedule_rules import line_stamp
     from .local_time import UNKNOWN
-    return HER_LINE % (line_stamp(zone, fault.get('at')) or UNKNOWN, fault.get('cause') or '原因不明')
+    return HER_LINE % (line_stamp(zone, fault.get('at')) or UNKNOWN, fault.get('cause') or NO_CAUSE)
 
 
 def told(store, ep):

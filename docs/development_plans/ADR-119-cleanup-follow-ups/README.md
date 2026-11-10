@@ -103,4 +103,37 @@ its offset, so the sites that read an offsetless time as the machine's local tim
 (b) the written form and the ingress normalisation; (c) the two defects. Tests: the parser's cases (`Z`, offset, none,
 bad, None), the one shown wording, and a bound comparison across the two forms.
 
+## 5. F7 design: the scanners (2026-11-10)
+
+**What is there** (survey 2026-11-10): six scanners, not four. `tools/check_staged_secrets.py` (a secret mode and
+`--personal`), `tools/publication_scan.py` (her publications, through `floor.js`), `tools/release.py` (packed
+tarballs), the lead's push gate (`scan_range.py` and `added_hits.py`), `tests/test_personal_words.py`, and her own
+`pre_publish_scan.py` (hers). The private-words list is located, parsed and matched in four copies (`private_words.py`,
+`check_staged_secrets.py`, `private-words.js`, hers), plus about twelve of her `check_skill.py`; text is read under
+four different rules (where a file counts as binary, strict or replacing decode, how lines split, a size limit);
+persona names are matched case-blind in one place and case-sensitively in two.
+
+**The broken invariants:**
+
+1. *A scan that checked nothing passed.* Exit 0 with nothing read: the secret mode with nothing staged or no secret
+   in the settings; `--personal` and `--personal --strict` with nothing staged; `scan_range` when git fails or the
+   range is empty; `added_hits` on an empty diff; `release.py` with the list missing; `publication_scan` always exits
+   0 and `floor.js` lets a publication through "checked without a private list". After: every scanner states what it
+   read (files, lines, list entries) and exits non-zero, apart from a hit's 1, when it read nothing or had no list
+   (the one code `UNCHECKED = 3`); `publication_scan` with no list makes `floor.js` refuse the publication, in her
+   words.
+2. *A gate that only reports.* `--personal` without `--strict` reports hits and exits 0, and the core skill calls that
+   command the push gate (`asuna-self-improvement/SKILL.md:57,171`). After: `--personal` always fails on a hit;
+   `--strict` goes; `release.py` reads the exit code, not a parsed summary line.
+3. *One fact, several readers.* `asuna.private_words` becomes the one Python reader (path, parse with categories,
+   pattern, find) and gains the one text rule (`text_of(bytes)`: NUL anywhere is binary, strict UTF-8, `\n` lines);
+   `check_staged_secrets`, `publication_scan`, `release`, the push gate and the test use it. Persona names: one
+   function (`release.persona_names`), matched one way. `private-words.js` (the plugin cannot import Python) keeps its
+   copy, and a test fails when it drifts (F6's shape). Her `pre_publish_scan.py` and `check_skill.py` copies are hers:
+   she is offered the module, nothing of hers changes.
+
+**Landings:** (a) invariants 1 and 2, with the skill's text and the refusal she reads; (b) invariant 3 in Python;
+(c) the JS drift test. Tests: a scan of nothing exits 3 (each scanner), a hit exits 1, a missing list exits 3, and
+each test is run on the old code first to show it fails there.
+
 One landing at a time; tests only where a failure would be silent and costly.

@@ -274,8 +274,8 @@ Her choice (agent line 0302, 0303): the interval through `set_policy`, and one r
    here happens only when the value differs, so it would always be false and say nothing).
    An equal value does nothing. Every path that writes the native record uses the computed interval: today a
    live plan returns early and a missing native record is rebuilt from the plan's old `rule.every_seconds`
-   (`_ensure_development_plan`); both take the new one. The plan record, its `fire_count` and
-   `fire_count_since` are Asuna's and stay through a retime (DSH keeps the task's id when it rebuilds it), so the
+   (`_ensure_development_plan`); both take the new one. The plan record (in the `plans` collection),
+   its `fire_count` and `fire_count_since` are Asuna's and stay through a retime (DSH keeps the task's id when it rebuilds it), so the
    count goes on; `rhythm.retimed` marks where the interval changed. *Where the next run falls:* DSH rebuilds an `every` task whose timing changes from
    the moment of the change (`createEveryScheduleRecord`: now plus the interval) and takes no anchor, so the next
    run is the moment of the change plus the new interval. With her plan as read on 11-10 (last run 18:18:44, next

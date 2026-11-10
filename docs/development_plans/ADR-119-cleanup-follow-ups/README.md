@@ -32,6 +32,7 @@ Left as is by the owner: the four channel API clients (ADR-118 §7.2).
 | F11 | A silence after a body the turn-end check sent back said 「这一回合正文里一个字都没写」 (her agent line, 2026-11-10 13:22): the receipt counted only the repair stage, so her refused reply was lost while the receipt said nothing was written | **Built 2026-11-10** (her wording, line 0234): on a line whose body is sent at the turn's end, silence after a refused body says 「这一步正文里没写字。这一回合前面那段被打回了、还没发出去：就这样结束，它不会发出去。现在在正文里重写一遍才发得出去（写进 think 的不会发）。」 and echoes the refused text's first 40 characters. Where only `speak` sends, the worker already says what the whole turn sent (`sent`). The check that sends a body back is unchanged. Covered by `stage-view.test.js` "ADR-119 F11: silence after a body the check sent back…"; she reports the first real one |
 | F12 | `summary_batch_id` read two ways (her finding, line 0246): the query of lines still to summarise (`records/messages.said`, `Exists(False)`) took a null as summarised, while the writer and every reader (`dialogue_summary`, `summary_attribution`, `retrieval`) take a falsy id as not; the catalog allows null, so only "nobody writes null" kept them agreeing | **Built 2026-11-10**: the query takes absent, null and empty as not summarised, the readers' rule; `tests/test_summary_batch_id.py` covers the four shapes |
 | F13 | `check_staged_secrets.py --personal --all` counts 50 hits on main (2026-11-10, after F7 b: 43 account-number shapes, 2 time zones, 1 persona name), nearly all synthetic numbers in test fixtures and the scanner's own tests; three are in her image skill's files; with every persona's names read (F7 b) four more, persona names in two core tests | Each hit fixed, or allowed where it is a fixture's placeholder (`personal_scan_allow.txt` or the line's `personal-scan: ok` mark); hers are hers to judge; `--all` then exits 0 on main **Built 2026-11-10**: every hit judged, none personal: test fixtures' numbers now the placeholder form or built at runtime, scanner tests' account-shaped numbers marked, digit-only fake hashes made hex, persona names used as test data replaced (the persona paths a test reads marked); real constants (a millisecond hour, the platform's 30-day mute, the QQ bot intents mask and two error codes) and her two image seeds (her judgment) on `tools/personal_scan_allow.txt`; two daylight-saving tests moved off the deployment's own zone to another with the same switch dates. `--all` exits 0 on main. This machine has no denylist (`<data>/private/personal-denylist.txt`), so that dimension is not checked here: `--all` exiting 0 covers the private-words list, account-number shapes and persona names, not the denylist. The denylist is the owner's own list of literals; it is not drafted from her private-words list, and each list keeps its own words |
+| F14 | Her daytime self-development interval has no way in (her reading, lines 0301 to 0303): `self_development.every_min` is read from her policy first but is not a `set_policy` parameter, and a live development plan is never retimed, so a changed interval (policy or persona model) never reaches the plan; no policy parameter can be cleared back to its default | She sets it with `set_policy` (360 to 10,080 min), a live plan is retimed once when the value changes (`rhythm.retimed`), a parameter written `null` returns to the persona model or the core default, and each set or clear answers the value now and where it comes from Design §9 |
 
 ## 3. F1 design (her wording, agent line 0222 to 0225, 2026-11-10)
 
@@ -192,8 +193,11 @@ end in three places, and none of them reaches her:
    `cancel` alike on the four rhythms (`PLAN_RHYTHM`, since 2026-10-19), now in her wording:
    「「…」是你的节律（心跳、夜间沉淀、自我改进或整理安静的群）：这四条归程序，调它们用 set_policy（快慢、时间和夜里的窗口；
    总开关归主人）。」 The rhythm stays as it was. The two self-development plans belong to no ADR: they live while
-   `self_development.enabled` holds. She tunes them with `set_policy` (`self_development.every_min`,
-   `night_start_hour`, `night_hours`; `night_hours = 0` is `NIGHT_OFF` at each tick and keeps the plan). The owner's
+   `self_development.enabled` holds. She tunes the night one with `set_policy` (`self_development.night_start_hour`,
+   `night_hours`, `night_every_min`; `night_hours = 0` is `NIGHT_OFF` at each tick and keeps the plan). The daytime
+   interval (`self_development.every_min`) is not one of her `set_policy` parameters (corrected 2026-11-10, her
+   reading line 0301): it comes from the persona model or the core default, and a change to it does not retime a
+   live plan. The owner's
    switch now removes them as the other rhythms' switches do (`_retire`, one `rhythm.disabled` line with its
    reason); a plan made again after that starts a new `fire_count_since`. Her `night_hours = 0` keeps the plan only
    because `ensure_night_development` never reads `night_hours` (each tick does): the test pins the outcome, not a
@@ -219,7 +223,7 @@ of fields, no content):
 |---|---|---|---|---|
 | `render._document_text` returns `content['body']`, and `carried.sections` returns nothing, for a document revision without `sections` ("pre-conversion legacy") | `state_revisions` of `doc:*` entities, `content.sections` | a head, or a revision an episode's ref names, without `sections` | 0 of 40 document heads, 0 of 1,869 document revisions | remove both branches; a document without sections then fails where it is read instead of rendering a body or nothing |
 | `schedule._migrate_native_links` at every start: a plan bound to another scheduler session is re-linked or re-armed ("one explicit cutover") | `plans.native_scheduler_session` (the current one is `asuna-scheduler-` + a hash of the database name) | an `ACTIVE` or `CREATING` plan on another session | 0 of 28 active plans; 2 ended plans have none | remove; the cutover it served is done |
-| `persona_model.self_development_minutes` reads `self_development.every_seconds` from the local config ("compat until P7") before the persona model | `config/local.json` and `config/local.example.json`, `self_development.every_seconds` | a deployment whose interval comes only from that key | her live config holds 86,400 (1,440 min); her policy and her persona model set no `self_development.every_min`; the core default is 1,440 min | remove the read and the key from both files: her interval stays 1,440 min (the default); a pace of her own goes through `set_policy` |
+| `persona_model.self_development_minutes` reads `self_development.every_seconds` from the local config ("compat until P7") before the persona model | `config/local.json` and `config/local.example.json`, `self_development.every_seconds` | a deployment whose interval comes only from that key | her live config holds 86,400 (1,440 min); her policy and her persona model set no `self_development.every_min`; the core default is 1,440 min | remove the read and the key from both files: her interval stays 1,440 min (the default) |
 
 **Her reading** (agent line 0294):
 
@@ -236,7 +240,7 @@ of fields, no content):
 3. *The local config line removed*, as it was: `config/local.json`, `self_development.every_seconds`, value `86400`
    (inside `"self_development": {"enabled": true, "every_seconds": 86400}`). Rollback is that key back with that
    value and this landing reverted. Without that key a deployment has no single setting for the daytime interval:
-   it is per persona (`self_development.every_min` in a persona model, or her `set_policy`), else 1,440 min; a
+   it is per persona (`self_development.every_min` in a persona model; not settable by her `set_policy`), else 1,440 min; a
    deployment that had set another value in its local config falls back to 1,440 (here 86,400 s = 1,440 min).
 4. *What the removed render branch would have returned* (her count, line 0297): no document revision carries a
    `content.body` (0 of 1,869; every one is `{kind, title, sections, source}`), so the branch rendered nothing,
@@ -277,3 +281,57 @@ the blocks this proof did not see, named, not claimed. One existing test changes
 
 **Landing:** one, with a restart; the comparison's report (turns compared, mismatches 0, blocks unseen) goes with
 it. A mismatch stops the landing.
+
+## 9. F14 design: her daytime interval, and clearing a parameter (2026-11-10)
+
+Her choice (agent line 0302, 0303): the interval through `set_policy`, and one rule for clearing every parameter.
+
+1. *The parameter.* `self_development.every_min` joins the core's `set_policy` parameters (`CORE_WRITABLE_KEYS`,
+   for every persona; not a package's own `policy_keys`): integer, 360 to 10,080 minutes, its spec shaped as
+   `heartbeat.every_min`'s. The 360 bound is `set_policy`'s alone: a persona model's own default may be lower (the
+   schema's minimum, 60, stays; it is every persona's). The owner's switches (`self_development.enabled`,
+   `night`) stay out of it. `set_policy` is a home, owner-private turn's tool (`POLICY_SET_REQUIRES_OWNER_PRIVATE`
+   elsewhere); its description says so beside the `null` sentence.
+2. *The retime, once per change.* Her `set_policy` of the interval ensures the daytime plan at once (the tool
+   ensures today only after a `heartbeat.` or `rhythm.` key; `self_development.every_min` joins them, through
+   `ensure_self_development`). If the policy is written but the retime fails, the answer says both: the value is
+   set, the plan is not yet moved, with the code (`NATIVE_SCHEDULE_UPDATE_FAILED` or
+   `NATIVE_SELF_DEVELOPMENT_CREATE_INCOMPLETE`), and the rhythm watch tries again within 300 s, since the plan's
+   interval still differs; the rhythm
+   watch (every 300 s) and each start ensure it too, for a change in the persona model. When the interval it
+   computes (policy, else persona model, else `SELF_DEVELOPMENT_DEFAULT_MIN`, 1,440) differs from the live plan's
+   `rule.every_seconds`, the native record is updated in place (`/schedule/update`, as `_rhythm_plan` retimes her
+   heartbeat), the plan's `rule` and `next_fire_at` follow, and one `rhythm.retimed` audit row (`audit_events`, on the plan's stream) records `from` and `to`: the
+   development plan's own, written in `_ensure_development_plan`, without the heartbeat's `drift` key (a retime
+   here happens only when the value differs, so it would always be false and say nothing).
+   An equal value does nothing. Every path that writes the native record uses the computed interval: today a
+   live plan returns early and a missing native record is rebuilt from the plan's old `rule.every_seconds`
+   (`_ensure_development_plan`); both take the new one. The plan record (in the `plans` collection),
+   its `fire_count` and `fire_count_since` are Asuna's and stay through a retime (DSH keeps the task's id when it rebuilds it), so the
+   count goes on; `rhythm.retimed` marks where the interval changed. *Where the next run falls:* DSH rebuilds an `every` task whose timing changes from
+   the moment of the change (`createEveryScheduleRecord`: now plus the interval) and takes no anchor, so the next
+   run is the moment of the change plus the new interval. With her plan as read on 11-10 (last run 18:18:44, next
+   11-11 18:18, 1,440 min): set to 360 at 19:02, the next run is 11-11 01:02; set to 10,080 at 19:02, it is 11-17
+   19:02 and tomorrow's 18:18 does not come. A shorter interval never fires at once for the time already passed.
+3. *Clearing.* For every `set_policy` parameter (the core's `CORE_WRITABLE_KEYS`, the private `PRIVATE_KEYS` and
+   a package's `policy_keys`: whatever `key_spec` accepts), `value: null` removes the key from her policy (the
+   key leaves the stored params; no `null` is written, so the source never reads `policy` for a cleared one), so it is read again from
+   her persona model, else the core default; `null` is the only clearing value. Every other value is checked by
+   the parameter's type and range as today, so `0`, an empty string or `false` for the interval is refused by
+   name (no value can be kept while having no effect). For a boolean, `false` sets the value and `null` clears it:
+   `rhythm.public_clock` set to `false` answers source `policy`, cleared answers `false` from `core`. Clearing one
+   that was never set answers 「本来就没设，无改动」 and is not a failure. After a clear, the parameters whose core default is empty read, when her persona model gives none:
+   `self_development.every_min` → 1,440 min (`SELF_DEVELOPMENT_DEFAULT_MIN`; `CORE_DEFAULTS` holds `None`); `rhythm.sleep_window` → no
+   sleep window; `rhythm.public_clock` → false. Every other parameter has a core default and returns to it (or to
+   her persona model's value).
+4. *The answer names the source.* A set or a clear answers one line: the value now and where it comes from
+   (`policy`, `model`, `core`).
+5. *Words.* The rhythm refusal's 「快慢」 and the page's sentences on her interval are made true in this landing,
+   not before: the daytime interval becomes hers to set.
+
+**Landing:** one, with a restart, after F8's. Tests: the range refused outside 360 to 10,080, and `0`, `''`,
+`false` refused by name; a change retimes the live plan once, its `next_fire_at` the change plus the new interval
+(shorter and longer), and an equal value does not retime; `null` clears and a second `null` answers
+「本来就没设，无改动」; the interval cleared answers its value from `model` or `core`; `rhythm.public_clock` set
+`false` answers `policy`, cleared answers `core`; a set of the interval retimes at once (not at the watch). Each run on the
+old code first.

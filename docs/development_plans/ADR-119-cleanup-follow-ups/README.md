@@ -333,7 +333,9 @@ Her choice (agent line 0302, 0303): the interval through `set_policy`, and one r
    heartbeat), the plan's `rule` and `next_fire_at` follow, and one `rhythm.retimed` audit row (`audit_events`, on the plan's stream) records `from` and `to`: the
    development plan's own, written in `_ensure_development_plan`, without the heartbeat's `drift` key (a retime
    here happens only when the value differs, so it would always be false and say nothing).
-   An equal value does nothing. Every path that writes the native record uses the computed interval: today a
+   An equal value does nothing. A consequence to know: a change of `SELF_DEVELOPMENT_DEFAULT_MIN` or of a persona model's
+   `self_development.every_min` now retimes the live plan at the next ensure (a start or the watch) when her
+   policy holds no value (her reading, line 0315). Every path that writes the native record uses the computed interval: today a
    live plan returns early and a missing native record is rebuilt from the plan's old `rule.every_seconds`
    (`_ensure_development_plan`); both take the new one. The plan record (in the `plans` collection),
    its `fire_count` and `fire_count_since` are Asuna's and stay through a retime (DSH keeps the task's id when it rebuilds it), so the

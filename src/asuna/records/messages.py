@@ -204,7 +204,8 @@ def said(store, scene=_ANY, epoch=_ANY, *, people_only=False, heard_before=_ANY,
         return View(store, None)
     _authors(where, people_only=people_only)
     if unsummarised:
-        where['summary_batch_id'] = Exists(False)
+        # Not yet summarised: no batch id, absent, null or empty, as every reader of the field takes it (ADR-119 F12).
+        extra.append(Or({'summary_batch_id': Exists(False)}, {'summary_batch_id': IsNull()}, {'summary_batch_id': ''}))
     parts = ([where] if where else []) + extra + [_said(inbound)]
     return View(store, And(*parts) if len(parts) > 1 else parts[0], by)
 

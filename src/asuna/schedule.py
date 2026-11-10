@@ -462,7 +462,10 @@ class ScheduleService:
             why = refused[1] if refused and refused[0] >= due else HANDOFF_UNSEEN
             self.store.audit(plan_id, 'schedule.handoff_late', {'seq': event['seq'], 'due': data['acceptedAt'],
                                                                 'why': why}, None)
-            self._deliver(event['seq'], data['id'], creates, late={'due': data['acceptedAt'], 'why': why})
+            try:
+                self._deliver(event['seq'], data['id'], creates, late={'due': data['acceptedAt'], 'why': why})
+            except Exception as exc:            # one firing's failure stays its own; the others are still handed on
+                self.store.audit(plan_id, 'schedule.handoff_failed', {'seq': event['seq'], 'error': str(exc)[:300]})
             plans.pop(plan_id, None)            # read again: the delivery moved its seq on
 
     def _watch_presence(self):

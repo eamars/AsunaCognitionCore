@@ -228,6 +228,8 @@ of fields, no content):
    `documents.py` is the only writer of document revisions. Were one ever read, `render.readable_sections` refuses
    it as `DOC_SECTIONS_MISSING: 「TITLE」（KIND）这份文档的修订里没有 sections`, naming the document, not a bare
    stack.
+   No test covers this: a revision without sections can only come from a hand edit of the database or an
+   outside import, and the runtime refusal is what stops it (her reading, line 0295).
 2. *No migration is left for a new scheduler session.* The scheduler session is `asuna-scheduler-` plus a hash of
    the database name: the day the database is renamed, nothing moves the old plans' links; they are re-armed by
    hand.

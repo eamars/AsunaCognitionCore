@@ -223,6 +223,19 @@ class ScheduleService:
         events=self._native_events()
         creates, _, deleted=self._grouped(events)
         if plan.get('schedule_id') in creates and plan['schedule_id'] not in deleted:
+            if plan['rule'].get('every_seconds') != interval:
+                # Her interval changed (set_policy, or the persona model): the live record is retimed in place
+                # (ADR-119 F14); DSH rebuilds it from now, so the next run is now plus the new interval.
+                native = self.lane.schedule('/schedule/update', {'id': plan['schedule_id'],
+                    'change': {'kind': 'every', 'every_seconds': interval}})
+                if not isinstance(native, dict) or native.get('id') != plan['schedule_id']:
+                    raise ValueError('NATIVE_SCHEDULE_UPDATE_FAILED')
+                current = plan_records.get(self.store, plan_id)
+                plan = plan_records.save(self.store, {**current, 'rule': {'every_seconds': interval},
+                    'next_fire_at': native.get('scheduledAt'), 'scheduled_at': native.get('scheduledAt')},
+                    expected=current['revision'], stream=plan_id)
+                self.store.audit(plan_id, 'rhythm.retimed', {'from': current['rule'], 'to': plan['rule']},
+                                 plan['scope_key'])
             if not plan.get('native_recurring'):
                 # A record from before ADR-119 F10 lacks the two shown fields; the count starts now, not back-filled.
                 plan_records.save(self.store, {**plan, 'native_recurring': True, 'fire_count_since': now(),
@@ -230,13 +243,16 @@ class ScheduleService:
                     expected=plan['revision'], stream=plan_id)
             return
         native = (self._created(plan_id,events) if not plan.get('schedule_id') else None) or self._create_native(
-            plan_id, {'every_seconds': plan['rule']['every_seconds']})
+            plan_id, {'every_seconds': interval})
         if not isinstance(native, dict) or not native.get('id'):
             raise ValueError('NATIVE_SELF_DEVELOPMENT_CREATE_INCOMPLETE')
         current = plan_records.get(self.store, plan_id)
+        if current['rule'].get('every_seconds') != interval:
+            self.store.audit(plan_id, 'rhythm.retimed', {'from': current['rule'], 'to': {'every_seconds': interval}},
+                             current['scope_key'])
         plan_records.save(self.store, {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
             'scheduled_at': native['scheduledAt'], 'next_fire_at': native['scheduledAt'], 'native_recurring': True,
-            'status': 'ACTIVE'}, expected=current['revision'], stream=plan_id)
+            'rule': {'every_seconds': interval}, 'status': 'ACTIVE'}, expected=current['revision'], stream=plan_id)
 
     def _night_stage(self, plan, occurrence):
         """One night stage when it is due (ADR-021): inside her window, her pace after the last stage, and nothing of
@@ -390,6 +406,10 @@ class ScheduleService:
             self.store.audit('rhythm-plans', 'rhythm.watch_failed', {'error': str(exc)[:300]})
             watched = None
         if deep:
+            try:                        # a changed interval reaches the live plan (ADR-119 F14), its own failure
+                self.ensure_self_development()
+            except Exception as exc:
+                self.store.audit('rhythm-plans', 'rhythm.watch_failed', {'error': str(exc)[:300]})
             try:
                 self.hand_on_late()
             except Exception as exc:

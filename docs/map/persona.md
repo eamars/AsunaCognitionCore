@@ -22,6 +22,7 @@ Persona model: validation and effective parameter values (ADR-009 PERSONA_CONTRA
 - def `value_words` — What a key takes, in words: its type and its bounds or choices.
 - def `check_value`
 - def `effective` — policy store > persona model default > core default (None when nothing applies).
+- def `source_of` — (value, where it comes from: 'policy', 'model' or 'core') for a set_policy parameter (ADR-119 F14).
 - def `self_development_minutes` — policy > model > 1440.
 
 ## `persona_data`

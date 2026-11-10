@@ -79,6 +79,9 @@ ERRAND_FROM = ('external', 'scheduled', 'note')
 # Her plan tool on one of the four rhythms, update or cancel alike (her wording, ADR-119 F10, line 0285).
 PLAN_RHYTHM = ('「%s」是你的节律（心跳、夜间沉淀、自我改进或整理安静的群）：这四条归程序，调它们用 set_policy'
                '（快慢、时间和夜里的窗口；总开关归主人）。')
+# set_policy's answers (ADR-119 F14, her wording).
+POLICY_NOT_SET = '本来就没设，无改动'
+POLICY_NOT_RETIMED = '值已经设上，钟还没挪（%s）；巡查 5 分钟内会再试。'
 PLAN_ENDED = {'CANCELLED': '取消', 'SUSPENDED': '停', 'FIRED': '跑完', None: '失效'}
 # ADR-087 §4.4 (with her ask: the new id named, the old one plainly still fired).
 PLAN_MOVED_FIRED = ('「%s」这回合已经到点跑完了，它还是跑完的那条，没有改动；按你给的时间新建了一条：%s。'
@@ -361,9 +364,10 @@ TOOLS = {
     'set_policy': {
         'description': ('调整你自己声明过的一个参数（persona-model 里的 policy key）。也管开关：key=tools_off 把 place 那个对话的一些工具关掉（value 是工具名列表，'
                          '空列表全部恢复；hours 默认 24，最多 168）；key=switch_off 提前结束一个开关（value 写它的 id）'
-                         '。'),
+                         '。value 写 null 清掉这一项，回到人格模型或核心的默认；回执说现在的值和它来自哪一级'
+                         '（policy、model、core）。只在家里的私聊里能改。'),
         'parameters': {'key': _s('参数名，或 tools_off、switch_off', required=True),
-                       'value': {'type': 'json', 'description': '新的值', 'required': True},
+                       'value': {'type': 'json', 'description': '新的值；null 清掉', 'required': True},
                        'reason': _s(limit=2000, description='为什么改', required=True),
                        'place': _s('tools_off：哪个对话，照抄 place'),
                        'hours': {'type': 'integer', 'description': 'tools_off：关多少小时'}},
@@ -2997,23 +3001,36 @@ class RoleTools:
             return self._switch_policy(ep, key, args, reason), False
         from . import dice
         table = None
-        if key in dice.KEYS.values():
+        if key in dice.KEYS.values() and args.get('value') is not None:
             try:
                 table = dice.words(dice.parse(args.get('value')))
             except ValueError as exc:
                 raise Refused(str(exc), ['POLICY_VALUE_INVALID']) from None
         if 'value' not in args:
             raise Refused('要写 value：这个参数的新值（类型照它的声明，比如整数、true/false）。', ['ARGS_MISSING'])
+        from .persona_model import source_of
         model, _ = model_and_policy(self.store, ep['persona'])
         policy = PolicyStore(self.store, ep['persona'], model)
         spec_what = policy.validate([{'key': key, 'value': args['value'], 'what': cut(reason, 300)}])
-        what = ((model.get('policy_keys') or {}).get(key) or {}).get('what') or spec_what[key]['what']
+        if args['value'] is None and key not in policy.params():
+            now_value, source = source_of(model, key, policy.params())
+            return {'key': key, 'done': POLICY_NOT_SET, 'now': now_value, 'from': source}, False
+        what = ((model.get('policy_keys') or {}).get(key) or {}).get('what') or (spec_what[key] or {}).get('what') \
+            or cut(reason, 300)
         revision = policy.set([{'key': key, 'value': args['value'], 'what': what}], base_revision_id=policy.read()[0],
                               reason=reason, author='character', mutation_id=f"{ep['_id']}:policy_set:{call_id}",
                               sources=[ep['source_event_id']])
         scheduler = self.coordinator.scheduler
-        result = {'key': key, 'value': args['value'], 'revision_id': revision['_id'],
+        now_value, source = source_of(model, key, policy.params())
+        result = {'key': key, 'value': args['value'], 'revision_id': revision['_id'], 'now': now_value, 'from': source,
                   **({'stored_table': table} if table else {})}      # the whole table, so a name left out shows as 0
+        if scheduler and hasattr(scheduler, 'ensure_self_development') and key == 'self_development.every_min':
+            # Her daytime interval moves the live plan at once (ADR-119 F14); the rhythm watch retries a failure.
+            try:
+                scheduler.ensure_self_development()
+            except Exception as exc:
+                from .faults import cause
+                result['note'] = POLICY_NOT_RETIMED % cause(str(exc) or type(exc).__name__)
         if scheduler and hasattr(scheduler, 'ensure_presence') and key.startswith(('heartbeat.', 'rhythm.')):
             # A new rhythm takes effect through schedule_update, never delete + create.
             scheduler.ensure_presence()

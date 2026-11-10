@@ -55,6 +55,10 @@ class PolicyStore:
             if spec is None:
                 raise Denied("POLICY_KEY_UNDECLARED: 没有可以改的参数「%s」；能改的是：%s，照抄一个"
                              % (echoed(item['key']), '、'.join(writable_keys(self.model))))
+            if item.get('value') is None:
+                # null clears it (ADR-119 F14): the key leaves her policy, read again from the model or the core.
+                out[item['key']] = None
+                continue
             try:
                 check_value(spec, item.get('value'))
             except ValueError as exc:
@@ -82,7 +86,9 @@ class PolicyStore:
                              'base_revision_id': base_revision_id, 'reason': 'BASE_REVISION_STALE'}, SCOPE)
             raise Conflict(STALE)
         params = self.read()[1] if head else {}
-        params.update(changes)
+        params.update({key: value for key, value in changes.items() if value is not None})
+        for key in [key for key, value in changes.items() if value is None]:
+            params.pop(key, None)                  # a cleared key is gone, never stored as null
         revision_id = sha(canonical({'mutation_id': mutation_id, 'entity': self.entity}))
         revision = head_records.save_revision(self.store, {
             '_id': revision_id, 'mutation_id': mutation_id, 'entity_key': self.key, 'scope_key': SCOPE,

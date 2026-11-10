@@ -36,6 +36,9 @@ CORE_WRITABLE_KEYS = {
     'heartbeat.dice_awake': {'type': 'string', 'what': '醒着时心跳掷骰子的分布，带名字写：歇着 40、有趣 31、自我开发 10、自我评估 12、复盘 2、找人 5、待着 0'},
     'heartbeat.dice_asleep': {'type': 'string', 'what': '作息窗里心跳掷骰子的分布，带名字写（含 待着），漏写的算 0；整夜安静就写 歇着 100'},
     # Her night self-development stages (ADR-021): when and how often; the owner can switch them off.
+    # Her daytime self-development interval (ADR-119 F14): set_policy's own bounds; a persona model may default lower.
+    'self_development.every_min': {'type': 'integer', 'min': 360, 'max': 10080,
+                                   'what': '白天自我开发的间隔（分钟）'},
     'self_development.night_start_hour': {'type': 'integer', 'min': 0, 'max': 23,
                                           'what': '夜里分段自我开发从几点开始（你的钟面，整点）'},
     'self_development.night_hours': {'type': 'integer', 'min': 0, 'max': 8,
@@ -235,6 +238,19 @@ def effective(model: dict, key: str, policy: dict | None = None):
         if value is not _MISSING:
             return copy.deepcopy(value)
     return None
+
+
+def source_of(model: dict, key: str, policy: dict | None = None) -> tuple:
+    """(value, where it comes from: 'policy', 'model' or 'core') for a set_policy parameter (ADR-119 F14)."""
+    if key == 'self_development.every_min':
+        return self_development_minutes(model, policy)
+    if policy and key in policy:
+        return policy[key]['value'], 'policy'
+    value = lookup(model or {}, key)
+    if value is not _MISSING and value is not None:
+        return copy.deepcopy(value), 'model'
+    value = lookup(CORE_DEFAULTS, key)
+    return (None if value is _MISSING else copy.deepcopy(value)), 'core'
 
 
 def self_development_minutes(model: dict, policy: dict | None) -> tuple:

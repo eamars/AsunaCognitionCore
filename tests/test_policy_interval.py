@@ -94,3 +94,27 @@ def test_a_boolean_false_is_a_value_and_null_clears_it(her):
     assert (put['now'], put['from']) == (False, 'policy')
     cleared = set_policy(her, None, key='rhythm.public_clock')
     assert (cleared['now'], cleared['from']) == (False, 'core'), 'the same value, another source'
+
+
+def test_a_retired_key_is_cleared_by_null_and_never_written_again(her):
+    """ADR-119 F14 §9.7: a key stored under an older model and no longer declared had no way out of her policy."""
+    import copy
+    model = model_and_policy(her.store, PERSONA)[0]
+    older = copy.deepcopy(model)
+    older['policy_keys'] = {**(older.get('policy_keys') or {}),
+                            'heartbeat.after_own_min': {'type': 'integer', 'min': 0, 'max': 600}}
+    store = PolicyStore(her.store, PERSONA, older)
+    store.set([{'key': 'heartbeat.after_own_min', 'value': 30, 'what': 'old'}], base_revision_id=store.read()[0],
+              reason='an older model', author='character', mutation_id='older-model')
+    no = refused(her, turn(her, ['set_policy']), 'set_policy',
+                 {'key': 'heartbeat.after_own_min', 'value': 45, 'why': 'test'})
+    assert '没有可以改的参数' in str(no), 'a value for a retired key is refused as today'
+    gone = set_policy(her, None, key='heartbeat.after_own_min')
+    assert gone['done'] == role_tools.POLICY_RETIRED % '30'
+    assert 'heartbeat.after_own_min' not in PolicyStore(her.store, PERSONA, model).params()
+    again = refused(her, turn(her, ['set_policy']), 'set_policy',
+                    {'key': 'heartbeat.after_own_min', 'value': None, 'why': 'test'})
+    assert '没有可以改的参数' in str(again), 'once gone it is undeclared like any unknown key'
+    never = refused(her, turn(her, ['set_policy']), 'set_policy',
+                    {'key': 'heartbeat.enabled', 'value': None, 'why': 'test'})
+    assert '没有可以改的参数' in str(never), "the owner's key is not hers to clear"

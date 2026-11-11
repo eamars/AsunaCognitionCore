@@ -82,6 +82,9 @@ PLAN_RHYTHM = ('「%s」是你的节律（心跳、夜间沉淀、自我改进�
 # set_policy's answers (ADR-119 F14, her wording).
 POLICY_NOT_SET = '本来就没设，无改动'
 POLICY_NOT_RETIMED = '值已经设上，钟还没挪（%s）；巡查 5 分钟内会再试。'
+# A stored key no longer declared, cleared (ADR-119 F14 §9.7, her wording, line 0343): only what the program sees.
+POLICY_RETIRED = ('这个参数不在能改的参数里了，从你的参数里拿掉了，原来存的是 `%s`。'
+                  '它不再是你能改的键，写值会按"没有可以改的参数"拒。')
 PLAN_ENDED = {'CANCELLED': '取消', 'SUSPENDED': '停', 'FIRED': '跑完', None: '失效'}
 # ADR-087 §4.4 (with her ask: the new id named, the old one plainly still fired).
 PLAN_MOVED_FIRED = ('「%s」这回合已经到点跑完了，它还是跑完的那条，没有改动；按你给的时间新建了一条：%s。'
@@ -364,7 +367,7 @@ TOOLS = {
     'set_policy': {
         'description': ('调整你自己声明过的一个参数（persona-model 里的 policy key）。也管开关：key=tools_off 把 place 那个对话的一些工具关掉（value 是工具名列表，'
                          '空列表全部恢复；hours 默认 24，最多 168）；key=switch_off 提前结束一个开关（value 写它的 id）'
-                         '。value 写 null 清掉，回到默认。只在家里私聊能改。'),
+                         '。value 写 null 清掉，回到默认。这一项只在家里的对话能改：主人的私聊、家里那个群，和可信的线（开发助手、你自己的另一处）。'),
         'parameters': {'key': _s('参数名，或 tools_off、switch_off', required=True),
                        'value': {'type': 'json', 'description': '新的值', 'required': True},
                        'reason': _s(limit=2000, description='为什么改', required=True),
@@ -3014,6 +3017,14 @@ class RoleTools:
         if args['value'] is None and key not in policy.params():
             now_value, source = source_of(model, key, policy.params())
             return {'key': key, 'done': POLICY_NOT_SET, 'now': now_value, 'from': source}, False
+        from .persona_model import key_spec
+        if key_spec(model, key) is None:                 # validate let only a stored retired key through
+            stored = policy.params()[key].get('value')
+            revision = policy.set([{'key': key, 'value': None, 'what': cut(reason, 300)}],
+                                  base_revision_id=policy.read()[0], reason=reason, author='character',
+                                  mutation_id=f"{ep['_id']}:policy_set:{call_id}", sources=[ep['source_event_id']])
+            return {'key': key, 'done': POLICY_RETIRED % json.dumps(stored, ensure_ascii=False),
+                    'revision_id': revision['_id']}, False
         what = ((model.get('policy_keys') or {}).get(key) or {}).get('what') or (spec_what[key] or {}).get('what') \
             or cut(reason, 300)
         revision = policy.set([{'key': key, 'value': args['value'], 'what': what}], base_revision_id=policy.read()[0],

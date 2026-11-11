@@ -389,4 +389,9 @@ old code first.
    a retired key leaves only when she clears it.
 
 Landing: one, with a restart, after her live retime reading. Tests: `null` on a stored undeclared key removes it and
-a second `null` is refused as undeclared; a value for it is refused; the tool budget's new size, stated.
+a second `null` is refused as undeclared; a value for it is refused; an owner's key is not cleared this way.
+Her wording (line 0342): the description 「这一项只在家里的对话能改：主人的私聊、家里那个群，和可信的线（开发助手、你自己的另一处）。」
+(the character brain's tool descriptions +36 characters, budget 21,158), and the retired key's answer
+(`role_tools.POLICY_RETIRED`, line 0343) with the value it held and the refusal she meets next. It says only what
+the program sees, a stored key that is not declared: not that nothing reads it, nor that it was ever retired rather
+than written by mistake.

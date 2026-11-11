@@ -10,7 +10,7 @@ import json
 
 from .config import echoed
 from .evidence import canonical, sha
-from .persona_model import check_value, key_spec, value_words, writable_keys
+from .persona_model import OWNER_KEYS, check_value, key_spec, value_words, writable_keys
 from .state import Conflict, Denied, now
 from .records import heads as head_records
 
@@ -52,6 +52,10 @@ class PolicyStore:
             if not isinstance(what, str) or not 1 <= len(what) <= 300:
                 raise ValueError(f"POLICY_WHAT_REQUIRED: {echoed(item['key'])}")
             spec = key_spec(self.model, item['key'])
+            if spec is None and item.get('value') is None and item['key'] not in OWNER_KEYS                     and item['key'] in self.params():
+                # A retired key (ADR-119 F14 §9.7): stored, no longer declared. null takes it out; no value writes it.
+                out[item['key']] = None
+                continue
             if spec is None:
                 raise Denied("POLICY_KEY_UNDECLARED: 没有可以改的参数「%s」；能改的是：%s，照抄一个"
                              % (echoed(item['key']), '、'.join(writable_keys(self.model))))

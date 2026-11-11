@@ -46,7 +46,12 @@ that word; they are her real record, not a mistake to clear, which is why they j
    names the program gives, are made by their first write as before. This would not have stopped 流水, which she
    made with `kind: journal`; rule 2 does.
 4. *流水 joins work_log, once* (her choice, line 0358: she uses `doc:流水#sid` refs as pointers in her plans, notes
-   and self). No sid is in both records (0 of 352 and 1,132), so every section keeps its sid. A one-off tool
+   and self). No sid is in both records (0 of 352 and 1,132), so every section keeps its sid, and a ref written with
+   a whole sid reads as `doc:work_log#sid`. Not more than that (her count, line 0364: 483 places name 流水 in her
+   texts, the baseline kept by her): a ref written short, with an ellipsis or as a placeholder never read, and
+   prose such as 「正本在流水某节」 (among them ten active plans' intents) is not made readable by the merge or by
+   rule 2; she changes the live ones herself (her plan for 2026-11-13), history stays. The counts are taken again
+   at the write, not taken from this page. A one-off tool
    (`<data>/private/claude-tools/merge_journal.py`, not tracked) runs while her worker is stopped at the install:
    the 352 entries become work_log entries (merged with work_log's by `created_at`, each record keeping its order,
    numbered 1 to 1,484), their 179 revisions follow, their 352 tier items and 2 move rows are re-keyed, their 352

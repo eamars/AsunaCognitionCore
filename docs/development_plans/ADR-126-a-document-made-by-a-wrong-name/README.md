@@ -26,7 +26,10 @@ Status: **Proposed** 2026-11-11; designed and built on a branch the same day, la
 
 The broken invariant: the program shows her one name for a document and takes another. `write_document`'s
 description named her documents by the shown words (人格、口吻、活账), its `kind` said 「journal 流水」, and the
-things block and `recall` labelled her items 「自我」「流水」; the tools take slugs. She wrote what she was shown.
+things block and `recall` labelled her items 「自我」「流水」; the tools take slugs. She wrote what she was shown, and
+she was told: when big sis turned the document 流水 into rows (2026-11-09 12:28, agent line), the message said to go
+on writing `append_section`, `replace_section` and `set_tags` to `doc=流水`. Most of its 352 entries were written on
+that word; they are her real record, not a mistake to clear, which is why they join work_log (4).
 
 1. *Where she reads a name, she reads the one she writes.* `write_document`'s description names her documents by
    slug (persona, voice, self, core, work_log, beside their words), its `kind` is required for a new document, its
@@ -47,11 +50,19 @@ things block and `recall` labelled her items 「自我」「流水」; the tools
    (`<data>/private/claude-tools/merge_journal.py`, not tracked) runs while her worker is stopped at the install:
    the 352 entries become work_log entries (merged with work_log's by `created_at`, each record keeping its order,
    numbered 1 to 1,484), their 179 revisions follow, their 352 tier items and 2 move rows are re-keyed, their 352
-   index rows are re-keyed with their embeddings (nothing is embedded again) and the 27 near-duplicate pairs naming
-   them are deleted (the index finds pairs again from the vectors). The record's 205 revisions from when it was one
-   document stay as history. One `journal.merged` audit row. Run on a copy of her four collections first
-   (2026-11-11 16:34, dropped after): work_log read back with 1,484 sections, every old sid, no tier or index row left
-   on 流水, the order unbroken; then planned on her data without writing (the same counts).
+   index rows (`memory_shadow`, rows `item`) are re-keyed with their embeddings, so nothing is embedded again, and the
+   27 near-duplicate pairs naming them (`memory_shadow`, rows `pair`) are re-keyed too: the index recomputes a pair
+   only when an item's text changes, so a deleted pair would not have come back. Fields written, and no others: a
+   moved entry's `_id`, `slug`, `seq`; a work_log entry's `seq`; a revision's `slug` and `entry_id`; a tier item's
+   `_id` and `doc`; a move row's `doc` and `item`; an index item's `_id` and `doc`; a pair's `_id` and `items` (and the
+   store's own `revision`, `_last_op`, `schema_version` where it writes). No time, text or tag changes. The record's 205
+   revisions from when it was one document stay as history. One `journal.merged` audit row. Run on a copy of her four
+   collections first (2026-11-11 16:40, dropped after): work_log read back with 1,484 sections, every old sid, each
+   entry's `created_at`, `updated_at` and text hash the same before and after, no tier or index row left on 流水,
+   the order unbroken, all 67 pairs present and none naming a missing item; then planned on her data without writing
+   (the same counts). Evidence (her ask, line 0361): the rosters before and after (every entry's slug, sid, seq,
+   `created_at`, `updated_at`, `body_sha256`) with `SHA256SUMS`, the copy run's in
+   `<data>/private/evidence/adr126/copy-run/` (about 0.7 MB), the live run's in `<data>/private/evidence/adr126/`.
 5. *The four documents named by a word* (人设, 口吻, 自我, 活账). She moves what she wants from them first (自我 done
    2026-11-11) and says when all four may go; rule 2 then makes them unnamed history. The landing waits for her word.
 

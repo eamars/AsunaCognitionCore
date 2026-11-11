@@ -62,7 +62,7 @@ that word; they are her real record, not a mistake to clear, which is why they j
    the order unbroken, all 67 pairs present and none naming a missing item; then planned on her data without writing
    (the same counts). Evidence (her ask, line 0361): the rosters before and after (every entry's slug, sid, seq,
    `created_at`, `updated_at`, `body_sha256`) with `SHA256SUMS`, the copy run's in
-   `<data>/private/evidence/adr126/copy-run/` (about 0.7 MB), the live run's in `<data>/private/evidence/adr126/`.
+   `<data>/private/evidence/adr126/copy-run/` (955,873 bytes), the live run's in `<data>/private/evidence/adr126/`.
 5. *The four documents named by a word* (人设, 口吻, 自我, 活账). She moves what she wants from them first (自我 done
    2026-11-11) and says when all four may go; rule 2 then makes them unnamed history. The landing waits for her word.
 

@@ -25,6 +25,13 @@ Her choice (agent line 0342): both halves, and a display name is always read as 
 of that name is looked for. So her document `自我` (kind `working`) can no longer be named by `write_document`; it
 stays as it is, hers. Her wording for the refusal before it is built.
 
+3. The documents already made this way (her ask, line 0354): once a display name reads as its slug, her document
+   `自我` can no longer be written, and must not stay silently, since `recall` can still bring its text back. She
+   reads its four sections and moves into her self what she wants, by hand; the program never guesses. Then it
+   leaves her store by a designed path (whether one exists for a `working` document is read in the design). She is
+   counting whether any other document of hers was made by a wrong name; the change covers every one she finds,
+   not only `自我`.
+
 ## 3. Closes when
 
 The change built and shown by a staged case for each half (a misspelled name refused with her documents listed; a

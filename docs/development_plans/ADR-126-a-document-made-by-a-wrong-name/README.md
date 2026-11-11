@@ -1,6 +1,6 @@
 # ADR-126: A document named wrongly is made, not refused
 
-Status: **Proposed** 2026-11-11 (laid down; nothing built). Her finding (agent line 0338, 2026-11-10 23:22).
+Status: **Proposed** 2026-11-11; designed and built on a branch the same day, landing after her word (§2.5). Her finding (agent line 0338, 2026-11-10 23:22).
 
 ## 1. What is known
 
@@ -22,26 +22,45 @@ Status: **Proposed** 2026-11-11 (laid down; nothing built). Her finding (agent l
   marks them is a name equal to a display name, with no `memory_tiers` rows.
 - Many of her documents have Chinese names on purpose; only the seven display names are read as slugs.
 
-## 2. The change (to design with her)
+## 2. The change (reviewed 2026-11-11 at the owner's ask; her agreement, agent line 0358 to 0360)
 
-1. Making a document is said: `append_section` to a name that does not exist makes it only when the call says so
-   (`kind` given); otherwise it is refused as `DOC_NOT_FOUND` with the list of her documents, as the other
-   operations are refused today.
-2. A display name is read as its slug: `自我`, `流水` and the other `STORE_WORDS` names are taken as the store they
-   name, so writing by the name she sees reaches the document she means.
+The broken invariant: the program shows her one name for a document and takes another. `write_document`'s
+description named her documents by the shown words (人格、口吻、活账), its `kind` said 「journal 流水」, and the
+things block and `recall` labelled her items 「自我」「流水」; the tools take slugs. She wrote what she was shown.
 
-Her choice (agent line 0342): both halves, and a display name is always read as its slug first, before any document
-of that name is looked for. So her document `自我` (kind `working`) can no longer be named by `write_document`; it
-stays as it is, hers. Her wording for the refusal before it is built.
+1. *Where she reads a name, she reads the one she writes.* `write_document`'s description names her documents by
+   slug (persona, voice, self, core, work_log, beside their words), its `kind` is required for a new document, its
+   `doc` lists work_log; the things block, `recall`'s `store` and the full-carry line show a store as its word with
+   the names of its documents (「自我（self）」「流水（work_log）」; a group's notes 「群笔记（group_notes）」, never by the
+   group's id; `memory_tiers.store_label`). A document outside any store (a working document) is listed in none.
+2. *A shown word is never a document's name.* `write_document` and `recall` by `doc` refuse a word of
+   `STORE_WORDS` (not `core`, which is its own slug) as `DOC_NAME_IS_A_STORE_WORD`, listing that kind's documents, or
+   saying it has none yet (`DocumentStore.store_word`, her wording). Not a redirect: 流水, 活账 and 群笔记 name a kind
+   that can hold several documents, and a second name for each document would have to be honoured by every tool that
+   takes a name. A document already named by such a word is left as history, never listed.
+3. *Making a document is said.* `append_section` to a name that is not a document makes one only with `kind`;
+   without it, `DOC_NEW_NEEDS_KIND` lists her documents (her wording). Her self, core and a group's notes, whose
+   names the program gives, are made by their first write as before. This would not have stopped 流水, which she
+   made with `kind: journal`; rule 2 does.
+4. *流水 joins work_log, once* (her choice, line 0358: she uses `doc:流水#sid` refs as pointers in her plans, notes
+   and self). No sid is in both records (0 of 352 and 1,132), so every section keeps its sid. A one-off tool
+   (`<data>/private/claude-tools/merge_journal.py`, not tracked) runs while her worker is stopped at the install:
+   the 352 entries become work_log entries (merged with work_log's by `created_at`, each record keeping its order,
+   numbered 1 to 1,484), their 179 revisions follow, their 352 tier items and 2 move rows are re-keyed, their 352
+   index rows are re-keyed with their embeddings (nothing is embedded again) and the 27 near-duplicate pairs naming
+   them are deleted (the index finds pairs again from the vectors). The record's 205 revisions from when it was one
+   document stay as history. One `journal.merged` audit row. Run on a copy of her four collections first
+   (2026-11-11 16:34, dropped after): work_log read back with 1,484 sections, every old sid, no tier or index row left
+   on 流水, the order unbroken; then planned on her data without writing (the same counts).
+5. *The four documents named by a word* (人设, 口吻, 自我, 活账). She moves what she wants from them first (自我 done
+   2026-11-11) and says when all four may go; rule 2 then makes them unnamed history. The landing waits for her word.
 
-3. The journal path: `流水` read as `work_log` for new entries; whether the 350 rows under `流水` move, and how
-   carrying picks journal entries (by slug or by store), is read in the design first.
-4. The documents already made this way (her ask, line 0354): once a display name reads as its slug, her document
-   `自我` can no longer be written, and must not stay silently, since `recall` can still bring its text back. She
-   reads its four sections and moves into her self what she wants, by hand; the program never guesses. Then it
-   leaves her store by a designed path (whether one exists for a `working` document is read in the design). She is
-   moving what she wants from all four (自我 done 2026-11-11); none leaves before she says it is moved. The change
-   covers every one, not only `自我`.
+Cost: the character brain's tool descriptions +96 characters (budget 21,254). Not changed: her past nights' reviews,
+which listed work_log only, are not filled in for the days she wrote to 流水.
+
+Tests (`tests/test_doc_names.py`, each failing on the old code first): a shown word refused with what she means, and
+with none yet; 流水 with `kind: journal` refused; a new name refused without `kind` and made with it; `recall` by a
+shown word refused; the store labels.
 
 ## 3. Closes when
 

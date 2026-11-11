@@ -38,6 +38,13 @@ JOURNALS = ('work_log',)
 # What she may make a new document (ADR-062): a ledger reaches every turn where it is readable (ledgers_from_program),
 # a journal is a running record like work_log (rows), a working document is read by recall.
 NEW_KINDS = ('ledger', 'journal', 'working')
+# ADR-126 (her wording, agent line 0359): a word the program shows for a kind of document (memory_tiers.STORE_WORDS)
+# is never a document's name, and a name she gives that is not a document makes one only when she says which kind.
+STORE_WORD_NAME = '「%s」是屏幕上标一类文档的词，不是文档名；这一类的文档：%s。doc 照抄其中一个。'
+STORE_WORD_EMPTY = ('「%s」是屏幕上标一类文档的词，不是文档名；这一类还没有文档；要新建就另起一个名字，'
+                    '写 kind（journal、ledger 或 working）。')
+NEW_NEEDS_KIND = ('「%s」不存在；已有的文档：%s。要新建一本就写 kind（ledger、journal 或 working）；'
+                  '要写已有的，照抄它的名字。')
 SECTION_KEYS = ('sid', 'heading', 'body', 'body_sha256', 'visibility', 'inject', 'tags', 'entry_date', 'corrects', 'pin')
 
 
@@ -159,6 +166,13 @@ def named_section(sections, wanted):
             return found[0]
     found = [s for s in sections if slugify(s.get('heading') or '') == slugify(wanted)]
     return found[0] if len(found) == 1 else None
+
+
+def _named_by_program(slug):
+    """A document whose name the program gives, made by her first write without a kind: her self and core, a group's
+    notes (and the retired person files, refused where they are made)."""
+    from .memory_tiers import SELF_DOCS
+    return slug in SELF_DOCS or str(slug).startswith(('group:', 'dossier:'))
 
 
 def _bad_tag(field, value, allowed):
@@ -449,9 +463,33 @@ class DocumentStore:
             'reason': intent.get('reason'), 'author': author, 'parent_revision_id': revision_id,
             'scope_key': SCOPE, 'created_at': now()}, stream='doc:' + mutation_id)
 
+    def store_word(self, name):
+        """DOC_NAME_IS_A_STORE_WORD when `name` is a word shown for a kind of document, else None (ADR-126). The
+        documents listed are the ones of that kind, never one named by such a word (a document made by one before
+        this rule stays as history, unnamed)."""
+        from .memory_tiers import STORE_WORDS
+        stores = {word: store for store, word in STORE_WORDS.items() if word != store}
+        if name not in stores:
+            return None
+        store, words = stores[name], set(stores)
+        if store in ('persona', 'voice', 'self', 'core'):
+            names = [store] if self.read(store)[1] is not None else []
+        elif store == 'group_notes':
+            names = ['group_notes']
+        elif store == 'ledger':
+            names = [slug for slug, _, _ in self.of_kind('ledger')]
+        else:
+            names = [slug for slug in self.slugs() if self.is_journal(slug)]
+        names = [slug for slug in names if slug not in words]
+        return DocumentError('DOC_NAME_IS_A_STORE_WORD', STORE_WORD_NAME % (name, '、'.join(names)) if names
+                             else STORE_WORD_EMPTY % name)
+
     def _own_slugs(self):
-        """Her documents by name, for a refusal (a group's notes are written as group_notes there)."""
-        names = [slug for slug in self.slugs() if not slug.startswith(('group:', 'dossier:'))]
+        """Her documents by name, for a refusal (a group's notes are written as group_notes there); a name that is a
+        word shown for a kind of document is not one of them (ADR-126)."""
+        from .memory_tiers import STORE_WORDS
+        words = {word for store, word in STORE_WORDS.items() if word != store}
+        names = [slug for slug in self.slugs() if not slug.startswith(('group:', 'dossier:')) and slug not in words]
         return '、'.join(names[:30]) + ('…' if len(names) > 30 else '') if names else '还没有'
 
     # ── writes ─────────────────────────────────────────────────────
@@ -544,9 +582,14 @@ class DocumentStore:
             found.append(DocumentError('DOC_OP_NOT_ALLOWED', '「%s」是流水记录：补一节用 append_section，改一节用 replace_section' % slug))
             return found
         sections = []
+        word = self.store_word(slug)
+        if word:
+            return [*found, word]
         if content is None:
             if op != 'append_section':
                 found.append(DocumentError('DOC_NOT_FOUND', '「%s」不存在；已有的文档：%s' % (slug, self._own_slugs())))
+            elif kind is None and not _named_by_program(slug):
+                found.append(DocumentError('DOC_NEW_NEEDS_KIND', NEW_NEEDS_KIND % (slug, self._own_slugs())))
             elif slug.startswith('dossier:'):
                 found.append(DocumentError('DOC_OP_NOT_ALLOWED', '人物档案不再使用；对一个人的理解用 understand_person 写'))
         else:
@@ -582,6 +625,9 @@ class DocumentStore:
         kind = intent.get('kind')
         if kind is not None and kind not in NEW_KINDS:
             raise DocumentError('DOC_KIND_INVALID', _bad_tag('kind', kind, NEW_KINDS))
+        word = self.store_word(slug)
+        if word:
+            raise word
         if self.is_journal(slug) or (kind == 'journal' and op == 'append_section' and self.read(slug)[1] is None):
             if kind not in (None, 'journal'):
                 raise DocumentError('DOC_KIND_FIXED', '「%s」已经是 journal；kind 只在新建文档时选，建好就不改' % slug)
@@ -596,6 +642,8 @@ class DocumentStore:
         if content is None:
             if op != 'append_section':
                 raise DocumentError('DOC_NOT_FOUND', '「%s」不存在；已有的文档：%s' % (slug, self._own_slugs()))
+            if kind is None and not _named_by_program(slug):
+                raise DocumentError('DOC_NEW_NEEDS_KIND', NEW_NEEDS_KIND % (slug, self._own_slugs()))
             if slug.startswith('dossier:'):
                 # Person files are retired: what she knows about someone lives with that person (understand_person).
                 raise DocumentError('DOC_OP_NOT_ALLOWED', '人物档案不再使用；对一个人的理解用 understand_person 写')

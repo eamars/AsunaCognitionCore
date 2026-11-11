@@ -331,14 +331,14 @@ TOOLS = {
                        'new_name': _s('rename 用：新名字')},
     },
     'write_document': {
-        'description': ('写你自己的文档（人格、口吻、活账、工作文档；群笔记只在那个群里）。do 选一样：replace_section 写修订后的整节；'
+        'description': ('写你自己的文档。doc 写文档名：persona（人设）、voice（口吻）、self（自我）、core、work_log（流水）；你建的活账、流水和工作文档用它们自己的名字；群笔记写 group_notes，只在那个群里。do 选一样：replace_section 写修订后的整节；'
                          'append_section 加新的一节；set_tags 只改 visibility、when_shown、tags；'
                          'adopt_seed 接收人格包里更新的种子。正文写在 content。visibility：public 你所有回合读得到，'
                          'owner_private（默认）只在家里。每回合随身带的（程序的开头说明、persona、voice、self、core）'
                          '每处合起来有上限：不常用的改成 on_demand（recall 还读得到）；只在某类回合用的，tags 加 place:group、place:home、place:peer 或 place:dm，'
                          '就只在那里带上。工作文档和人格用 replace_section。只写发生过的事，不写对人说的台词。'),
         'parameters': {
-            'doc': _s('文档，如 persona、voice、group_notes', required=True),
+            'doc': _s('文档名，照抄，如 persona、voice、self、work_log、group_notes', required=True),
             'op': _s('操作', required=True, enum=['replace_section', 'append_section', 'set_tags', 'adopt_seed']),
             'reason': _s('为什么改', required=True),
             'sid': _s('目标节，照抄它的 section（replace_section、set_tags 用）'),
@@ -347,7 +347,7 @@ TOOLS = {
             'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': '标签'},
             'visibility': _s('哪些回合读得到：public＝你所有的回合（包括在群里的）；owner_private＝只在家里的回合', enum=['public', 'owner_private']),
             'inject': _s('什么时候放进上下文', enum=['always', 'on_demand', 'never']),
-            'kind': _s('新建文档时：ledger 活账，每回合带上；journal 流水；working 工作文档，默认', enum=['ledger', 'journal', 'working']),
+            'kind': _s('新建文档时必写：ledger 活账，每回合带上；journal 流水；working 工作文档', enum=['ledger', 'journal', 'working']),
             'pin': _s('群笔记：yes 置顶（超长时不折叠）', enum=['yes', 'no']),
         },
     },
@@ -1839,6 +1839,11 @@ class RoleTools:
             raise Refused('sections 是至多 3 条 {doc, section}（都是文字，section 照抄 recall 或文档里的）%s。'
                           % ('；给了 %d 条' % len(sections) if isinstance(sections, list) and len(sections) > 3 else ''),
                           ['RECALL_SECTIONS_INVALID'])
+        named = DocumentStore(self.store, ep['persona'])
+        for item in sections:
+            word = named.store_word(item['doc'])
+            if word:
+                raise word                            # ADR-126: a word shown for a kind of document is not a name
         c = self.coordinator
         # ADR-117 B6: each part of a recall is timed into its tool.time row (`parts`); a timer never fails it.
         from .tool_watch import part

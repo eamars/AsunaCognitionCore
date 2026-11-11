@@ -210,6 +210,14 @@ def store_of(slug, kind):
     return {'ledger': 'ledger', 'journal': 'journal'}.get(kind)
 
 
+def store_label(store, docs):
+    """A store as she reads it, with the names she writes for its documents (ADR-126): 「自我（self）」,
+    「流水（work_log）」; a group's notes are written group_notes, never by the group's id."""
+    names = sorted({'group_notes' if str(doc).startswith('group:') else doc for doc in docs})
+    word = STORE_WORDS.get(store, store)
+    return '%s（%s）' % (word, '、'.join(names)) if names and names != [word] else word
+
+
 def item_id(persona, doc, sid):
     return 'tier:' + sha(canonical([persona, doc, sid]))[:32]
 
@@ -466,7 +474,7 @@ class Tiers:
                 continue
             listed = sorted(carried, key=lambda row: (-unused(row, moment), row.get('heading') or ''))
             oldest = self._lapse_order([row for row in carried if row['_id'] != pending.get('keep')])[0]
-            lines.append(OVER_LINE % (STORE_WORDS.get(pending['store'], pending['store']), len(carried), cap,
+            lines.append(OVER_LINE % (store_label(pending['store'], [pending['doc']]), len(carried), cap,
                                       '；'.join('「%s」%d 天没用到' % (row.get('heading') or row['sid'], unused(row, moment))
                                                for row in listed),
                                       oldest.get('heading') or oldest['sid']))
@@ -934,7 +942,7 @@ class Tiers:
         def room(kind):
             # Measured as the cap is (_overflow): a document's carried items, the tightest one this turn reads.
             return min(CAPS[kind] - len(self._carried(doc)) for doc in docs[kind])
-        places = {STORE_WORDS[kind]: '、'.join(
+        places = {store_label(kind, docs[kind]): '、'.join(
             '%s %s' % (place, words(ROOM_WORDS, max(0, room(kind))) if place == CARRIED and kind in CAPS
                        else words(COUNT_WORDS, n)) for place, n in tally.items())
                   for kind, tally in sorted(counts.items())}
@@ -1311,7 +1319,7 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
     for key in admit(pool):
         item, row = by_key[key], rows[(by_key[key]['doc'], by_key[key]['sid'])]
         out.append({'_id': ref(item['doc'], item['sid']), 'kind': 'own_item', 'heading': item.get('heading') or row['heading'],
-                    'body_markdown': excerpt(item['text'], excerpt_chars), 'store': STORE_WORDS[row['store']],
+                    'body_markdown': excerpt(item['text'], excerpt_chars), 'store': store_label(row['store'], [item['doc']]),
                     'place': FOLDED if is_folded(item) else row['place'],
                     'age': FACT if row.get('fact') else age_word(row.get('added'), moment),
                     **({'why': BROUGHT_BY % said[key]} if said[key] else {})})
@@ -1348,7 +1356,7 @@ def headings(store, persona, pilot, query, readable, cls, scene_id, shown=()):
         said = key_said(item, table, query)
         if said:
             found.append((-len(said), row['heading'], {'ref': ref(*key), 'heading': row['heading'],
-                                                       'store': STORE_WORDS[row['store']], 'place': row['place'],
+                                                       'store': store_label(row['store'], [key[0]]), 'place': row['place'],
                                                        'why': BROUGHT_BY % said}))
     return [entry for *_, entry in sorted(found)[:HEADINGS_SHOWN]]
 

@@ -57,6 +57,7 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `words`
 - def `age_word`
 - def `store_of` — Which store a document is, or None when it is not tiered (her working documents).
+- def `store_label` — A store as she reads it, with the names she writes for its documents (ADR-126): 「自我（self）」, 「流水（work_log）」; a group's notes are written group_notes, never by the group's id.
 - def `item_id`
 - def `ref`
 - def `items` — View: a persona's items (rows `item`) whose fields equal these (or meet these words), ordered by `by` (none: the database's order).
@@ -315,6 +316,7 @@ Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
   - `revision`
   - `slugs`
   - `of_kind` — [(slug, revision id, content)] of the documents of this kind, by slug: the heads of that kind read once (a head carries its document's kind, `_commit`), then their revisions only.
+  - `store_word` — DOC_NAME_IS_A_STORE_WORD when `name` is a word shown for a kind of document, else None (ADR-126).
   - `not_running_record` — Refuse a whole-document write to a running record (DOC_IS_RUNNING_RECORD): its rows are what every reader reads, and a head written for it would hide them.
   - `seed` — Import a package seed only when the head is missing (package upgrades never overwrite).
   - `problems` — Every problem this write would meet before anything is written, as [DocumentError] (ADR-108 D4b): the intent's own fields, then the document's state, then the budget on the document the write would leave.

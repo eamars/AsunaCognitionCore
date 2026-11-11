@@ -13,6 +13,15 @@ Status: **Proposed** 2026-11-11 (laid down; nothing built). Her finding (agent l
 - The class is wider than display names: any `append_section` to a misspelled name makes a new document.
 - She has let go of the document `自我`; it is hers and stays as it is.
 
+- Her count (agent line 0355, 2026-11-11, structure only): four `working` documents carry a display name of
+  `STORE_WORDS` (`人设`, `口吻`, `自我`, `活账`). The journal has the same slip on its own path: `journal_entries`
+  holds two slugs, `work_log` (1,131 rows) and `流水` (350 rows, still written on 2026-11-11). None of the four
+  documents is in `memory_tiers`, so `recall` does not find their text (she searched one principle written there on
+  2026-11-05: not found).
+- `kind=working` does not mark them: `voice` is `working` too and is carried by its name (`carried.IDENTITY`). What
+  marks them is a name equal to a display name, with no `memory_tiers` rows.
+- Many of her documents have Chinese names on purpose; only the seven display names are read as slugs.
+
 ## 2. The change (to design with her)
 
 1. Making a document is said: `append_section` to a name that does not exist makes it only when the call says so
@@ -25,12 +34,14 @@ Her choice (agent line 0342): both halves, and a display name is always read as 
 of that name is looked for. So her document `自我` (kind `working`) can no longer be named by `write_document`; it
 stays as it is, hers. Her wording for the refusal before it is built.
 
-3. The documents already made this way (her ask, line 0354): once a display name reads as its slug, her document
+3. The journal path: `流水` read as `work_log` for new entries; whether the 350 rows under `流水` move, and how
+   carrying picks journal entries (by slug or by store), is read in the design first.
+4. The documents already made this way (her ask, line 0354): once a display name reads as its slug, her document
    `自我` can no longer be written, and must not stay silently, since `recall` can still bring its text back. She
    reads its four sections and moves into her self what she wants, by hand; the program never guesses. Then it
    leaves her store by a designed path (whether one exists for a `working` document is read in the design). She is
-   counting whether any other document of hers was made by a wrong name; the change covers every one she finds,
-   not only `自我`.
+   moving what she wants from all four (自我 done 2026-11-11); none leaves before she says it is moved. The change
+   covers every one, not only `自我`.
 
 ## 3. Closes when
 

@@ -21,7 +21,9 @@ Status: **Proposed** 2026-11-11 (laid down; nothing built). Her finding (agent l
 2. A display name is read as its slug: `自我`, `流水` and the other `STORE_WORDS` names are taken as the store they
    name, so writing by the name she sees reaches the document she means.
 
-Her wording for the refusal before it is built; whether she wants both halves or one.
+Her choice (agent line 0342): both halves, and a display name is always read as its slug first, before any document
+of that name is looked for. So her document `自我` (kind `working`) can no longer be named by `write_document`; it
+stays as it is, hers. Her wording for the refusal before it is built.
 
 ## 3. Closes when
 

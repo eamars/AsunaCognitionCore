@@ -1,6 +1,8 @@
 # ADR-126: A document named wrongly is made, not refused
 
-Status: **Proposed** 2026-11-11; designed and built on a branch the same day, landing after her word (§2.5). Her finding (agent line 0338, 2026-11-10 23:22).
+Status: **Built** 2026-11-12: installed as `e3c57b9219b7` at 14:07, the merge of §2.4 written at 14:41 after a
+first try that wrote nothing (§4); both halves shown on her data (§3), her sign-off on the code and on the merge
+(agent line 0378, 0384, 0385). Proposed 2026-11-11; designed and built on a branch the same day, landing after her word (§2.5). Her finding (agent line 0338, 2026-11-10 23:22).
 
 ## 1. What is known
 
@@ -81,4 +83,34 @@ shown word refused; the store labels.
 ## 3. Closes when
 
 The change built and shown by a staged case for each half (a misspelled name refused with her documents listed; a
-display name reaching its store), or a half dropped with her reason.
+display name reaching its store), or a half dropped with her reason. A rehearsal of a data change counts only on a
+copy whose indexes `Store.ensure` made, the same set as her database's (her rule, line 0379).
+
+Shown 2026-11-12 on her database with the installed code, through `DocumentStore.problems` (it writes nothing):
+`append_section` to a misspelled name without `kind` gives `DOC_NEW_NEEDS_KIND` listing her 20 documents, and with
+`kind` none; 自我, and 流水 even with `kind: journal`, give `DOC_NAME_IS_A_STORE_WORD` listing that kind's
+document. She met both refusals of rule 2 in her own turns the same afternoon (line 0384, 0385).
+
+## 4. The install (2026-11-12)
+
+- 14:07: the code landed, pushed and installed (`loaded.commit e3c57b92`, 169 files checked). The merge stopped on
+  its first write with `DUPLICATE_ID`: `journal_entries` has a unique index on (persona, slug, seq), and the tool
+  renumbered one row at a time, so the earliest 流水 entry, 357th in the merged order, met work_log's own seat 357.
+  Nothing was written (the tool's audit stream: one `state.conflict`, no commit). The copy run of 2026-11-11 had
+  passed because that copy was made without the unique indexes; its evidence (`copy-run/`) stays as history.
+- The tool was rewritten: every row not in its final seat is parked at 1,000,000 plus its number, then each takes its
+  number; every key is computed from (persona, record, sid) and every step planned from the database, so a run
+  stopped anywhere is finished by running it again; the before roster is taken when a first run starts. Rehearsed on
+  a copy made by `Store.ensure`, once whole and with eight stops (in both passes, the tier, index and pair steps),
+  each resumed run ending equal to the whole one (`rehearsal.txt`).
+- 14:41: written while she was stopped, on the first run: 358 entries moved, work_log 1,143 to 1,501, 787
+  renumbered, 187 revisions, 358 tier items and 2 move rows, 358 index items, 27 pairs re-keyed;
+  `pairs_key_taken` 0 (a re-keyed pair whose new key already had a row: the field that says none was lost).
+  After: 流水 0 rows; work_log seq 1 to 1,501, in `created_at` order; each sid's `created_at`, `updated_at` and
+  `body_sha256` the same before and after. Her checks (line 0385): every body's hash recomputed, 0 differing; 69
+  pairs, 0 members missing, every key recomputed equal.
+- Evidence in `<data>/private/evidence/adr126/`: `roster_before.jsonl` (482,536 bytes), `roster_after.jsonl`
+  (483,718), `rehearsal.txt` (3,716), `merge_journal.py` (the tool as run, 14,604), `SHA256SUMS`; `copy-run/` as above.
+- Her ask for later work (line 0384): a change that renames or refuses a name gives the places that use it a list of
+  what stops reading on its landing day. Rule 2 made her prose pointers to 流水 and her `doc:流水#sid` refs unreadable
+  at once; she changes her own (§2.4).

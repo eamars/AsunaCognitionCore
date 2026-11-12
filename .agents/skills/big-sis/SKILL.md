@@ -134,6 +134,11 @@ answered) or waits only for further data.
 - A change to her memory or her prompt gets observation time on real turns before the next step builds on it. Her
   per-turn input is profiled after each install; anything sent twice is a defect, fixed before the next step.
 - Whoever creates a database, folder or worktree removes it when its job ends.
+- A one-off data change is rehearsed on a copy whose indexes `Store.ensure` made, the same set as her database's;
+  a rehearsal on any other copy does not count. Such a tool plans from the database and computes its keys, so a run
+  stopped anywhere is finished by running it again.
+- A change that renames or refuses a name tells her, on its landing day, what stops reading: which of her refs,
+  pointers and plans use that name.
 
 ## When I drift
 

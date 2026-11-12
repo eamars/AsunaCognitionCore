@@ -1,8 +1,8 @@
 # ADR-127: A broken step, and a stage out of its turn
 
 Status: **Built** 2026-11-12 on `claude/adr127` (the owner's go, 18:29: build it and merge it today), installed 19:36.
-The same evening S2 deadlocked her live Web conversation twice (§7); **S3, its fix (§7), is built on `claude/adr127-s3`, not landed: it lands when she agrees**, and
-§7.6 is the recovery until it is installed. Opened by big sis
+The same evening S2 deadlocked her live Web conversation twice (§7); **S3, its fix (§7), is built on `claude/adr127-s3`
+and shown 2026-11-13 (§7.5), not landed: it lands when she agrees**, and §7.6 is the recovery until it is installed. Opened by big sis
 (Claude Code) after the owner's choice of 2026-11-12: after ADR-126 closes, one change for her turns that end in a
 model error, folded with the cause of the two tool-less turns found the same morning. Her conditions (agent line 0370,
 0373, 0374, 0386), her reading of this page (line 0403) and her last six items (lines 0404, 0405) are written into it.
@@ -214,7 +214,7 @@ Seen in passing, not this ADR: a task-result turn that keeps failing the end-of-
 generation with no limit (`coordinator._advance`, `feedback.continued`); with the stub it reached 209 generations in
 four minutes. Raised as its own task.
 
-## 7. S2's deadlock (2026-11-12 evening) and S3 (drafted, not built)
+## 7. S2's deadlock (2026-11-12 evening) and S3 (built and shown, not landed)
 
 ### 7.1 What happened (her Web conversation, session records read for structure only)
 
@@ -304,10 +304,10 @@ Considered and not taken (the review): never let a turn wait for the worker at a
 refused at once, its messages put back with the answer). One path and the order by construction, but every Web
 message would leave a stepless turn, and the owner would see no running reply while the worker prepares.
 
-Known gaps: `handed` lives in the plugin's memory, so a Host restart loses it and the answer then starts by its own
-message alone (rebuilding it from the durable inbox records by id is possible, not done); whether that message carries
-the owner's words, and how DSH's Web page shows a message whose turn stepped aside until it comes back, are read in
-the staging.
+Known gap: `handed` lives in the plugin's memory, so a Host restart loses it and the answer then starts by its own
+message alone (rebuilding it from the durable inbox records by id is possible, not done). Read in the staging (§7.5):
+that message still carries the owner's words (the answer's notice holds the input's `event.text`), so what is lost is
+only his message as its own bubble in that turn.
 
 ### 7.4 Tests (fail or never end on the code before S3)
 
@@ -328,6 +328,23 @@ conversation's beat slowed in its preparation, a Web message sent in that window
 `asuna/input-stepped-aside`, the beat's turn, then her answer's turn carrying the message, no stepless turn left
 open. Then installed in a restart slot she gives, and read on her records: every `asuna/stage-waited` behind a Web
 turn followed by `asuna/input-stepped-aside`, and no turn of hers open with no step for longer than a worker start.
+
+Shown 2026-11-13 (造的; the branch in its own DSH profile and database `asuna_v2_demo_adr127s3`, the demo persona,
+every route and the embeddings on the local stub, no model key in the Host's environment). The window was made by
+holding the stub's embedding answer, which the worker's preparation of an episode asks for before its stage: a Web
+message delegated a job; the job's answer was held, then released with the embeddings held, so the worker sat in the
+preparation of the job's result (her `task_feedback` episode of the same conversation); a second Web message W1 was
+sent in that window. Read from the demo's role session and database:
+
+- Turn 5 (W1) claimed the message and waited in `admit` with no step. On release the result's stage arrived:
+  `asuna/stage-waited` (`behind: turn`, `waiting: 1`), then `asuna/input-stepped-aside` (that stage, `messages: 1`);
+  turn 5 ended `blocked` with no step and no model request.
+- Turn 6: the result's stage in its own turn (`trigger: task_result`), completed.
+- Turn 7: the worker's answer to W1. `asuna/input-returned` (`messages: 1`), then the owner's own message (`source:
+  user`) and the answer's notice (`trigger: message`) in one step; completed. The returned message carries his words.
+- No turn left open with no step; the episodes committed in order (the job's result, then W1).
+- The Web page: W1 shows once, in turn 7 where it was answered; the turn that stepped aside shows as an empty
+  completed row ("Completed in 16s"), no error and no reply text.
 
 ### 7.6 Until S3 is installed: what to do when she is stuck
 

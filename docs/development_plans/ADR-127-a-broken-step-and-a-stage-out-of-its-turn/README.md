@@ -1,7 +1,7 @@
 # ADR-127: A broken step, and a stage out of its turn
 
 Status: **Built** 2026-11-12 on `claude/adr127` (the owner's go, 18:29: build it and merge it today), installed 19:36.
-The same evening S2 deadlocked her live Web conversation twice (§7); **S3, its fix, is drafted in §7, not built**, and
+The same evening S2 deadlocked her live Web conversation twice (§7); **S3, its fix (§7), is built on `claude/adr127-s3`, not landed: it lands when she agrees**, and
 §7.6 is the recovery until it is installed. Opened by big sis
 (Claude Code) after the owner's choice of 2026-11-12: after ADR-126 closes, one change for her turns that end in a
 model error, folded with the cause of the two tool-less turns found the same morning. Her conditions (agent line 0370,
@@ -253,42 +253,44 @@ turn of hers runs" was the one case not staged live.
 
 ### 7.3 S3. Her Web turn steps aside for what is held back
 
-1. **Handed once.** A Web message's ids go to the worker once, at the first turn that claims it (`input`, as now).
-   The plugin keeps each handed message by id (`state.handed`) until the stage answering it is taken.
-2. **Step aside.** A Web turn waits for the worker only while nothing of its conversation is held back. When a stage
-   of the conversation is already queued, or arrives while it waits and is another's (`another()`), the turn steps
-   aside: its messages stay handed, the step is refused (`agent/pre-step` answers `reject`, the path `admit` already
-   uses for an input that needs no turn), so the turn ends with no step and no model call, and DSH goes idle. The held
-   stage then starts in its own turn (`resume`), and the worker goes on in its order. Recorded:
-   `asuna/input-stepped-aside` (the held stage's operation, how many messages stay handed).
-3. **Her messages come back with their answer.** When a stage answering handed messages is to start (from `onEvent`
-   or `resume`), those messages are sent back to her inbox for the next turn (`agent.send`, next turn, waking), and the
-   stage is kept as that turn's answer: `admit` takes it without asking the worker again. A stage already queued that
-   answers a turn's own messages is taken from the queue (`next()` with ids looks there too).
-4. **A turn carries only what its stage answers.** When a turn claims handed messages together with a new one, the
-   new one is handed to the worker as its own input and kept out of this turn's step (`agent/pre-step` keeps the
-   messages whose ids the stage answers); it comes back with its own answer (3).
-5. **Lifecycle of `handed`.** Made by `admit`; used by (3); dropped when its answer is taken. A worker restart or
-   failure drops it with the rest of the plugin's waiting state: the worker still holds the input durably and sends
-   its answer after the start, which then starts by its own message, as turn 3718 did on 11-12. A Host restart is the
-   same. Stop on a turn that holds handed messages leaves them handed.
+1. **Wait only while nothing is held back.** `admit` hands her Web messages to the worker (`input`, as now) and waits
+   for the worker's answer only while no stage of the conversation is queued. A queued stage that answers a Web input
+   of hers is taken as this turn's answer (`next()` with ids looks in the queue; any answer to her input is hers, as
+   `another()` already says).
+2. **Step aside.** When another's stage is already queued, or arrives while the turn waits (it is queued by S2, and
+   the waiting turn is told), the turn steps aside: its step is refused (`agent/pre-step` answers `reject`, the path
+   `admit` already uses for an input that needs no turn), so it ends `blocked` with no step and no model call, and
+   DSH goes idle (pinned DSH: a refused step returns from `turn()`; a new turn starts at once only for a message
+   waiting in the inbox, and that turn steps aside the same way). The held stage then starts in its own turn
+   (`resume`), and the worker goes on in its order. Recorded: `asuna/input-stepped-aside` (the held stage's operation,
+   how many of her messages are kept).
+3. **Kept, and carried with the next answer.** A message the worker has and no turn carried (its turn stepped aside,
+   or its wait ended without an answer: a stop, a worker restart or failure) is kept by id (`state.handed`, in order).
+   The first step whose stage answers a Web input of hers (admitted with her input, or started on its own after it
+   waited: `state.current`) carries the kept messages first, then its own; they are then dropped. Recorded:
+   `asuna/input-returned` (that stage's operation, how many). A message whose `input` call failed is not kept: the
+   worker never had it.
+4. **Lifecycle of `handed`.** Made by `admit`; used and emptied by that step; kept through a worker restart or failure
+   (the worker keeps the input durably and sends its answer after the start, as on 11-12 21:53); lost with the Host
+   (memory only), in which case the answer starts by its own message alone, as turn 3718 did. A message kept whose
+   answer the worker never sends comes with the next answer to any Web input of hers.
 
 Every wait of a Web turn then has an exit: the answer comes, or another's stage arrives (the turn steps aside), or
 the worker fails or restarts (the wait is rejected), or the owner stops it. No timer is added.
 
 Not changed: S1, S2 for every turn that does not wait for the worker, R1, N1, and the worker's single queue.
 
-To check while building (not yet read): how DSH's Web page shows a message that was claimed by a turn that stepped
-aside and has not come back yet; and whether a Web message sent while she was stuck (21:44) can be found again.
+To read in the staging (not yet seen): how DSH's Web page shows a message whose turn stepped aside until it comes
+back.
 
 ### 7.4 Tests (fail or never end on the code before S3)
 
-On DSH's own loop with a worker double that keeps the real worker's order (one queue; no input answered while one
-of its stages is unanswered): the 11-12 sequence (a Web turn waiting, another's stage of the same conversation
-arrives first: it runs in its own turn, then her message in its own, with its answer); a Web message arriving while
-a stage is already queued (the turn steps aside at once); a handed message claimed with a new one (each answered in
-its own turn, neither twice to the worker); a worker restart while messages are handed (the answer starts by its own
-message).
+In `stage-order.test.js`, on DSH's own loop with a worker double that keeps the real worker's order (her input
+answered only after the result of a stage it sent before); the old S2 test whose double answered her input before
+its own earlier stage is replaced. The 11-12 sequence (a Web turn waiting, another's stage arrives first: it runs in
+its own turn, then her message with its answer, the stepped-aside turn `blocked` with no request); a Web turn begun
+while a stage already waits (it steps aside at once); a Web turn stopped while it waits (its message comes with the
+answer that then starts on its own). On the code before S3 the first two never end and the third fails.
 
 ### 7.5 Shown, then installed
 

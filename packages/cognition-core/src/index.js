@@ -852,15 +852,24 @@ export class CognitionCore {
   state(id) {
     if (!this.states.has(id)) this.states.set(id, {
       queue: [], current: null, waiter: null, claimed: [], admitted: null, system: '', finish: null,
+      // ADR-127 S3: her Web messages the worker has, from a turn that did not answer them, by id, in order.
+      handed: new Map(),
     });
     return this.states.get(id);
   }
 
   /** The worker's next event for this conversation: a stage queued behind is taken first, unless `inputs` is given
-   * (her own input being admitted: only the worker's answer to those messages, never a stage that waits). */
+   * (her own input being admitted: only the worker's answer to those messages, never a stage that waits). With
+   * `inputs`, an answer already queued is taken; another's stage queued holds the worker, which answers in order, so
+   * the turn steps aside for it (ADR-127 S3). */
   next(id, signal, inputs = null) {
     const state = this.state(id);
     if (!inputs && state.queue.length) return Promise.resolve(state.queue.shift());
+    if (inputs && state.queue.length) {
+      const answer = state.queue.findIndex(event => !another(event, inputs));
+      if (answer >= 0) return Promise.resolve(state.queue.splice(answer, 1)[0]);
+      return Promise.resolve({ kind: 'step-aside', operation: state.queue[0].token });
+    }
     if (state.waiter) throw new Error('Asuna stage already awaited');
     return new Promise((resolve, reject) => {
       const abort = () => { state.waiter = null; reject(signal.reason ?? new Error('Cancelled')); };
@@ -1010,7 +1019,13 @@ export class CognitionCore {
         // Seen, so a wait can be counted on her own records: behind a stage of hers, or behind a turn with none.
         agent.session.append('asuna/stage-waited', { operation: event.token,
           behind: state.current ? 'stage' : 'turn', waiting: state.queue.length + 1 });
-        state.queue.push(event); return;
+        state.queue.push(event);
+        // ADR-127 S3: a Web turn of hers waiting for the worker steps aside: the worker answers it only after this.
+        if (state.waiter?.inputs) {
+          const waiter = state.waiter; state.waiter = null;
+          waiter.resolve({ kind: 'step-aside', operation: event.token });
+        }
+        return;
       }
       await this.startStage(agent, state, event);
     } catch (error) {
@@ -1480,6 +1495,14 @@ export class CognitionCore {
       const stage = state.admitted; state.admitted = null;
       if (stage && stage.kind !== 'stage') return { kind: 'reject' };
       let messages = stage ? [...decision.messages, this.message(stage, agent.session)] : decision.messages;
+      // ADR-127 S3: her Web messages handed to the worker by a turn that did not carry them come first in the first
+      // step whose stage answers a Web input of hers (admitted with her input, or started on its own: state.current).
+      const answer = stage ?? state.current;
+      if (lane === 'character' && state.handed.size && answer?.inputs?.length) {
+        const back = [...state.handed.values()]; state.handed.clear();
+        agent.session.append('asuna/input-returned', { operation: answer.token, messages: back.length });
+        messages = [...back, ...messages];
+      }
       // A compaction (this step's, or one since her notice) may have taken copies it relies on: they come back here.
       const restored = lane === 'character' ? this.restored(agent.session, messages) : null;
       if (restored) messages = [...messages, restored];
@@ -1595,11 +1618,23 @@ export class CognitionCore {
       const images = attachments ? await imagesOf(attachments, humans, signal) : [];
       const waiting = this.next(id, signal, humans.map(x => x.id));
       // Observe both failures immediately; the signal also releases waiting.
-      const [, stage] = await Promise.all([
-        this.worker.call('input', { session_id: id, cwd: agent.session.header.cwd,
-          message_ids: humans.map(x => x.id), text: humans.map(textOf).join('\n'),
-          ...(images.length ? { images } : {}) }), waiting,
-      ]);
+      const given = this.worker.call('input', { session_id: id, cwd: agent.session.header.cwd,
+        message_ids: humans.map(x => x.id), text: humans.map(textOf).join('\n'),
+        ...(images.length ? { images } : {}) });
+      // ADR-127 S3: messages the worker has and this turn does not carry (it stepped aside, or its wait ended without
+      // an answer: a stop, a worker restart) come with the next stage that answers a Web input of hers (pre-step).
+      const keep = () => { for (const message of humans) state.handed.set(message.id, message); };
+      let stage;
+      try { [, stage] = await Promise.all([given, waiting]); } catch (error) {
+        if (await given.then(() => true, () => false)) keep();
+        throw error;
+      }
+      if (stage.kind === 'step-aside') {
+        keep();
+        agent.session.append('asuna/input-stepped-aside', { operation: stage.operation, messages: state.handed.size });
+        state.admitted = stage;
+        return;
+      }
       if (stage.error) throw new Error(stage.error);
       // A group turn's pictures (role_tools.turn_pictures) become image parts of her turn's message.
       if (stage.pictures?.length && attachments) stage.pictureParts = await pictureParts(attachments, stage.pictures);

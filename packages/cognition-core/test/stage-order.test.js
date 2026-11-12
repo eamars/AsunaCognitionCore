@@ -1,5 +1,7 @@
 // ADR-127 on the installed DSH loop: one copy of a stage's message (S1), a stage current only in the turn that answers
-// it (S2), and a malformed step requested again once (R1). Inference is a scripted fixture adapter.
+// it (S2), her Web turn stepping aside for a stage held back (S3), and a malformed step requested again once (R1).
+// Inference is a scripted fixture adapter. The worker double keeps the real worker's order where S3 is tested: one
+// episode at a time, so her input is answered only after the result of a stage it sent before.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
@@ -17,7 +19,7 @@ import { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry';
 import { CognitionCore, another, failureText } from '../src/index.js';
 
 /** Each request takes the next answer: 'ok', a failure code, or a promise the answer waits for first. */
-async function harness(t, answers, onInput) {
+async function harness(t, answers, onInput, onResult) {
   const ctx = new Context();
   new LlmRuntime(ctx); new SessionStore(ctx); new SessionProjectionRegistry(ctx);
   await start(new AgentRegistry(ctx)); new SystemPrompt(ctx, {}); new Tools(ctx);
@@ -51,6 +53,7 @@ async function harness(t, answers, onInput) {
     if (method === 'result') {
       results.push(args);
       await core.onEvent({ kind: 'turn_done', session_id: 'role' });
+      await onResult?.(core, args);
     }
     return { accepted: true };
   } };
@@ -67,6 +70,26 @@ const stage = (token, extra = {}) => ({ kind: 'stage', session_id: 'role', token
   system: 'persona', text: 'stage text ' + token, binding: { scene_id: 'local-scene' }, ...extra });
 const of = (role, type) => role.session.snapshotEvents().filter(event => event.type === type);
 const settled = async role => { await role.whenIdle(); await new Promise(resolve => setTimeout(resolve, 20)); await role.whenIdle(); };
+const until = async (check, what) => {
+  for (let i = 0; i < 500 && !check(); i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.ok(check(), what);
+};
+const human = text => createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] });
+const count = (text, part) => text.split(part).length - 1;
+/** The real worker's order: her input waits behind the episode whose stage it sent first; its answer comes after
+ * that stage's result. */
+const serial = () => {
+  let ids = null;
+  return {
+    onInput: async (core, args, first) => { ids = args.message_ids; if (first) await core.onEvent(first); },
+    onResult: async (core, args) => {
+      if (args.token !== 'beat' || !ids) return;
+      const inputs = ids; ids = null;
+      await core.onEvent(stage('web', { inputs }));
+    },
+    get ids() { return ids; },
+  };
+};
 
 test('R1: a malformed step is requested again once, and its turn answers once', async t => {
   const h = await harness(t, ['MALFORMED_RESPONSE', 'ok']);
@@ -156,17 +179,57 @@ test('S2: a stage arriving while a turn with no stage runs waits, and is answere
   assert.deepEqual(h.results.map(r => [r.token, r.result?.content]), [['s2', 'answer 2']]);
 });
 
-test('S2: a stage arriving while her Web input is admitted leaves that turn its own stage', async t => {
-  const h = await harness(t, [], async (core, args) => {
-    await core.onEvent(stage('beat', { inputs: [] }));                       // not an answer to this input
-    await core.onEvent(stage('web', { inputs: args.message_ids }));
-  });
-  h.role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Human input' }] }));
+test('S3: another stage arriving while her Web turn waits: the turn steps aside, the stage runs, her message comes with its answer', async t => {
+  const worker = serial();
+  const h = await harness(t, [], (core, args) => worker.onInput(core, args, stage('beat', { inputs: [] })),
+    worker.onResult);
+  h.role.followup(human('Human input'));
+  await until(() => h.results.length === 2, 'both answered (on the code before S3 this never ends)');
   await settled(h.role);
-  assert.equal(h.requests.length, 2);
-  assert.ok(h.requests[0].includes('stage text web') && !h.requests[0].includes('stage text beat'));
-  assert.ok(h.requests[1].includes('stage text beat'));
-  assert.deepEqual(h.results.map(r => r.token), ['web', 'beat']);
+  assert.deepEqual(h.results.map(r => r.token), ['beat', 'web']);
+  assert.equal(h.requests.length, 2, 'the turn that stepped aside made no request');
+  assert.ok(h.requests[0].includes('stage text beat') && !h.requests[0].includes('Human input'));
+  assert.equal(count(h.requests[1], 'Human input'), 1);
+  assert.ok(h.requests[1].includes('stage text web'));
+  assert.deepEqual(of(h.role, 'asuna/input-stepped-aside').map(e => e.data), [{ operation: 'beat', messages: 1 }]);
+  assert.deepEqual(of(h.role, 'asuna/input-returned').map(e => e.data), [{ operation: 'web', messages: 1 }]);
+  assert.equal(of(h.role, 'turn/end')[0].data.reason.kind, 'blocked');
+  assert.equal(h.core.state('role').handed.size, 0);
+});
+
+test('S3: a stage already waiting when her Web turn begins: the turn steps aside at once', async t => {
+  let release;
+  const gate = new Promise(resolve => { release = () => resolve('ok'); });
+  const worker = serial();
+  const h = await harness(t, [gate], (core, args) => worker.onInput(core, args), worker.onResult);
+  h.role.followup(createUserMessage({ content: [{ type: 'text', text: 'stale copy' }],
+    source: { kind: 'asuna', form: 'notice', summary: 'asuna:character:TURN', operation: 'old', lane: 'character', phase: 'TURN' } }));
+  while (h.requests.length === 0) await new Promise(resolve => setTimeout(resolve, 2));
+  await h.core.onEvent(stage('beat', { inputs: [] }));      // waits behind the running turn
+  h.role.followup(human('Human input'));                     // her next turn, begun while the beat still waits
+  release();
+  await until(() => h.results.length === 2, 'both answered (on the code before S3 this never ends)');
+  await settled(h.role);
+  assert.deepEqual(h.results.map(r => r.token), ['beat', 'web']);
+  assert.ok(h.requests[1].includes('stage text beat') && !h.requests[1].includes('Human input'));
+  assert.equal(count(h.requests[2], 'Human input'), 1);
+  assert.deepEqual(of(h.role, 'asuna/input-stepped-aside').map(e => e.data), [{ operation: 'beat', messages: 1 }]);
+});
+
+test('S3: a Web turn stopped while it waits: its message comes with the answer that starts on its own', async t => {
+  const worker = serial();
+  const h = await harness(t, [], (core, args) => worker.onInput(core, args));
+  h.role.followup(human('Human input'));
+  await until(() => h.core.state('role').waiter, 'waiting for the worker');
+  h.role.cancel({ kind: 'user' });
+  await settled(h.role);
+  assert.equal(h.requests.length, 0);
+  await h.core.onEvent(stage('web', { inputs: worker.ids }));
+  await until(() => h.results.length === 1, 'answered');
+  await settled(h.role);
+  assert.equal(count(h.requests[0], 'Human input'), 1);
+  assert.ok(h.requests[0].includes('stage text web'));
+  assert.deepEqual(of(h.role, 'asuna/input-returned').map(e => e.data), [{ operation: 'web', messages: 1 }]);
 });
 
 test('another and failureText', () => {

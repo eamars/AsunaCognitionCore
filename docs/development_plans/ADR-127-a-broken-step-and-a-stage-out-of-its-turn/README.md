@@ -225,20 +225,25 @@ four minutes. Raised as its own task.
   `behind: turn`, `waiting: 1`).
 - From then on: the turn waited for the worker's answer; the worker runs one episode at a time for all her
   conversations (`chat.py`, one `SceneQueue` and one consumer), so it was waiting for the note's result and the input
-  sat behind it; the note waited for the turn to end. No wait in the circle had an exit. She took no turn anywhere
-  (Web, QQ, her agent lines, her clocks) until the owner pressed Stop at 21:51:41.
+  sat behind it; the note waited for the turn to end. The circle's one exit was the worker's stage deadline
+  (`workflow_timeout_seconds`, 1800 s in her config): at about 21:55:26 the worker would have given the note up
+  (`task_fenced`, `STAGE_TIMEOUT`) and gone on to the input, leaving the note's stage in the plugin's queue to start
+  a turn nobody reads. She took no turn anywhere (Web, QQ, her agent lines, her clocks) until the owner pressed Stop
+  at 21:51:41.
 - After Stop: the turn ended with no step; the note started in its own turn (3717) and finished at 21:52:32; the
   worker then took the owner's input, and its answer started its own turn (3718). The worker restarted itself at
   21:52:32 (her publication, `published-worker`), and turn 3718 waited for that start (about 3 minutes, by design)
-  before its first step at about 21:55:50. A Web message sent at 21:44 while she was stuck did not reach the worker.
+  before its first step at about 21:55:50. A Web message inserted at 21:44:22 left DSH's queue three seconds later
+  without reaching the worker; no path of the plugin removes a queued message of hers (the review), so it was most
+  likely removed in the Web page's queue, not by the circle (not verified).
 - 21:58:22: a second owner Web message started turn 3720 while the worker was preparing a `self_development` episode
   of the same conversation; its stage arrived at 22:00:23 and was held back the same way. The owner's Stop at 22:01:34
   ended it, and that stage started its own turn (3721) in the same second; a second Stop at 22:01:36 stopped turn
   3721 mid-request, so that episode ended `FAILED_RUNTIME`. She went on at 22:01:57 (a task's result, then the owner's
   message in its own turn).
 
-Only her Web conversation can start it (only a Web turn waits on the worker: `admit` with its message ids); while it
-holds, everything of hers waits behind the one worker queue.
+Only a turn that admits her input waits on the worker (`admit` with its message ids: her Web messages, and a joined
+home line); while it holds, everything of hers waits behind the one worker queue.
 
 ### 7.2 Why S2 missed it
 
@@ -246,6 +251,10 @@ S2 holds a stage back behind a turn. That is safe only when the turn does not wa
 always blocks the worker, which answers in order and waits for each stage's result. Her Web turn does wait for the
 worker (`admit`), so S2 and `admit` together can make a circle. The broken invariant: **the worker's order is the
 order of her turns; a turn may wait for the worker only while nothing of its conversation is held back.**
+
+Before this ADR the waiter took whatever came first: the note's stage would have been admitted with the owner's
+message and run in its turn (the mixing of §1), his answer in a second turn; no hang. The circle came with `another()`
+(the filter that keeps another's stage from her waiting turn), not with S2's queue alone.
 
 `stage-order.test.js` did not see it: its scripted worker answered an input at once, even while an earlier stage of
 its own was unanswered, which the real worker never does. The staging of §6 did not see it: "a stage arriving while a
@@ -275,13 +284,30 @@ turn of hers runs" was the one case not staged live.
    (memory only), in which case the answer starts by its own message alone, as turn 3718 did. A message kept whose
    answer the worker never sends comes with the next answer to any Web input of hers.
 
+5. **A stage's turn never takes her waiting message.** DSH's turn claims only the first message waiting for the next
+   turn, and a refused step leaves a message of hers waiting there without waking the agent. So when a stage starts
+   (`startStage`), her messages waiting for the next turn are taken out, the stage's message is sent (it wakes the
+   agent), and hers are put back behind it: the stage's turn claims the stage's message, and hers follow in their own
+   turn. Without this the stage's turn claimed her message and failed (`admit`: input during an unfinished stage).
+6. **Kept on every outcome but an answer.** An `admit` that ends with anything but a stage (an error, the worker's
+   word that no turn follows) keeps her messages the same way, so a refused step never drops one.
+7. **A stage given up leaves the queue.** `task_fenced` (the worker's deadline, or a task fenced) removes a waiting
+   stage of that operation, recorded as `asuna/stage-dropped` (operation, reason), so a stage nobody reads never
+   starts a turn. This was S2's own gap.
+
 Every wait of a Web turn then has an exit: the answer comes, or another's stage arrives (the turn steps aside), or
 the worker fails or restarts (the wait is rejected), or the owner stops it. No timer is added.
 
 Not changed: S1, S2 for every turn that does not wait for the worker, R1, N1, and the worker's single queue.
 
-To read in the staging (not yet seen): how DSH's Web page shows a message whose turn stepped aside until it comes
-back.
+Considered and not taken (the review): never let a turn wait for the worker at all (every Web message's step
+refused at once, its messages put back with the answer). One path and the order by construction, but every Web
+message would leave a stepless turn, and the owner would see no running reply while the worker prepares.
+
+Known gaps: `handed` lives in the plugin's memory, so a Host restart loses it and the answer then starts by its own
+message alone (rebuilding it from the durable inbox records by id is possible, not done); whether that message carries
+the owner's words, and how DSH's Web page shows a message whose turn stepped aside until it comes back, are read in
+the staging.
 
 ### 7.4 Tests (fail or never end on the code before S3)
 
@@ -290,7 +316,10 @@ answered only after the result of a stage it sent before); the old S2 test whose
 its own earlier stage is replaced. The 11-12 sequence (a Web turn waiting, another's stage arrives first: it runs in
 its own turn, then her message with its answer, the stepped-aside turn `blocked` with no request); a Web turn begun
 while a stage already waits (it steps aside at once); a Web turn stopped while it waits (its message comes with the
-answer that then starts on its own). On the code before S3 the first two never end and the third fails.
+answer that then starts on its own); her second message waiting behind a turn that stepped aside (the stage's turn
+carries neither of hers; both come with the next answer, each once); and a waiting stage the worker gave up on
+(dropped, no request). On the code before S3 the first two never end and the third fails; without (5) the fourth
+never ends.
 
 ### 7.5 Shown, then installed
 

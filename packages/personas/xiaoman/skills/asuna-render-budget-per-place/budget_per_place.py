@@ -165,7 +165,7 @@ def main():
     largest_place = max(full, key=full.get)
     gone_largest = max(gone, key=gone.get)
 
-    # 上限：policy 存储 > persona-model 默认 > 核默认（render.budget_tokens），再和种子渲染 ×1.25 取大
+    # 上限：policy 存储 > persona-model 默认 > 核默认（render.budget_limit），再和种子渲染 ×1.25 取大
     limit, limit_note, seed_note = None, "", ""
     try:                                          # 上限用的是上面为 placed 造的那一枚 store（同一份 config）
         limit = render.budget_limit(store, persona)
@@ -241,7 +241,7 @@ def main():
     # ── 自我层：不进这把按场合渲染的尺 ──
     print("\n自我层（单独一格，**不受 %s 管**）：" % (limit or "这把尺（上限未取到：现读失败，原因见上面「上限」那行）"))
     print("  render.compose 只吃 persona＋voice；`self`、`core` 两本走 context 里的 self_state（current_self／character_core 那一块），"
-          "放不放得下不看 render.budget_tokens（它有没有别的上限我没查）。所以「自我层省了 N」≠「预算省了 N」：预算那把尺（上限见上面「上限 N」那行）只认上面两列。")
+          "放不放得下看程序随身回执那个数（它进的是 carried.py 的 IDENTITY 那本总账：persona／voice／self／core 四份一起算，上限以程序随身回执为准）。所以「自我层省了 N」≠「预算省了 N」：预算那把尺（上限见上面「上限 N」那行）只认上面两列。")
     self_docs, self_revs = {}, {}
     for slug in (memory_tiers.SELF_DOC, memory_tiers.CORE_DOC):
         content, rev = content_of(db, persona, slug)

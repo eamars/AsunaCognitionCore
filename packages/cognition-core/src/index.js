@@ -1006,7 +1006,12 @@ export class CognitionCore {
       // ADR-127 S2: a stage becomes current only in the turn that answers it: behind a current stage, or while a
       // turn runs, it waits, and starts when that turn has ended (resume).
       this.replaceCopies(agent, state, event);
-      if (state.current || agent.status !== 'idle') { state.queue.push(event); return; }
+      if (state.current || agent.status !== 'idle') {
+        // Seen, so a wait can be counted on her own records: behind a stage of hers, or behind a turn with none.
+        agent.session.append('asuna/stage-waited', { operation: event.token,
+          behind: state.current ? 'stage' : 'turn', waiting: state.queue.length + 1 });
+        state.queue.push(event); return;
+      }
       await this.startStage(agent, state, event);
     } catch (error) {
       await this.worker.call('result', { token: event.token, error: String(error) });

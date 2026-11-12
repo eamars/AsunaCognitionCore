@@ -146,6 +146,8 @@ test('S2: a stage arriving while a turn with no stage runs waits, and is answere
   while (h.requests.length === 0) await new Promise(resolve => setTimeout(resolve, 2));
   await h.core.onEvent(stage('s2'));
   assert.equal(h.core.state('role').current, null, 'not current under a turn that never read it');
+  assert.deepEqual(of(h.role, 'asuna/stage-waited').map(event => event.data), [{ operation: 's2', behind: 'turn', waiting: 1 }]);
+  assert.equal(of(h.role, 'asuna/stage-copy-replaced').length, 0, 'a wait is not a replaced copy');
   release();
   await settled(h.role);
   assert.equal(h.requests.length, 2);

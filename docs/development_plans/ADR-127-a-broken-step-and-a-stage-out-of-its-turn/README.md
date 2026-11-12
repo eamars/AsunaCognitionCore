@@ -198,6 +198,13 @@ the turn that delegated it ends, so no stage arrives mid-turn by itself), and a 
 restart (it needs the Host to stop between a stage's queueing and its turn's start). Both are shown on DSH's own loop
 in `stage-order.test.js`, which fails or never ends on the code before this build.
 
+Read on her own records after the install instead (her line 0409; mechanism only): a stage that waits leaves
+`asuna/stage-waited` (its operation, `behind: stage | turn`, how many wait), so a stage that arrives while a turn of hers
+runs is seen to wait and not to become current, and is not counted as a replaced copy; and at the install's restart,
+the stage messages left pending in her conversations' DSH inboxes before the stop are counted, and after the start the
+`asuna/stage-copy-replaced` records and any stage queued twice. No pending stage is made for this: what the stop finds
+is what is read, 0 included.
+
 Seen in passing, not this ADR: a task-result turn that keeps failing the end-of-turn check is continued as a new
 generation with no limit (`coordinator._advance`, `feedback.continued`); with the stub it reached 209 generations in
 four minutes. Raised as its own task.

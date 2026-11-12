@@ -43,7 +43,7 @@ The DSH services, hooks, events, APIs, UI facilities and file formats the core p
 | `agent/created` | attach the role and action presets to a new agent | `role.js`; `action.js` |
 | `session/event`, `domain/changed` | wait for a session's head and its projection checkpoint | `navigation.js`; `pairing.js` |
 | `agent.inbox.splice`, `agent.inbox.nextStep`, `agent.followup` | queue lines before her first step; continue a stage | `navigation.js`; `children.js` |
-| `agent.inbox.nextStep`, `agent.inbox.nextTurn`, `agent.inbox.remove`, `agent.status` | one copy of a stage's message (an older copy of the same stage still queued is removed, `asuna/stage-copy-replaced`); a stage becomes current only while no turn runs, and one that waited starts when the turn ends | `index.js` `replaceCopies`, `onEvent`, `resume` |
+| `agent.inbox.nextStep`, `agent.inbox.nextTurn`, `agent.inbox.remove`, `agent.status` | one copy of a stage's message (an older copy of the same stage still queued is removed, `asuna/stage-copy-replaced`); a stage becomes current only while no turn runs (one that waits is recorded, `asuna/stage-waited`), and one that waited starts when the turn ends | `index.js` `replaceCopies`, `onEvent`, `resume` |
 | `agent.model` (`current`, `select`) | DSH fixes a step's provider, model and effort when it prepares the step: the route a stage's requests take (the gate's, a group turn's and a summary's own effort among them) is selected before its turn starts, and a session opens with the stage's effort; a repair session's, the publication floor's, when input arrives | `settings.js` `selectFor`; `index.js` `selectRoute`, `openAgent`; `children.js`; `recovery.js` |
 
 ## Session event types
@@ -61,7 +61,7 @@ The DSH services, hooks, events, APIs, UI facilities and file formats the core p
 | `image/offload` | turn retained pictures into DSH's placeholders after a refusal | `image-refusal.js` |
 | `session/title` | conversation titles | `navigation.js` |
 | `assistant/message`, `assistant/live-chunk`, `subagent/descriptor`, `subagent/catalog`, `model/selection` | read in the client and API projections | `client.js`; `api.js` |
-| Asuna's own `asuna/stage`, `asuna/stage-result`, `asuna/schedule`, `asuna/collab`, `asuna/web-search`, `asuna/route`, `asuna/retry`, `asuna/stage-copy-replaced` | written `ignorable: true`, so plain DSH readers skip them; `asuna/route` names a `model/selection` the program made itself, which never counts as a deliberate choice | `persistence.js` `ASUNA_EVENTS`; `settings.js` `deliberate` |
+| Asuna's own `asuna/stage`, `asuna/stage-result`, `asuna/schedule`, `asuna/collab`, `asuna/web-search`, `asuna/route`, `asuna/retry`, `asuna/stage-copy-replaced`, `asuna/stage-waited` | written `ignorable: true`, so plain DSH readers skip them; `asuna/route` names a `model/selection` the program made itself, which never counts as a deliberate choice | `persistence.js` `ASUNA_EVENTS`; `settings.js` `deliberate` |
 
 ## Package APIs
 

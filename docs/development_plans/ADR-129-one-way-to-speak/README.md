@@ -1,6 +1,6 @@
 # ADR-129: One way to speak, at home too
 
-Status: **Proposed** 2026-11-13 (laid down; nothing built). The owner's request (11-12 night): give her home line the
+Status: **Proposed** 2026-11-13 (laid down; nothing built; framed by the owner the same night, §3). The owner's request (11-12 night): give her home line the
 same `speak` she uses on QQ, so she is not confused between her two selves; calling it should do the same thing it
 does on QQ. Then: `stay_silent` was made before `speak` existed. If she ends her turns by actively calling silence,
 she becomes more and more likely to say nothing at all. Big sis counted her home Web session (tool names, counts,
@@ -26,77 +26,83 @@ times and lengths only, through `session_fields`; no words read). No build until
 - **Her home answers are long.** There are 2326 replies with words in her Web session: median 149 characters, p75 245,
   p90 369, and 379 over 300. On QQ, `speak` refuses a call past `SPEAK_HARD_LINES` (6) lines in one turn, and
   `speak.max_messages` paces her there. Those limits belong to a group chat's rhythm, not to `speak`.
+- **The program makes silence at home an act.** At home a turn that ends with no words is handed back
+  (`answers.speech_problem`: 这回合没有写要说的话：写出要对对方说的话，或者用 stay_silent 结束), and a turn that keeps
+  failing that check fails as `INVALID_TURN_OUTPUT`. To be quiet at home she must call `stay_silent`.
+- **No stickers at home.** `stickers.sends` needs a platform scene (`channel_id`). At home the `sticker` tool only tidies
+  her shelf.
 - **The page already shows `speak` as speech.** `client.js` (`RoleToolRow`) draws a `speak` call as the row 说话 · its
   first text, which opens to all its parts read as speech. The row is closed by default, so at home the owner would
   open each reply to read it.
 
 ## 2. The broken invariant
 
-**Writing text means one thing everywhere.** Today it means "said" at home and "not said" on QQ. The same person moves
-between the two, carries the habit of each into the other, and gets corrected for it both ways. On QQ she is told
-这段没发出去; at home `speak` is refused. Silence has the same split: on QQ it is the absence of an act, at home it is
-an act.
+**At home nothing about her manner of speaking is mandated** (owner, 11-13). She may speak in plain text, through
+`speak`, in several lines, or not at all, and a turn that ends with no words is fine. The program breaks this in two
+ways. It refuses the `speak` that her outer self is used to, and she reaches for it (§1). And it demands words or an
+explicit `stay_silent`, which turns silence into an act she must perform (§1).
 
-## 3. Decision (proposed)
+## 3. Decision (proposed, the owner's framing of 11-13)
 
-**D1. `speak` speaks at home.** Her home conversations get a reply-parts declaration, so `abilities` gives them
-`speak` and folds `REPLY_REPLACES` (`await_answer`, `attach_image`, `stay_silent`) into it, exactly as on QQ. One code
-path (`channel_kinds.reply_parts` → `queue_reply` → the publisher) and one receipt. The parts are those the place can
-carry: `text`, `sticker`, `picture` at home. `file` follows if the home page can show one. There is no `poke`,
-`react` or `recall` with no platform behind them; ADR-079's `PART_NEEDS` rule already lists a part only where it is
-declared.
+**D1. `speak` at home, as on QQ.** Her home conversations list `speak` with the parts the place can carry: `text`,
+`sticker` and `picture`, with `file` if the home page can show one. There is no `poke`, `react` or `recall`, because
+there is no platform behind them; ADR-079's `PART_NEEDS` rule already lists a part only where it is declared. It takes
+the same parts, writes the same outbound rows (`queue_reply`) and returns the same receipt as on QQ. `attach_image`
+becomes its `picture` part, as on QQ (`REPLY_REPLACES`).
 
-**D2. `stay_silent` leaves home with it.** It is not removed on its own: once D1 is in, the existing rule drops it.
-Silence at home is then what it is on QQ, not calling `speak`, with no tool that invites it. Removing `stay_silent`
-alone, with body text kept as speech, was considered. It ends the explicit silence but keeps the two meanings of text
-(§2) and the refused `speak` calls (§1), so it fixes half.
+**D2. Plain text stays speech at home.** Unlike QQ, body text at home is still said; nothing is handed back. A turn may
+use both, and both are said in the order written: `speak`'s parts when it is called, the end-of-turn text after them.
 
-**D3. The limits are the place's, not the tool's.** The line limit (`SPEAK_HARD_LINES`, `speak.max_messages`) and the
-typing pace apply where a channel paces her. Pace already does: `not_before` is set only for a scene with a
-`channel_id`. At home a reply is as long as she writes it. Without this, her long home answers (p90 369 characters)
-would be refused.
+**D3. Silence needs no act at home.** `stay_silent` leaves her home toolbox, and the no-words check
+(`answers.speech_problem`'s last case) does not apply at home. A turn that ends with no words and no `speak` is silent
+and fine. The checks for things that cannot be sent stay: a reply cut off at the length limit, and a sticker she does
+not have.
 
-**D4. Body text at home is treated as on QQ.** A turn that ends with body text and no `speak` gets the same
-`UNSENT_NOTE` hand-back once, in the same turn. Her old home turns stay as they are (no history conversion).
+**D4. No rules on `speak` at home** (owner, 11-13: just give the tool). None of `speak`'s QQ rules apply at home: the
+line limit (`SPEAK_HARD_LINES`, `speak.max_messages`), the typing pace, the refusal of a text already sent this turn,
+and the refusal of `#number` labels. The one thing still refused is a part that cannot be shown at all: a sticker she
+does not have, or a picture id that is not hers. The receipt says which part and why, as on QQ. Pace already follows
+the place (`not_before` is set only for a scene with a `channel_id`); the other rules get the same test of place.
 
-**D5. The page shows her home speech open.** The 说话 row opens by default on the page of a conversation where `speak`
-is her speech, so the owner reads her reply without a click. This uses DSH's own disclosure row; it is not new UI.
+**D5. The page shows it.** The 说话 row opens by default where `speak` is her home speech, so the owner reads her reply
+without a click, through DSH's own disclosure row. Today a sticker part is drawn as the words ［表情包：name］. Showing
+the sticker itself on the page is the point of stickers at home (owner's point 3); if that needs more than DSH's own
+image facilities, it is a UI change and needs the owner's approval first.
 
 ## 4. Open for the owner
 
 1. **Which home lines.** He asked for her home line (the Web chat). Recommendation: every conversation where her words
-   are plain speech today, which means the Web chat, the agent lines and the peer line. Any one left on plain speech
-   keeps the two meanings of text, and with them the confusion. Cost: the agent tools that collect her answers
-   (`agent_line.py poll`) must take several parts per turn (to read before building). The alternative is the Web chat
-   only, then the others in a later step, at the price of a third rule while they differ.
+   are plain speech today, which means the Web chat, the agent lines and the peer line, for the same reasons there. Cost:
+   the agent tools that collect her answers (`agent_line.py poll`) must take several parts per turn (to read before
+   building). The alternative is the Web chat only.
 
 ## 5. Read before building (not yet checked)
 
 - How a home conversation declares reply parts. The Web chat's scene has no channel kind today, so `reply_parts`
-  returns nothing for it.
-- Whether the Web page shows a `picture` and a `sticker` part, and what `attach_image`'s picture at home becomes as a
-  `picture` part (`_publish` carries `attachment`; `queue_reply` carries `part['fields']`).
-- What her prompts and tool descriptions say about speaking at home (for example, the stay_silent description and
-  any 在家里 wording). A changed or new literal needs her word first (her F8).
+  returns nothing for it. Home must get `speak` without QQ's A2 rule that body text is not sent.
+- How a sticker reaches the home page (D5), and what `attach_image`'s picture at home becomes as a `picture` part
+  (`_publish` carries `attachment`; `queue_reply` carries `part['fields']`).
+- How `_publish` (her end-of-turn text) and `queue_reply` (`speak`'s parts) share one turn's sequence numbers and
+  `speak:<index>` keys, so that D2's order holds.
+- What her prompts and tool descriptions say about speaking or being silent at home. A changed or new literal needs her
+  word first (her F8).
 - How `speak`'s receipt reads where a part is shown at once (no platform delivery to wait for).
-- The cache: the toolbox of each home session changes once, with one cache miss on the first turn after the install.
+- The cache: each home session's toolbox changes once, with one cache miss on the first turn after the install.
   `tests/test_tool_budget.py` changes by the measured difference.
-- Whether a turn ending with neither words nor `speak` at home needs anything beyond D2. The intent is no: that is
-  silence, as on QQ.
 
 ## 6. Tests
 
 These go only where a failure would be silent:
-- a home turn's `speak` text reaches her outbound history as `SPEAK` and `DELIVERED`;
-- a home turn with only body text gets the hand-back once and sends nothing;
-- a long home reply (over `SPEAK_HARD_LINES`) is not refused.
+- a home turn's `speak` parts and its end-of-turn text both reach her outbound history, in order;
+- a home turn with no words ends silent, with no hand-back and no failure;
+- a home `speak` that QQ would refuse (over `SPEAK_HARD_LINES`, a repeated text, a `#number`) goes out.
 
 ## 7. Shown, then installed. Closes when
 
-- **Shown** in an isolated demo profile with a stub model and the real worker, labeled 造的. A home turn speaks through
-  `speak` (the page shows it open), a long reply passes, body text alone is handed back once, and the toolbox lists
-  neither `stay_silent` nor `attach_image` at home.
+- **Shown** in an isolated demo profile with a stub model and the real worker, labeled 造的: a home turn with `speak`
+  (text and a sticker, both seen on the page), one with plain text, one with both, one with neither (silent, no
+  hand-back), and a long reply with a repeated line. The home toolbox lists no `stay_silent`.
 - **Installed** in a restart slot she gives, after her reading.
-- **Closed** when, over three days of her own home use: there are no refused `speak` calls at home. Owner-started
-  home turns that end without words are back at or below the 10-23 to 11-11 level (0 to 5 a day) or are explained by
-  her. Her replies reach the page as before.
+- **Closed** when, over her own home use, there are no refused `speak` calls at home and no hand-backs for a missing
+  answer, and her `speak` replies (a sticker among them) are seen on the page. How often she is silent is hers, not a
+  closing condition.

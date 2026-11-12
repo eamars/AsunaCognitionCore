@@ -230,7 +230,7 @@ A model that refuses a picture must not end her turn, nor leave the conversation
 The Host plugin's core: `CognitionCore` starts the Python worker and runs the turns it prepares in her native DSH sessions, with her role and action tools served by the worker.
 
 - def `ERRAND_ROOM` — Room an errand's notice and turn take on top of the conversation it copies (ADR-066), in DSH's token measure.
-- def `another` — A stage the worker made for other input than the input being admitted (`inputs`, her message ids).
+- def `another` — While her Web input is admitted (`inputs`, its message ids), a stage that answers no Web input of hers (a beat, a channel line, a task's result: `inputs` empty) is another's and waits; one that answers a Web input is the answer, whichever o
 - def `failureText` — A failed turn as the worker records it: one line led by its code, so the program names it by its code and never by what the error text carries; a broken step requested again once and broken again is marked (faults.RETRIED_MARK).
 - def `completedPrefix` — The end of a session's last completed turn, with the standalone events after it (DSH's own default fork cut), or undefined when no turn has completed.
 - def `name`

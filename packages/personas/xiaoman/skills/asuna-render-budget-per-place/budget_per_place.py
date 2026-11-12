@@ -190,7 +190,7 @@ def main():
             limit, full[largest_place], PLACE_CN[largest_place], verdict(full[largest_place]),
             gone[gone_largest], PLACE_CN[gone_largest], verdict(gone[gone_largest]), limit_note, seed_note))
         if gone[gone_largest] > limit and full[largest_place] <= limit:
-            print("  ↑ 带出门那份已越线而预算口径没超：程序对带出门那份没有报警（读 report_budget 得来：它吃的是 doc 原文）。")
+            print("  ↑ 带出门那份已越线而预算口径按这把尺没超：程序对带出门那份没有报警（读 report_budget 得来：它吃的是 doc 原文）。")
     else:
         print("  上限 None%s%s" % (limit_note, seed_note))
     print("  闸该卡哪一份（预算口径还是带出门，inject 当申请、tier 当权威）：这是别处 05:24 传来的读法，"

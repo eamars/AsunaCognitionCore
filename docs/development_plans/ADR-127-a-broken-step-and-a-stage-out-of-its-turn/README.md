@@ -145,11 +145,19 @@ Her wording (line 0393, 0396, 0403, 0404):
 - S1 and S2: no request of hers declares no tools while a stage is current or waiting; checked by `toolless_steps.py`
   (big sis's private tool) on her sessions with fixed criteria (line 0405): the window starts at the install; all her
   sessions; the character and the action lanes; a step counts when its `request/header` declares no tools while a stage
-  of that session is current or waiting. Reported to her weekly: 0 such requests from the install on.
+  of that session is current or waiting. Reported to her weekly: 0 such requests from the install on. It counts
+  requests (DSH records a `request/header` whenever a request's header differs from the last, so a tool-less one is
+  always recorded); a turn that steps aside (S3) makes no request and is never counted here (her line 0421).
+  Its reading as run (`toolless_since.py`, the same criteria): 11-12 00:00 to the install at 19:36, 2 (the two turns of
+  §1); from the install on, 0.
 - N2 (line 0405): the report half changes only by hand, on the day the notes are read, and she is told on the line
   with the time; no detection.
 - S3 (§7): no turn of hers waits for the worker while a stage of its conversation is held back; she is never left
-  with a turn open and no step for longer than a worker start.
+  with a turn open and no step for longer than a worker start. Read from the S3 install on with `toolless_since.py`:
+  every turn that ended with no step, by end reason, whether `asuna/input-stepped-aside` came before its end, and how
+  long it was open. Nothing is left out: a turn that steps aside is open only while the worker prepares the stage it
+  meets (seconds), then ends `blocked`, so the criterion is the time open, more than 180 s is a failure (her line
+  0421). The same reading over 11-12 19:36 to the S3 install shows the two deadlocks (1,597 s and 192 s).
 
 ## 4. Tests
 
@@ -298,6 +306,11 @@ turn of hers runs" was the one case not staged live.
 Every wait of a Web turn then has an exit: the answer comes, or another's stage arrives (the turn steps aside), or
 the worker fails or restarts (the wait is rejected), or the owner stops it. No timer is added.
 
+A turn that steps aside is not R1's case (her line 0421: both have no `tool/call` and no `tool/result`). R1 acts only
+on `agent/request-error` with `MALFORMED_RESPONSE`, an answer to a request; a turn that steps aside is refused at
+`agent/pre-step`, before any request, so nothing of it can be requested again. The S3 tests assert that it made no
+request.
+
 Not changed: S1, S2 for every turn that does not wait for the worker, R1, N1, and the worker's single queue.
 
 Considered and not taken (the review): never let a turn wait for the worker at all (every Web message's step
@@ -328,6 +341,13 @@ conversation's beat slowed in its preparation, a Web message sent in that window
 `asuna/input-stepped-aside`, the beat's turn, then her answer's turn carrying the message, no stepless turn left
 open. Then installed in a restart slot she gives, and read on her records: every `asuna/stage-waited` behind a Web
 turn followed by `asuna/input-stepped-aside`, and no turn of hers open with no step for longer than a worker start.
+Its restart also gives S1 its live reading (§6): the stage messages pending in her DSH inboxes just before the stop
+(`inbox_pending.py`), and after the start the `asuna/stage-copy-replaced` records and any operation queued twice.
+
+S1 is not staged on purpose (her line 0421 asked): since S2 a stage's message enters DSH's inbox only while DSH is idle,
+and a turn claims it at once, so a copy kept across a restart needs the Host to stop inside that gap (on 11-12 the Host
+hung for three and a half minutes, then crashed). No stub answer widens it; S1 is shown on DSH's own loop in
+`stage-order.test.js` (it fails on the code before S1) and read at each restart as above.
 
 Shown 2026-11-13 (造的; the branch in its own DSH profile and database `asuna_v2_demo_adr127s3`, the demo persona,
 every route and the embeddings on the local stub, no model key in the Host's environment). The window was made by

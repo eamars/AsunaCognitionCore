@@ -168,7 +168,8 @@ test('S2: a stage arriving while her Web input is admitted leaves that turn its 
 });
 
 test('another and failureText', () => {
-  assert.equal(another({ inputs: ['m2'] }, ['m1']), true);
+  assert.equal(another({ inputs: [] }, ['m1']), true, 'a beat while her input is admitted waits');
+  assert.equal(another({ inputs: ['m0'] }, ['m1']), false, 'an answer to an earlier message of hers is still her answer');
   assert.equal(another({ inputs: ['m1'] }, ['m1']), false);
   assert.equal(another({}, ['m1']), false);
   assert.equal(another({ inputs: [] }, null), false);

@@ -55,9 +55,11 @@ export const ERRAND_ROOM = 16384;
 /** The model's answer could not be read (DSH's failure code): the one failure a step is requested again for (ADR-127). */
 const MALFORMED = 'MALFORMED_RESPONSE';
 
-/** A stage the worker made for other input than the input being admitted (`inputs`, her message ids). */
+/** While her Web input is admitted (`inputs`, its message ids), a stage that answers no Web input of hers (a beat, a
+ * channel line, a task's result: `inputs` empty) is another's and waits; one that answers a Web input is the answer,
+ * whichever of her messages its turn began from, so her turn never waits for an answer that already came. */
 export function another(event, inputs) {
-  return Boolean(inputs) && Array.isArray(event.inputs) && !event.inputs.some(id => inputs.includes(id));
+  return Boolean(inputs) && Array.isArray(event.inputs) && event.inputs.length === 0;
 }
 
 /** A failed turn as the worker records it: one line led by its code, so the program names it by its code and never by

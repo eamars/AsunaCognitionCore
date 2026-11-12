@@ -331,11 +331,11 @@ class NativeLane:
                                    # the route this job runs on (ADR-075): 高's only while it has not fallen
                                    'tier': 'high' if (task.get('tier') or {}).get('ran') == '高' else 'low'}
             if self.lane == 'character':
+                source = message_records.get(self.store, 'in-' + ep['_id'])
                 # The Web input this stage answers, by its message ids (none for any other stage): a stage admitted
                 # for her input is told from one that arrives meanwhile (ADR-127 S2).
-                event = (ep.get('context') or {}).get('event') or {}
-                request['inputs'] = [str(x) for x in event.get('native_message_ids') or []] if isinstance(event, dict) else []
-                source = message_records.get(self.store, 'in-' + ep['_id'])
+                ids = ((source or {}).get('event') or {}).get('native_message_ids')
+                request['inputs'] = [str(x) for x in ids] if isinstance(ids, list) else []
                 if source and source.get('event', {}).get('channel'):
                     request['channel_input'] = self.worker.channel_input(source)
             future = Future()

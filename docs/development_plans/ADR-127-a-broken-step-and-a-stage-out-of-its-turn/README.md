@@ -62,9 +62,20 @@ same step ends the turn as now. Only `MALFORMED_RESPONSE`: other codes keep DSH'
 
 **N1. The line about a failed turn says what was lost** (her need, line 0370, 0386). `HER_LINE` gains the turn's own
 count of what went out and what was done, from that episode's records: how many of her lines were published (lane
-receipts), and which of her tools completed (the episode's `role_tool` rows). Two shapes at least: nothing went out
-and nothing was done; or what went out and what was done. Never the text. Her wording, given by her before it is
-built (her F8 rule).
+receipts), and which of her tools completed (the episode's `role_tool` rows), by name only, never an argument (line
+0393). Two shapes at least: nothing went out and nothing was done; or what went out and what was done. Never the
+text. Her wording so far (line 0393, 0396):
+
+- Nothing went out, nothing done: 「你在这里 %s 那一回合没跑成：是程序出了错（%s），不是你做错了什么。那一拍你没说出口一个
+  字、也没做成任何事——那件事到现在还是没做。」 The last half is required: a line that says only "did not run" reads as
+  half done, and the act is not done again.
+- The report: today the program writes a `developer_inbox` note per kind of failure a day (`faults.turn_failed`), and
+  the 12 notes of 2026-10-25 to 2026-11-11 are all unread (`state: new`), so 「已经报给开发者了」 claims more than
+  happened. It becomes 「这条已经记进开发者收件箱」, followed by 「开发者收件箱里还有 %d 条没被读过」 with the count read
+  when the line is made; when the count cannot be read, that half is left out, never shown as 0.
+- **N2. The notes are read.** Big sis's line watcher also reports new program notes in `developer_inbox`, each read
+  and marked when it appears. From the day that is in place, the report half becomes 「已经报给开发者，这条你不用替它报」
+  (her wording, line 0396); not before.
 
 ## 3. Acceptance (her items)
 

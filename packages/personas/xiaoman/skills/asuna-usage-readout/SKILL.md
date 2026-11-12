@@ -1,6 +1,6 @@
 ---
 name: asuna-usage-readout
-description: 我每七天跑一次的「用量读数」：读三张表——① 缓存命中率按会话种类分开（我的对话／行动脑低档高档／差事／反思回合／压缩／摘要／门／调度／网页界面会话），每类另报自有调用数／拷贝来的调用数；② 选高率（选高几次、占全部差事几成、实际跑在高档几件、落档几件各因为什么）；③ 成败与拒（交回／卡住／取消／暂停各几件按档分开、被拒从八处数按成因分）。来源、口径、读法写死在这里：会话记录是磁盘上的 session.v4.jsonl.zstd（必须 development_run 读，project=core，沙箱看不到）、命中率＝cacheRead／(input＋cacheRead＋cacheWrite)、算之前先跨类全局按 data.message.id 去重（一条 id 只算一次、归首次出现那一类；分叉和播种会把别人的历史带进本会话）、会话种类按目录名前缀认而不是 agentPreset（六格口径；对账表按 agentPreset 分行，两把尺并存见第二·五节）、档位在库 tasks 的 tier 字段（落档件数只从 tier.fell 字段数，审计看不见「开工即落档」那一类）、被拒散在八处没有统一集合、时间窗写死从本地 2026-10-16 00:00 起、当天会旧的数一律读的那一刻报。硬规矩：只读数字、字段名、枚举短码和计数，不读正文。每个数带来源和读的时刻，没验过的标出来。要跑每周用量读数、核「我选高多不多」「缓存命中多少」「被拒几次」，或者另一边要对数时读这一份。每次跑先出一张对账表：一行一类、各行（不含拷贝行）之和＝合计、四条硬断言不过不出表，按 agentPreset 分行、home＋archive 两根跨根去重，口径见第二·五节。
+description: 我每七天跑一次的「用量读数」：读三张表——① 缓存命中率按会话种类分开（我的对话／行动脑低档高档／差事／反思回合／压缩／摘要／门／调度／网页界面会话），每类另报自有调用数／拷贝来的调用数；② 选高率（选高几次、占全部差事几成、实际跑在高档几件、落档几件各因为什么）；③ 成败与拒（交回／卡住／取消／暂停各几件按档分开、被拒从八处数按成因分）。来源、口径、读法写死在这里：会话记录是磁盘上的 session.v4.jsonl.zstd（读之前先 isdir 现测目录可见性——看得见就在沙箱里跑完，看不见换 development_run（project=core，只读））、命中率＝cacheRead／(input＋cacheRead＋cacheWrite)、算之前先跨类全局按 data.message.id 去重（一条 id 只算一次、归首次出现那一类；分叉和播种会把别人的历史带进本会话）、会话种类按目录名前缀认而不是 agentPreset（六格口径；对账表按 agentPreset 分行，两把尺并存见第二·五节）、档位在库 tasks 的 tier 字段（落档件数只从 tier.fell 字段数，审计看不见「开工即落档」那一类）、被拒散在八处没有统一集合、时间窗写死从本地 2026-10-16 00:00 起、当天会旧的数一律读的那一刻报。硬规矩：只读数字、字段名、枚举短码和计数，不读正文。每个数带来源和读的时刻，没验过的标出来。要跑每周用量读数、核「我选高多不多」「缓存命中多少」「被拒几次」，或者另一边要对数时读这一份。每次跑先出一张对账表：一行一类、各行（不含拷贝行）之和＝合计、四条硬断言不过不出表，按 agentPreset 分行、home＋archive 两根跨根去重，口径见第二·五节。
 scene_kinds: [home, group]
 ---
 
@@ -11,7 +11,7 @@ scene_kinds: [home, group]
 ## 一、硬规矩（不是提示）
 
 1. **只读数字、字段名、枚举短码和计数，不读正文。** 会话记录里有我的心里话和行动脑的推理。读文件的脚本只许取 `type`、`data.usage` 里那几个数、`data.message.id`（判重键，不是正文）、每一行的 `time`（整数毫秒）、目录名（＝会话 id，用来认种类）和第一行的 `agentPreset`／`origin`／`createdAt`（整数毫秒，比较前先换算）／`isSeeded`／`parentSession`／`delegationDepth` 这类短字段；不许 print 整行，不许把 `message`、`content`、`text`、推理字段取出来，哪怕「只看一眼」。这条违了，这次读数作废，照实写违了。
-2. **读会话记录必须用 `development_run`（project=core，只读）**：`sandbox_run` 看不到那个目录。别在 `sandbox_run` 里「试试」然后把找不到说成没有数据。
+2. **读会话记录之前先现读一眼目录可见性**：先花一眼 `os.path.isdir(<sessions 根>)` 测目标目录——**看得见就在 `sandbox_run` 里把整趟干完，看不见再换 `development_run`（project=core，只读）**。沙箱可见性随任务授权形状变，「沙箱一定能看到」和「沙箱看不见」两头都不该写成常数。真测不到目录，就报「这一趟这个形状读不到那个目录」，别把它说成没有数据。
 3. **每个数带来源＋读的时刻**：哪个集合／路径、什么字段、什么筛法、几点读的。没这三样的数不报。
 4. **推断写明是推断，没验过的写明没验过**（见第六节）。
 5. **不跑就不报**：这份技能只写读法；读出来之前，别在任何地方写「命中率大约是多少」。
@@ -32,7 +32,7 @@ scene_kinds: [home, group]
 
 ### 来源
 
-- **会话记录在磁盘**：`.runtime/adr008/home/sessions/<工作区目录>/<session-id>/session.v4.jsonl.zstd`，python `zstandard` 解。沙箱 `sandbox_run` 看不到这个目录，必须用 `development_run`（project=core，只读）。**必须跨帧解**：`stream_reader` 写死 `read_across_frames=True`，别拿 `decompress()`／`decompressobj()` 省事——这些 `.zstd` 是多帧文件（抽到的会话文件全是多帧，件数当天会旧、别抄），而 `zstandard` 对多帧是**静默截断**的：`decompress()` 只回第一帧，不报错也不提示。分寸：0.25.0 上 `stream_reader` 就算写 `read_across_frames=False` 也把后面的帧读完了，所以这一格钉的是意图、防的是换 API 或换版本时少算且不报错，**不是这台机器此刻正在少算**。
+- **会话记录在磁盘**：`.runtime/adr008/home/sessions/<工作区目录>/<session-id>/session.v4.jsonl.zstd`，python `zstandard` 解。用哪个工具读它**先现读**：`os.path.isdir` 认那个 sessions 根，`sandbox_run` 里 True 就在沙箱里解完，False 再换 `development_run`（project=core，只读）——这一格的可见性随授权形状变，两头都不写死。**必须跨帧解**：`stream_reader` 写死 `read_across_frames=True`，别拿 `decompress()`／`decompressobj()` 省事——这些 `.zstd` 是多帧文件（抽到的会话文件全是多帧，件数当天会旧、别抄），而 `zstandard` 对多帧是**静默截断**的：`decompress()` 只回第一帧，不报错也不提示。分寸：0.25.0 上 `stream_reader` 就算写 `read_across_frames=False` 也把后面的帧读完了，所以这一格钉的是意图、防的是换 API 或换版本时少算且不报错，**不是这台机器此刻正在少算**。
 - **一次模型调用＝一行 `type=="assistant/message"`**。`data.usage` 里有 `inputTokens`（未命中的输入）、`cacheReadTokens`（命中）、`cacheWriteTokens`（写缓存）、`outputTokens`、`totalTokens`，**单位都是 token 数，不是字节也不是比例**。每一行另有 `time`（整数毫秒），切时间窗用它。
 - **`data.message.id` 是判重键**：同一次调用在别的会话文件里再出现一遍时，带的还是这个 id。**实测：`compaction/summary` 行没有这个字段**，那批只能退回启发式键判重。
 - **`compaction/summary` 行**带同样的 `usage`（压缩那次调用）。

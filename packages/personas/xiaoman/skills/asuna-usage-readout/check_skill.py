@@ -234,7 +234,8 @@ TABLES = [
     ("table3_states", "交回／卡住／取消／暂停"),
     ("table3_cause", "被拒按成因分"),
     ("hard_no_body", "不许 print 整行"),
-    ("hard_sandbox", "`sandbox_run` 看不到那个目录"),
+    ("hard_sandbox", "看得见就在 `sandbox_run` 里把整趟干完，看不见再换 `development_run`"),
+    ("hard_visibility_not_constant", "两头都不该写成常数"),
     ("hard_only_numbers", "**只读数字、字段名、枚举短码和计数，不读正文。**"),
     ("hard_no_stale_numbers", "当天会旧的数不写进这份技能"),
 ]
@@ -290,6 +291,9 @@ STALE = [
     ("hardcoded_task_dirs", "484"),
     ("hardcoded_tier_tasks", "7 件"),
     ("old_dup_share", "约 19%"),
+    # 11-13：读会话记录的工具可见性从「沙箱看不见」改成现读句式，旧的绝对说法不许回来
+    ("old_sandbox_blind_rule", "看不到那个目录"),
+    ("old_sandbox_blind_source", "看不到这个目录"),
     ("old_compaction_suspect", "疑似同一行被两边各数一次"),
 ]
 

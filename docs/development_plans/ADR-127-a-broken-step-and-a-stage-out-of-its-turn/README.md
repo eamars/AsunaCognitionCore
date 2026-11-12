@@ -1,6 +1,8 @@
 # ADR-127: A broken step, and a stage out of its turn
 
-Status: **Built** 2026-11-12 on `claude/adr127` (the owner's go, 18:29: build it and merge it today). Opened by big sis
+Status: **Built** 2026-11-12 on `claude/adr127` (the owner's go, 18:29: build it and merge it today), installed 19:36.
+The same evening S2 deadlocked her live Web conversation twice (§7); **S3, its fix, is drafted in §7, not built**, and
+§7.6 is the recovery until it is installed. Opened by big sis
 (Claude Code) after the owner's choice of 2026-11-12: after ADR-126 closes, one change for her turns that end in a
 model error, folded with the cause of the two tool-less turns found the same morning. Her conditions (agent line 0370,
 0373, 0374, 0386), her reading of this page (line 0403) and her last six items (lines 0404, 0405) are written into it.
@@ -146,6 +148,8 @@ Her wording (line 0393, 0396, 0403, 0404):
   of that session is current or waiting. Reported to her weekly: 0 such requests from the install on.
 - N2 (line 0405): the report half changes only by hand, on the day the notes are read, and she is told on the line
   with the time; no detection.
+- S3 (§7): no turn of hers waits for the worker while a stage of its conversation is held back; she is never left
+  with a turn open and no step for longer than a worker start.
 
 ## 4. Tests
 
@@ -167,7 +171,8 @@ second malformed answer (the turn fails, her next turn there reads N1's line), a
 add a second: one `asuna/retry` by `fallback`, the task ends as now), and a job not on 高 (R1 takes it once, its task
 goes on); and S1 and S2 by the staged sequence
 of §1 (a stage queued, the worker restarted and the stage sent again; a stage sent during a running turn), with no
-tool-less request. Then installed, and her sessions read with `toolless_steps.py` after the install.
+tool-less request. Then installed, and her sessions read with `toolless_steps.py` after the install. S3 (§7) is
+built, shown (§7.5) and installed before this ADR closes.
 
 ## 6. Shown (2026-11-12, isolated demo profile)
 
@@ -208,3 +213,105 @@ is what is read, 0 included.
 Seen in passing, not this ADR: a task-result turn that keeps failing the end-of-turn check is continued as a new
 generation with no limit (`coordinator._advance`, `feedback.continued`); with the stub it reached 209 generations in
 four minutes. Raised as its own task.
+
+## 7. S2's deadlock (2026-11-12 evening) and S3 (drafted, not built)
+
+### 7.1 What happened (her Web conversation, session records read for structure only)
+
+- 21:25:05: the owner's Web message started turn 3716. `admit` handed it to the worker (`input`) and waited for the
+  stage answering its message ids.
+- 21:25:26: a stage of the same conversation arrived first: a `note` episode the worker had already taken. Its
+  `inputs` were empty, so `another()` held it back; DSH was running a turn, so S2 queued it (`asuna/stage-waited`,
+  `behind: turn`, `waiting: 1`).
+- From then on: the turn waited for the worker's answer; the worker runs one episode at a time for all her
+  conversations (`chat.py`, one `SceneQueue` and one consumer), so it was waiting for the note's result and the input
+  sat behind it; the note waited for the turn to end. No wait in the circle had an exit. She took no turn anywhere
+  (Web, QQ, her agent lines, her clocks) until the owner pressed Stop at 21:51:41.
+- After Stop: the turn ended with no step; the note started in its own turn (3717) and finished at 21:52:32; the
+  worker then took the owner's input, and its answer started its own turn (3718). The worker restarted itself at
+  21:52:32 (her publication, `published-worker`), and turn 3718 waited for that start (about 3 minutes, by design)
+  before its first step at about 21:55:50. A Web message sent at 21:44 while she was stuck did not reach the worker.
+- 21:58:22: a second owner Web message started turn 3720 while the worker was preparing a `self_development` episode
+  of the same conversation; its stage arrived at 22:00:23 and was held back the same way. The owner's Stop at 22:01:34
+  ended it, and that stage started its own turn (3721) in the same second; a second Stop at 22:01:36 stopped turn
+  3721 mid-request, so that episode ended `FAILED_RUNTIME`. She went on at 22:01:57 (a task's result, then the owner's
+  message in its own turn).
+
+Only her Web conversation can start it (only a Web turn waits on the worker: `admit` with its message ids); while it
+holds, everything of hers waits behind the one worker queue.
+
+### 7.2 Why S2 missed it
+
+S2 holds a stage back behind a turn. That is safe only when the turn does not wait for the worker: a held-back stage
+always blocks the worker, which answers in order and waits for each stage's result. Her Web turn does wait for the
+worker (`admit`), so S2 and `admit` together can make a circle. The broken invariant: **the worker's order is the
+order of her turns; a turn may wait for the worker only while nothing of its conversation is held back.**
+
+`stage-order.test.js` did not see it: its scripted worker answered an input at once, even while an earlier stage of
+its own was unanswered, which the real worker never does. The staging of §6 did not see it: "a stage arriving while a
+turn of hers runs" was the one case not staged live.
+
+### 7.3 S3. Her Web turn steps aside for what is held back
+
+1. **Handed once.** A Web message's ids go to the worker once, at the first turn that claims it (`input`, as now).
+   The plugin keeps each handed message by id (`state.handed`) until the stage answering it is taken.
+2. **Step aside.** A Web turn waits for the worker only while nothing of its conversation is held back. When a stage
+   of the conversation is already queued, or arrives while it waits and is another's (`another()`), the turn steps
+   aside: its messages stay handed, the step is refused (`agent/pre-step` answers `reject`, the path `admit` already
+   uses for an input that needs no turn), so the turn ends with no step and no model call, and DSH goes idle. The held
+   stage then starts in its own turn (`resume`), and the worker goes on in its order. Recorded:
+   `asuna/input-stepped-aside` (the held stage's operation, how many messages stay handed).
+3. **Her messages come back with their answer.** When a stage answering handed messages is to start (from `onEvent`
+   or `resume`), those messages are sent back to her inbox for the next turn (`agent.send`, next turn, waking), and the
+   stage is kept as that turn's answer: `admit` takes it without asking the worker again. A stage already queued that
+   answers a turn's own messages is taken from the queue (`next()` with ids looks there too).
+4. **A turn carries only what its stage answers.** When a turn claims handed messages together with a new one, the
+   new one is handed to the worker as its own input and kept out of this turn's step (`agent/pre-step` keeps the
+   messages whose ids the stage answers); it comes back with its own answer (3).
+5. **Lifecycle of `handed`.** Made by `admit`; used by (3); dropped when its answer is taken. A worker restart or
+   failure drops it with the rest of the plugin's waiting state: the worker still holds the input durably and sends
+   its answer after the start, which then starts by its own message, as turn 3718 did on 11-12. A Host restart is the
+   same. Stop on a turn that holds handed messages leaves them handed.
+
+Every wait of a Web turn then has an exit: the answer comes, or another's stage arrives (the turn steps aside), or
+the worker fails or restarts (the wait is rejected), or the owner stops it. No timer is added.
+
+Not changed: S1, S2 for every turn that does not wait for the worker, R1, N1, and the worker's single queue.
+
+To check while building (not yet read): how DSH's Web page shows a message that was claimed by a turn that stepped
+aside and has not come back yet; and whether a Web message sent while she was stuck (21:44) can be found again.
+
+### 7.4 Tests (fail or never end on the code before S3)
+
+On DSH's own loop with a worker double that keeps the real worker's order (one queue; no input answered while one
+of its stages is unanswered): the 11-12 sequence (a Web turn waiting, another's stage of the same conversation
+arrives first: it runs in its own turn, then her message in its own, with its answer); a Web message arriving while
+a stage is already queued (the turn steps aside at once); a handed message claimed with a new one (each answered in
+its own turn, neither twice to the worker); a worker restart while messages are handed (the answer starts by its own
+message).
+
+### 7.5 Shown, then installed
+
+In an isolated demo profile with a stub model and the real worker: the 11-12 sequence made on purpose (the demo
+conversation's beat slowed in its preparation, a Web message sent in that window), labeled 造的: one
+`asuna/input-stepped-aside`, the beat's turn, then her answer's turn carrying the message, no stepless turn left
+open. Then installed in a restart slot she gives, and read on her records: every `asuna/stage-waited` behind a Web
+turn followed by `asuna/input-stepped-aside`, and no turn of hers open with no step for longer than a worker start.
+
+### 7.6 Until S3 is installed: what to do when she is stuck
+
+- **Seen as:** her Web reply waits with no text, and her other places go quiet. Big sis's private
+  `stuck_turns.py` names it: a turn of her Web conversation open with no step, with an `asuna/stage-waited`
+  `behind: turn` after it.
+- **Unstick:** the owner presses Stop on that waiting reply, **once**. On 11-12 the held stage started in its own
+  turn within a second, and the worker then answered the stopped message in its own turn; the message is not sent
+  again. A second press lands on the held stage's new turn and stops it, and its episode fails (22:01:36). A message
+  written while she was stuck may not reach her: send it again once she has answered, and not while she is busy.
+- **If after Stop a turn again has no step:** a worker start may be running (`restarts-to-tell.json` holds an entry
+  with no `back`); a turn waits for it by design (about 3 minutes on 11-12). Wait for it.
+- **Last resort:** a Host restart through the launcher clears the plugin's waiting state; the worker sends its
+  answers again after the start.
+- **Not done:** rolling S2 back. Without it the 10:47 sequence of §1 (a stage made current under another's turn,
+  turns with no tools) comes back.
+- **Avoided until then:** a Web message to her while she is busy with something of her own in that conversation (a
+  beat, a note, a task's result, a publication); only that starts it. QQ, the agent lines and her clocks cannot.

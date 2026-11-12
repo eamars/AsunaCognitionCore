@@ -110,7 +110,8 @@ document. She met both refusals of rule 2 in her own turns the same afternoon (l
   `body_sha256` the same before and after. Her checks (line 0385): every body's hash recomputed, 0 differing; 69
   pairs, 0 members missing, every key recomputed equal.
 - Evidence in `<data>/private/evidence/adr126/`: `roster_before.jsonl` (482,536 bytes), `roster_after.jsonl`
-  (483,718), `rehearsal.txt` (3,716), `merge_journal.py` (the tool as run, 14,604), `SHA256SUMS`; `copy-run/` as above.
+  (483,718), `rehearsal.txt` (3,716), `merge_journal.py` (the tool as run at 14:41, 14,604), `merge_journal_1407.py` (the tool as run at 14:07, 10,201),
+  `SHA256SUMS`; `copy-run/` as above.
 - Her ask for later work (line 0384): a change that renames or refuses a name gives the places that use it a list of
   what stops reading on its landing day. Rule 2 made her prose pointers to 流水 and her `doc:流水#sid` refs unreadable
   at once; she changes her own (§2.4).

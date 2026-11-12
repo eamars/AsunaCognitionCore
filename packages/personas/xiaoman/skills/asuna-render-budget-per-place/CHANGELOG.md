@@ -1,4 +1,5 @@
 # CHANGELOG · asuna-render-budget-per-place
+- 11-12：`budget_per_place.py` 上限那一行收口径（那一行的 print 与 `verdict()` 两处）。改前：`verdict()` 打「超了 N」／「没超」，读起来像「没撞程序那道上限」。改后：`verdict()` 两处改「按这把尺超了 N」／「按这把尺没超」，同一行末接「这把尺不含自我层与 core，会不会撞上限请看程序随身回执」。为什么：脚本的数只吃 `render.compose(common, persona, voice)`，就是 persona＋voice 两份；程序那道 12288 套在 `carried.py` 的 tokens 上，按它的 IDENTITY 把 persona／voice／self／core 四份一起算——两把尺量的不是一回事。SKILL.md §三「这张表与回执那个随身层 N 不是同一把尺」那一格补了同一半句。本包 `check_skill.py` 钉的是脚本源码里几组存在的字面，不钉这一行的形状，管不到这条改动。生效随下次装包。
 
 - 10-30：从正文剥离来历叙述 13 处（摘要：删「版本」「试用记录」两节；去掉 description 与第二节里「10-15 放掉 131 字节只腾 8」「今天实测…」两个事例日期／条目；第一节「来历：6144 是旧上限口径」改成只留动作的「旧 6144 口径别用」；「10-26 现读」「我撞过的 10-11 超 6501…」「第五节 asuna-launch 90-105 活样本」「10-25 夜里自我层省 301」「v2，2026-10-25」「当晚实读」等日期与故事；算法、推论、口径、动作未动）。
 - 10-30：`check_skill.py` 同步删 6 条钉来历文字的断言（section_6「## 版本」、section_7「## 试用记录」、rule_limit_provenance_6144「6144 是旧上限口径」、rule_inference_freed_8「只腾出」、rule_over_history「6501/6144」、selfcheck_documented「正文里出现 check_skill.py」）；检查条数 63→57，全绿。

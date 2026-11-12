@@ -185,8 +185,8 @@ def main():
     print("  带出门：render_system 过 placed() 再渲染，是那一拍真进提示词的字。")
     if limit:
         def verdict(value):
-            return "超了 %d" % (value - limit) if value > limit else "没超"
-        print("  上限 %d：预算口径最大 %d（%s）%s；带出门最大 %d（%s）%s%s%s" % (
+            return "按这把尺超了 %d" % (value - limit) if value > limit else "按这把尺没超"
+        print("  上限 %d：预算口径最大 %d（%s）%s；带出门最大 %d（%s）%s%s%s；这把尺不含自我层与 core，会不会撞上限请看程序随身回执" % (
             limit, full[largest_place], PLACE_CN[largest_place], verdict(full[largest_place]),
             gone[gone_largest], PLACE_CN[gone_largest], verdict(gone[gone_largest]), limit_note, seed_note))
         if gone[gone_largest] > limit and full[largest_place] <= limit:

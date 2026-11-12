@@ -41,7 +41,7 @@ python3 budget_per_place.py --drop persona#节sid   # 只算放掉某一节之�
 - 去掉一节 = 把那一节从 `sections` 里挑掉再渲染，两次之差就是它在那个场合的数
 - 带出门口径 = 同一份 doc 先过 `src/asuna/memory_tiers.py:placed` 再 compose。L3 之后 `placed` 走 `Tiers(store, persona)`，它要 `store.collection(...)` ⇒ **得给它真 `state.Store`，只带 db 的壳当场 `AttributeError`**（2026-11-05 我核过成因，11-07 在数据库副本上复现）；账本不调 `render_system`（超预算时它会写一行审计，账本只读）
 - 库从哪来：`config_source()` 先看 `ASUNA_MONGO_URI`＋`ASUNA_DATABASE`（两个都给才算），都不给才退回检出的 `config/local.json`（与 `asuna.dbread` 同一条退路）；`open_store(config)` 就在这同一份 config 上造 `state.Store`。**别在这下面硬编默认 config 路径**——那会让账跑在副本、store 跑在真库，「拿一份数据库副本复现」这条路当场废掉。
-- **这张表与回执那个「随身层 N」不是同一把尺。** 表量的是 **persona＋voice 两份的 compose**；回执／设置卡那个数走 `src/asuna/render.py:render_status` → `src/asuna/carried.py:identity`，按 `src/asuna/carried.py:IDENTITY` 把 **persona／voice／self／core 四份一起算**（读码得来）。§六 的自我层那一格是它自己单独的量法（那里说的是不进 `render.compose` 那把尺）。**所以别拿表里最大那份去减上限算余量**——「上限 N」那把尺卡的是四份的总账，就是回执那个数（11-07 同一天我这侧回执现读 12,173，这张表最大那份 6,632；两边都跟着文档改，别当长期值）。
+- **这张表与回执那个「随身层 N」不是同一把尺。** 表量的是 **persona＋voice 两份的 compose**；回执／设置卡那个数走 `src/asuna/render.py:render_status` → `src/asuna/carried.py:identity`，按 `src/asuna/carried.py:IDENTITY` 把 **persona／voice／self／core 四份一起算**（读码得来）。§六 的自我层那一格是它自己单独的量法（那里说的是不进 `render.compose` 那把尺）。**所以别拿表里最大那份去减上限算余量**——「上限 N」那把尺卡的是四份的总账，就是回执那个数（11-07 同一天我这侧回执现读 12,173，这张表最大那份 6,632；两边都跟着文档改，别当长期值）。账本输出那行现在也自带这半句：**这把尺不含自我层与 core，会不会撞上限请看程序随身回执**——它打的是「按这把尺没超」／「按这把尺超了 N」，不是「没撞程序那道上限」。
 
 一个提醒：脚本 `import asuna` 拿到的是本机检出那份代码，不是 worker 正在跑那份（见 `asuna-running-version` 第八格）。口径要按在跑的那份核。
 

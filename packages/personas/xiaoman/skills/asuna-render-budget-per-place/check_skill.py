@@ -70,16 +70,18 @@ RULES = [
     ("rule_points_running_version", "asuna-running-version"),
     ("rule_anchor_rule", "行号每次有人改那个文件就漂，名字不会"),
     # v2（2026-10-25）：两份口径、自我层、锚点形状
+    # 11-13：自我层那一格不再写死上限数字——旧字面「不受 6144 管」把 6144 当现值留着；现行口径指向程序随身回执那个数，
+    # 旧字面在另一头 STALE_LIMIT_VALUE 判红；frontmatter description 那一行由 DESC_MUST_SAY 同口径要求。
     ("rule_two_calibres", "两种口径"),
     ("rule_placed_is_the_carried_one", "memory_tiers.py:placed"),
     ("rule_gate_which_copy_undecided", "待读码"),
-    ("rule_self_layer_outside_6144", "不受 6144 管"),
+    ("rule_self_layer_place_ruler_and_receipt", "不进这把按场合渲染的尺，上限以程序随身回执为准"),
     ("rule_self_saved_is_not_budget_saved", "不等于「预算省了 N」"),
     ("rule_anchor_is_shape", "自证锚点认形状，不认绝对数"),
 ]
 
 # 账本脚本源码里必须有的字面（只查字面在不在，不查跑通；跑通看试用记录里的实跑）：
-# 同时输出两份口径、逐节说为什么不一样、自我层单独一格且明写不受 6144 管、锚点是形状。
+# 同时输出两份口径、逐节说为什么不一样、自我层单独一格且明写不受上限管（脚本 print 的是它现读的上限）、锚点是形状。
 LEDGER_BOTH_CALIBRES = ["预算口径", "带出门", "memory_tiers.placed", "doc 里怎么说 vs memory_tiers 排成哪一档",
                         "没解释掉的", "inject=%s／visibility=%s／tags=%s"]
 LEDGER_SELF_LAYER = ["自我层（单独一格", "不受 %s 管", "memory_tiers.SELF_DOC"]
@@ -87,10 +89,10 @@ LEDGER_ANCHOR_SHAPE = ["ANCHOR = (", "形状", "只出现在一个场合的节�
 # 绝对值锚点的旧写法：任何一处（脚本、正文、frontmatter description）再出现就红。description 那一行每一拍进技能目录、被当触发依据读，
 # 所以它与正文同口径一起扫。
 STALE_ABSOLUTE_ANCHOR = ["home≈", "≈733", "733"]
-# 旧上限 6144 被当现值写回来（老句子「核默认 6144」回到散文）就红；反引号里的引用不算，与绝对值锚点同一判法。
+# 旧上限 6144 被当现值写回来就红（老句子「核默认 6144」回到散文、或自我层那一格写回「不受 6144 管」）；反引号里的引用不算，与绝对值锚点同一判法。
 # 另一头在 RULES：rule_limit_value_current（12288 必须在）。
-STALE_LIMIT_VALUE = ["核默认 6144"]
-DESC_MUST_SAY = ["两种口径", "memory_tiers.placed", "不受 6144 管", "形状"]
+STALE_LIMIT_VALUE = ["核默认 6144", "不受 6144 管"]
+DESC_MUST_SAY = ["两种口径", "memory_tiers.placed", "不进这把按场合渲染的尺，上限以程序随身回执为准", "形状"]
 
 # 代码锚点：`文件:名字`。行号每次有人改那个文件就漂，名字不会——所以锚点只准写文件里真有的标识符。
 CODE_ANCHOR = re.compile(r"^([\w./-]+\.(?:py|mjs|js|json|md|yml)):([A-Za-z_][A-Za-z0-9_.]*)$")

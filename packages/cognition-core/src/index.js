@@ -52,6 +52,30 @@ import { fileURLToPath } from 'node:url';
 /** Room an errand's notice and turn take on top of the conversation it copies (ADR-066), in DSH's token measure. */
 export const ERRAND_ROOM = 16384;
 
+/** The model's answer could not be read (DSH's failure code): the one failure a step is requested again for (ADR-127). */
+const MALFORMED = 'MALFORMED_RESPONSE';
+
+/** A stage the worker made for other input than the input being admitted (`inputs`, her message ids). */
+export function another(event, inputs) {
+  return Boolean(inputs) && Array.isArray(event.inputs) && !event.inputs.some(id => inputs.includes(id));
+}
+
+/** A failed turn as the worker records it: one line led by its code, so the program names it by its code and never by
+ * what the error text carries; a broken step requested again once and broken again is marked (faults.RETRIED_MARK). */
+export function failureText(session, error) {
+  const text = String(error).replace(/\s+/g, ' ');
+  const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(error.code) ? error.code : null;
+  const line = code && !text.startsWith(code) ? code + ': ' + text : text;
+  if (code !== MALFORMED) return line;
+  try {
+    const events = session.snapshotEvents();
+    const attempt = events.findLast(event => event.type === 'assistant/attempt');
+    const retried = attempt && events.some(event => event.type === 'asuna/retry'
+      && event.data?.turn === attempt.data?.turn && event.data?.step === attempt.data?.step);
+    return retried ? 'ASUNA_RETRIED_ONCE\n' + line : line;
+  } catch { return line; }
+}
+
 /** The end of a session's last completed turn, with the standalone events after it (DSH's own default fork cut), or
  * undefined when no turn has completed. */
 export function completedPrefix(events) {
@@ -829,14 +853,16 @@ export class CognitionCore {
     return this.states.get(id);
   }
 
-  next(id, signal) {
+  /** The worker's next event for this conversation: a stage queued behind is taken first, unless `inputs` is given
+   * (her own input being admitted: only the worker's answer to those messages, never a stage that waits). */
+  next(id, signal, inputs = null) {
     const state = this.state(id);
-    if (state.queue.length) return Promise.resolve(state.queue.shift());
+    if (!inputs && state.queue.length) return Promise.resolve(state.queue.shift());
     if (state.waiter) throw new Error('Asuna stage already awaited');
     return new Promise((resolve, reject) => {
       const abort = () => { state.waiter = null; reject(signal.reason ?? new Error('Cancelled')); };
       signal?.addEventListener('abort', abort, { once: true });
-      state.waiter = {
+      state.waiter = { inputs,
         resolve: value => { signal?.removeEventListener('abort', abort); resolve(value); },
         reject: error => { signal?.removeEventListener('abort', abort); reject(error); },
       };
@@ -951,7 +977,7 @@ export class CognitionCore {
     }
     const state = this.state(event.session_id);
     if (event.kind === 'turn_done' && event.retire) this.retireErrand(event.session_id);
-    if (state.waiter) {
+    if (state.waiter && !(event.kind === 'stage' && another(event, state.waiter.inputs))) {
       const waiter = state.waiter; state.waiter = null; waiter.resolve(event); return;
     }
     if (event.kind !== 'stage') return;
@@ -974,16 +1000,74 @@ export class CognitionCore {
           result: this.result(event, agent.id, actual, saved.data.finish_reason) });
         return;
       }
-      if (state.current) { state.queue.push(event); return; }
-      if (event.channel_input && await lineBeforeTurn(this, agent, event.channel_input))
-        this.ctx.logger.warn('Asuna: the line for ' + event.token + ' was not in its conversation; queued it before the turn');
-      state.current = event;
-      state.system = event.system;
-      this.selectRoute(agent, event.lane, event);
-      agent.followup(this.message(event, agent.session, agent.inbox.nextStep));
+      // ADR-127 S2: a stage becomes current only in the turn that answers it: behind a current stage, or while a
+      // turn runs, it waits, and starts when that turn has ended (resume).
+      this.replaceCopies(agent, state, event);
+      if (state.current || agent.status !== 'idle') { state.queue.push(event); return; }
+      await this.startStage(agent, state, event);
     } catch (error) {
       await this.worker.call('result', { token: event.token, error: String(error) });
     } finally { started(); }
+  }
+
+  /** The stage's message goes to DSH for the next turn: it is current from here. */
+  async startStage(agent, state, event) {
+    if (event.channel_input && await lineBeforeTurn(this, agent, event.channel_input))
+      this.ctx.logger.warn('Asuna: the line for ' + event.token + ' was not in its conversation; queued it before the turn');
+    state.current = event;
+    state.system = event.system;
+    this.selectRoute(agent, event.lane, event);
+    agent.followup(this.message(event, agent.session, agent.inbox.nextStep));
+  }
+
+  /** ADR-127 S1: one copy of a stage's message. A copy of the same stage still queued, in DSH's inbox (kept across a
+   * restart) or waiting here, is removed before the fresh one is queued, and each removal is recorded. */
+  replaceCopies(agent, state, event) {
+    for (const where of ['next-step', 'next-turn']) {
+      const pending = where === 'next-step' ? agent.inbox.nextStep : agent.inbox.nextTurn;
+      for (const message of pending.filter(message => message.source?.operation === event.token)) {
+        if (!agent.inbox.remove(message.id)) continue;
+        agent.session.append('asuna/stage-copy-replaced', { operation: event.token, where,
+          chars: (message.content ?? []).reduce((sum, part) => sum + (part.text?.length ?? 0), 0) });
+      }
+    }
+    const kept = state.queue.filter(queued => queued.kind !== 'stage' || queued.token !== event.token);
+    for (let n = kept.length; n < state.queue.length; n++)
+      agent.session.append('asuna/stage-copy-replaced', { operation: event.token, where: 'waiting' });
+    state.queue.splice(0, state.queue.length, ...kept);
+  }
+
+  /** A turn of this conversation has ended with no stage current: the next stage waiting starts (ADR-127 S2). */
+  async resume(agent) {
+    const id = agent.session.id, state = this.states.get(id);
+    if (!state?.queue.length) return;
+    const started = await this.turnEnds.begin(id);
+    try {
+      if (this.states.get(id) !== state || state.current || state.waiter || agent.status !== 'idle') return;
+      const event = state.queue.shift();
+      if (!event) return;
+      try { await this.startStage(agent, state, event); } catch (error) {
+        await this.worker.call('result', { token: event.token, error: String(error) });
+      }
+    } finally { started(); }
+  }
+
+  /** ADR-127 R1: a step whose model answer came back malformed (MALFORMED_RESPONSE) is requested again, once, when it
+   * holds no tool call or result of its own (what cannot be read counts as one); `decision` stands otherwise. */
+  retryBroken(payload, decision) {
+    if (decision?.kind === 'retry' || !payload.agent || payload.failure?.code !== MALFORMED) return decision;
+    const { agent, turn, step } = payload;
+    try {
+      const own = event => event.data?.turn === turn && event.data?.step === step;
+      const events = agent.session.snapshotEvents();
+      if (events.some(event => own(event) && ['tool/call', 'tool/result', 'asuna/retry'].includes(event.type)))
+        return decision;
+      agent.session.append('asuna/retry', { turn, step, code: payload.failure.code });
+    } catch (error) {
+      this.ctx.logger.warn('Asuna: a broken step was not requested again: ' + String(error));
+      return decision;
+    }
+    return { kind: 'retry' };
   }
 
   /** A conversation's agent is gone: its stage state goes with it, unless it was closed to reopen the conversation. */
@@ -1430,12 +1514,15 @@ export class CognitionCore {
     });
     // ADR-075: a request on 高 that ended in an error DSH's own retries did not cure falls to the action route, once
     // and for the rest of the job; a failure of the line makes 高 rest. Runs after DSH's retry decided.
+    // ADR-127 R1: on her lane a broken step is requested again once; on the action lane only when the fallback yields.
+    if (lane === 'character') scope.on('agent/request-error', async (payload, next) =>
+      this.retryBroken(payload, await next()));
     if (lane === 'executor') scope.on('agent/request-error', async (payload, next) => {
       const decision = await next();
       if (decision?.kind === 'retry' || !payload.agent) return decision;
       const state = this.state(payload.agent.session.id);
       const kind = state.onHigh ? failureClass(payload.failure?.code) : null;
-      if (!kind) return decision;
+      if (!kind) return this.retryBroken(payload, decision);
       const rest = restFor(kind, this.routeFor('actionHigh')?.idleMinutes);
       if (rest) this.restHigh(rest, payload.failure.code);
       this.fall(payload.agent, state.current?.task, kind, payload.failure.code);
@@ -1449,7 +1536,8 @@ export class CognitionCore {
       // session carrying this one's last summary (ADR-028).
       const carry = lane === 'character' && overflowed(error)
         ? { summary: lastSummary(agent.session.snapshotEvents()) } : undefined;
-      if (stage) this.worker?.call('result', { token: stage.token, error: String(error), ...(carry ? { carry } : {}) })
+      if (stage) this.worker?.call('result', { token: stage.token, error: failureText(agent.session, error),
+        ...(carry ? { carry } : {}) })
         .catch(error => this.ctx.logger.warn(`result: ${error}`));
     });
     scope.on('agent/status', ({ agent, status }) => {
@@ -1463,9 +1551,14 @@ export class CognitionCore {
         this.worker?.call('result', { token: stage.token, error: 'Native turn stopped before stage completion' })
           .catch(error => this.ctx.logger.warn(`result: ${error}`));
       }
-      // ADR-094: her conversation is compacted at the end of its turn, once it is large enough.
-      if (lane === 'character' && status === 'idle')
-        this.turnEnd(agent).catch(error => this.ctx.logger.warn('Asuna compaction: turn end of ' + agent.session.id + ': ' + String(error)));
+      // ADR-094: her conversation is compacted at the end of its turn, once it is large enough; then a stage that
+      // waited for the turn starts (ADR-127 S2).
+      if (status !== 'idle') return;
+      const ended = lane === 'character'
+        ? this.turnEnd(agent).catch(error => this.ctx.logger.warn('Asuna compaction: turn end of ' + agent.session.id + ': ' + String(error)))
+        : Promise.resolve();
+      ended.then(() => this.resume(agent))
+        .catch(error => this.ctx.logger.warn('Asuna: a waiting stage of ' + agent.session.id + ' did not start: ' + String(error)));
     });
     scope.on('agent/disposed', ({ agent }) => this.disposed(agent));
   }
@@ -1487,7 +1580,7 @@ export class CognitionCore {
       // DSH's attachment store when the host provides one (read without making it a requirement of the role).
       const attachments = scope.reflect.get('attachments');
       const images = attachments ? await imagesOf(attachments, humans, signal) : [];
-      const waiting = this.next(id, signal);
+      const waiting = this.next(id, signal, humans.map(x => x.id));
       // Observe both failures immediately; the signal also releases waiting.
       const [, stage] = await Promise.all([
         this.worker.call('input', { session_id: id, cwd: agent.session.header.cwd,

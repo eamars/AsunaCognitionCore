@@ -7,6 +7,8 @@ and shown 2026-11-13 (§7.5), not landed: it lands when she agrees**, and §7.6 
 model error, folded with the cause of the two tool-less turns found the same morning. Her conditions (agent line 0370,
 0373, 0374, 0386), her reading of this page (line 0403) and her last six items (lines 0404, 0405) are written into it.
 
+Times on this page are local time unless marked UTC.
+
 ## 1. What is known (2026-11-12, session records read for structure only: types, seqs, times, codes)
 
 **Model errors.** Four steps of hers ended in `MALFORMED_RESPONSE` from 2026-11-07 to 2026-11-11, none before (the
@@ -99,6 +101,10 @@ receipts), and which of her tools completed (the episode's `role_tool` rows), by
 once and broken again. Never the text. The tools named leave out `speak` (what went out is counted as lines),
 `stay_silent` and `think` (a thought is not a deed), a refused call, and a name already listed. The counts are read
 when her line is made (the fault keeps its episode), so a line delivered after the failure is counted.
+The sentence with the time and the cause (`TURN_HEAD`) always comes first, and each of the three shapes follows it in
+the same line, never alone (her line 0424): `her_line` is `TURN_HEAD` + `lost()` + `reported()` in one string, and the
+third shape (`RETRIED`) is only `lost()`'s answer when nothing went out, nothing was done and the step was requested
+again; §6 quotes it as shown.
 
 The cause in the brackets is never the error's own text, which can carry what the model wrote (her `think`, line
 0404): it is a word from a table (`faults.CAUSES`), and a code not in it is 「出错类型未辨」 (「原因没记下来」 when
@@ -142,22 +148,27 @@ Her wording (line 0393, 0396, 0403, 0404):
 - A retried step has in her history one `tool/call` and one `tool/result` for each call it makes, never a second
   (line 0403: the lost step of 2026-11-11 was a `write_document`).
 - A second failure is never silent: her next turn there reads N1's line (line 0374).
-- S1 and S2: no request of hers declares no tools while a stage is current or waiting; checked by `toolless_steps.py`
-  (big sis's private tool) on her sessions with fixed criteria (line 0405): the window starts at the install; all her
+- S1 and S2: no request of hers declares no tools while a stage is current or waiting; checked by big sis's private
+  `toolless_since.py` (written for these criteria; `toolless_steps.py`, which found §1's turns, counts the character
+  lane only, by day) on her sessions with fixed criteria (line 0405): the window starts at the install; all her
   sessions; the character and the action lanes; a step counts when its `request/header` declares no tools while a stage
   of that session is current or waiting. Reported to her weekly: 0 such requests from the install on. It counts
   requests (DSH records a `request/header` whenever a request's header differs from the last, so a tool-less one is
   always recorded); a turn that steps aside (S3) makes no request and is never counted here (her line 0421).
-  Its reading as run (`toolless_since.py`, the same criteria): 11-12 00:00 to the install at 19:36, 2 (the two turns of
-  §1); from the install on, 0.
+  Its readings: 11-12 00:00 to the install at 19:36, 2 (the two turns of §1, 10:47:23 and 10:48:21); from the install
+  on, 0.
 - N2 (line 0405): the report half changes only by hand, on the day the notes are read, and she is told on the line
   with the time; no detection.
 - S3 (§7): no turn of hers waits for the worker while a stage of its conversation is held back; she is never left
   with a turn open and no step for longer than a worker start. Read from the S3 install on with `toolless_since.py`:
-  every turn that ended with no step, by end reason, whether `asuna/input-stepped-aside` came before its end, and how
-  long it was open. Nothing is left out: a turn that steps aside is open only while the worker prepares the stage it
-  meets (seconds), then ends `blocked`, so the criterion is the time open, more than 180 s is a failure (her line
-  0421). The same reading over 11-12 19:36 to the S3 install shows the two deadlocks (1,597 s and 192 s).
+  each turn's wait before its first step (or before its end when it never stepped), sorted before it is judged (her
+  lines 0421, 0424), each class by its own record: stepped aside (`asuna/input-stepped-aside` in the turn, which
+  ended `blocked`); waiting for a worker start (a start in `worker-restarts.jsonl` from 300 s before the turn opened
+  to the end of its wait, or a launcher stop and start overlapping it; turn 3718 of 11-12 waited for one by design);
+  neither. Only the third class is judged: a wait over 180 s (one worker start) is a failure. Over 11-12 19:36 to the
+  S3 install it shows the two deadlocks as failures (1,597 s and 192 s), one turn waiting for a worker start (157 s),
+  and the longest wait of the third class that was not a deadlock, 144 s on 11-12 before the install (the worker
+  preparing her answer).
 
 ## 4. Tests
 
@@ -342,7 +353,10 @@ conversation's beat slowed in its preparation, a Web message sent in that window
 open. Then installed in a restart slot she gives, and read on her records: every `asuna/stage-waited` behind a Web
 turn followed by `asuna/input-stepped-aside`, and no turn of hers open with no step for longer than a worker start.
 Its restart also gives S1 its live reading (§6): the stage messages pending in her DSH inboxes just before the stop
-(`inbox_pending.py`), and after the start the `asuna/stage-copy-replaced` records and any operation queued twice.
+(`inbox_pending.py`), and after the start the `asuna/stage-copy-replaced` records and any operation queued twice. Read
+2026-11-13 12:15 over the first install's window (11-12 19:30 on): 0 pending, 0 replaced, 0 queued twice; each says
+only that none was in the records at that moment (her line 0424). S1 has no sample from real traffic yet; its
+evidence is the test that fails on the code before it, and these readings at each restart.
 
 S1 is not staged on purpose (her line 0421 asked): since S2 a stage's message enters DSH's inbox only while DSH is idle,
 and a turn claims it at once, so a copy kept across a restart needs the Host to stop inside that gap (on 11-12 the Host

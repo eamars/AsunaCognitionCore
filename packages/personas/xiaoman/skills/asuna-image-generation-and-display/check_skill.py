@@ -947,6 +947,23 @@ def main():
         except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
             check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
 
+    # 11-12 捆补格：节标题在、每格的特征句在（节标题被删时切片为空，这几条一起红）。
+    batch_head = re.search(r"^## 实测补格[^\n]*$", body, re.M)
+    batch_slice = ""
+    if batch_head:
+        batch_rest = body[batch_head.end():]
+        batch_next = re.search(r"^#{2,6} ", batch_rest, re.M)
+        batch_slice = batch_rest[:batch_next.start()] if batch_next else batch_rest
+    for pin_name, needle in (("pin_batch_full_id32", "全 32 位"), ("pin_batch_size_tier", "原图多大、发出去多大"),
+                             ("pin_batch_sha_not_path", "按 sha 取"), ("pin_batch_group_view_route", "只有一条路"),
+                             ("pin_batch_prompt_shape", "先判提示词形状"), ("pin_batch_two_person_direction", "方向词基本不听"),
+                             ("pin_batch_cfg1_negative", "negative 完全不生效"), ("pin_batch_view_count", "格数正好"),
+                             ("pin_batch_edit_no_size", "IMAGE_OPTION_NOT_IN_WORKFLOW"), ("pin_batch_crop_single", "先裁底图的单人格"),
+                             ("pin_batch_no_latent_sheet", "latent 图生图"), ("pin_batch_framing_centre", "构图重心"),
+                             ("pin_batch_outpaint", "outpaint"), ("pin_batch_one_pass_text", "并进同一个 pass"),
+                             ("pin_batch_self_portrait_recipe", "裁眼区放大")):
+        check(pin_name, needle in batch_slice, "「实测补格」节里找不到：" + needle)
+
     # 换行：必须读字节。文本模式（universal newlines）把 CR 吃掉，"\r" not in text 永远为真——
     # 2026-10-15 实测真 CRLF 样本 CR=59 照样绿。判据名与另外五份 check_skill.py 逐字一致。
     cr_files = cr_bytes([path] + [os.path.join(HERE, script) for script in scripts])

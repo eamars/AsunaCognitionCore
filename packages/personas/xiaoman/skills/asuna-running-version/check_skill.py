@@ -54,6 +54,8 @@ SECTIONS = [
 
 # 八条判据 + 两条顺手：每条查一个只有写全了才会出现的字面
 CRITERIA = [
+    ("pin_engine_pkg_no_source_commit", "没有 `sourceCommit` 一类字段"),
+    ("pin_engine_pkg_three_things", "关键符号在不在"),
     ("criterion_loaded_first", "restart_from_program"),
     ("criterion_loaded_fields", "selections"),
     ("criterion_missing_loaded_not_absent", "不等于「没装」"),

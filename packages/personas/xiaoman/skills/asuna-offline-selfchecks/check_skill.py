@@ -17,7 +17,7 @@
 5. 补遗的钉：「判据补遗」一节里各条各一个 pin_* 检查，只认本节范围内的字面。
 6. 内容级私密词扫描（同日补）：leak_scan_ran／no_listed_words／no_listed_words_outside_envoy 三格。
    名单配不上或 0 条＝红 leak_scan_ran（没真查，不是干净）；本技能目录里的文件零命中；
-   找得到包根时再扫整个包根，命中只许落在 integration/envoy_meters_read.py（既有基线：名单 103 条、
+   找得到包根时再扫整个包根，命中只许落在 integration/envoy_meters_read.py（既有基线：名单 125 条、
    12 处，漂了只打 NOTE，不变红）。命中只报 文件:行号:类别，绝不回显词本身。
 
 不联网、不跑离线套件、不写 Mongo、不发 QQ。
@@ -102,12 +102,15 @@ BACKLOG_PINS = [
     ("pin_b_corroboration", ["必须带旁证", "不拿最新一版当现场"]),
     ("pin_c_module_file", ["`模块.__file__`", "主干那份 blob"]),
     ("pin_d_content_scan_documented", ["内容级私密词扫描",
-                                       "名单 103 条、命中 12 处全在 `integration/envoy_meters_read.py`"]),
+                                       "名单 125 条、命中 12 处全在 `integration/envoy_meters_read.py`"]),
     ("pin_f_which_zero", ["报 0 之前先说它是哪种 0", "必须显式给 `fields` 或先枚举键路径"]),
     ("pin_g_receipt_or_no_number", ["指不到就写「我没读到号」", "在跑，号等回执"]),
     ("pin_h_table_beats_prose", ["以表格为准，并追问同一格"]),
     ("pin_i_temp_one_command", ["跨命令要留的东西一律写 `/task`", "别拿 TEMP 当中间存储"]),
     ("pin_j_local_hash_offline", ["别为了算 sha 出网", "哈希未算", "import hashlib,sys"]),
+    ("pin_k_alternates_notes", ["alternates 文件必须 LF 行尾", "路径写相对路径", "远端只用 https"]),
+    ("pin_m_dates_by_script", ["脚本读钟面", "不手打日期", "假数"]),
+    ("pin_l_fork_root_cause", ["主检出落后", "不许 merge／rebase／reset 硬挪", "先发布，再把自动提交"]),
 ]
 
 # 派活交代的落点（2026-11-02 主人交代，来路是 10-22 部署环境那条 TEMP 回收改动）：正文一提到临时目录／TEMP，
@@ -118,7 +121,7 @@ TEMP_LANDING_RULE = "跨命令要留的东西一律写 `/task`"
 
 # 内容级私密词扫描的既有基线（2026-10-24 发布前扫整棵候选根的读数；名单条目数 2026-11-02 现量更新 69→90，主人当日判过；11-03 20:35 发布趟现量再更 90→103、命中 11→12（名单增长是我 11-03 自判、已向金主报备）：漂了只打 NOTE，不变红。
 ENVOY_FILE = "integration/envoy_meters_read.py"
-BASELINE_LIST_ENTRIES = 103
+BASELINE_LIST_ENTRIES = 125
 BASELINE_ENVOY_HITS = 12
 
 # 11-04：发布前一条命令（pre_publish_scan.py）并进「发布前自检（私密词扫描）」一节。一条判据名底下挂几个关键串，缺哪个写进 detail。

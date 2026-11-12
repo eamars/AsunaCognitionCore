@@ -121,6 +121,12 @@ python3 skills/asuna-running-version/version_probe.py --receipt --package core -
 一处坑还是那一处：脚本里 `import asuna` 拿到的是本机检出 `src` 那一份，不是 worker 读的这份（见 §八）。「我这边脚本跑出来是对的」替代不了上面那几样读数。
 
 
+### 认 DSH 引擎包的版本：包里没有 sourceCommit 可认
+
+`@deepseek-ai/dsh-compaction-basic` 这类 DSH 引擎包的 `package.json` 没有 `sourceCommit` 一类字段，认哪版在跑只认三样，缺一样不算判过：① `version`（形如 `0.2.2-alpha.3-asuna.1`）；② 关键符号在不在（在运行时那份 lib 里找只有修复后才带的字面）；③ tgz 自身的 sha256。
+
+另外，它在 `activation.json` 里没有自己的 `packageRoot`（不是 ADR-008 的 project），判「哪份 lib 在跑」要拿 core 的 `packageRoot` 那棵 `node_modules` 树，加 `launch.json` 的 digest 去对 tgz。包 digest 之外没有更高层的号，与上面「看技能内容、不看包 digest」是同一族的另一半。
+
 ## 六、回执说「本机检出有 origin/main 没有的提交」＝本机比远端新
 
 那是 `checkout.state = diverged`：本机有远端没有的提交，快进不了，这次装的是磁盘上原来的检出。**这不是「没装」**。

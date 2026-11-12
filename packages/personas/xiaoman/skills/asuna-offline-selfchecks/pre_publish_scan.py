@@ -7,10 +7,11 @@
      changed／added 全落在这些前缀里，落到预期之外的算停；missing 默认算停，确实要删的用
      `--allow-missing <路径>` 逐个放行。
   2. 按候选 package.json 的 `files` 白名单扫候选根：根上不在白名单里的路径。ACTIVE 快照里也有的
-     （既有的）只报 NOTE，候选新冒出来的（ACTIVE 没有）算停；里面一个文件都没有的空目录不进包，只报 NOTE。另报 __pycache__ 残留（发布前要清）
+     （既有的）只报 NOTE，候选新冒出来的（ACTIVE 没有）也只报 NOTE（白名单外＝不进包；11-12 起）；里面一个文件都没有的空目录不进包，只报 NOTE。另报 __pycache__ 残留（发布前要清）
      和 .tmp/ 在不在。
   3. 私密词扫描，按「三岔」判（asuna-offline-selfchecks「发布前自检（私密词扫描）」那一节原样）：
      候选与 ACTIVE 各扫一次整棵根（逐行 find，命中只报 文件＋行号＋类别＋名单行号，不回显词）。
+       11-12 起：白名单外、ACTIVE 快照里没有的文件（不进包，ACTIVE 侧永远数到 0）的命中差与「被改」单列成「比对不到」NOTE，不当新增，不停；它不是干净的证据。
        通过：命中全部落在 integration/envoy_meters_read.py，且本次改动零新增命中
              （候选与 ACTIVE 逐文件命中数、命中文件两处对得上）；
        停：① 命中冒出 integration/envoy_meters_read.py 以外的文件；
@@ -245,11 +246,9 @@ def main():
     old_extras = [e for e in extras if e in base_top]
     print("  白名单：%s" % "、".join(allow))
     show_list("根上白名单外、ACTIVE 里也有的（既有，NOTE）", old_extras)
-    show_list("根上白名单外、ACTIVE 里没有的（新冒出来）", new_extras)
+    show_list("根上白名单外、ACTIVE 里没有的（新冒出来，不进包，NOTE；里面有私密词命中的照样在第 3 件事里停）", new_extras)
     if empty_extras:
         show_list("根上白名单外的空目录（没有文件，不进包，NOTE）", empty_extras)
-    if new_extras:
-        stops.append("候选根新冒出白名单外路径：%s" % "、".join(new_extras))
     stray = sorted(r for r in (os.path.relpath(os.path.join(d, n), candidate).replace(os.sep, "/")
                                for d, ns, _fs in os.walk(candidate) for n in ns if n == "__pycache__"))
     if stray:
@@ -289,13 +288,29 @@ def main():
         stops.append("① 命中冒出 %s 以外的文件：%s" % (ENVOY, "、".join(outside)))
     cand_counts = {r: len(v) for r, v in cand_hits.items()}
     base_counts = {r: len(v) for r, v in base_hits.items()}
+
+    def shipped(rel):
+        """这个路径会不会进包：顶层段在 files 白名单里（或是总带的几个文件）。"""
+        head = rel.split("/")[0]
+        return head in always or any(fnmatch.fnmatch(head, a.split("/")[0]) for a in allow)
+
     if cand_counts != base_counts:
         diff = sorted(set(cand_counts) | set(base_counts))
-        delta = ["%s：ACTIVE %d → 候选 %d" % (r, base_counts.get(r, 0), cand_counts.get(r, 0))
-                 for r in diff if cand_counts.get(r, 0) != base_counts.get(r, 0)]
-        print("  命中与 ACTIVE 不一致：" + "；".join(delta))
-        stops.append("本次改动命中数／命中文件与 ACTIVE 对不上（有新增或消失）：" + "；".join(delta))
-    if ENVOY in cand_files and (ENVOY not in base_files or sha256(cand_files[ENVOY]) != sha256(base_files[ENVOY])):
+        delta, unmatched = [], []
+        for r in diff:
+            if cand_counts.get(r, 0) == base_counts.get(r, 0):
+                continue
+            line = "%s：ACTIVE %d → 候选 %d" % (r, base_counts.get(r, 0), cand_counts.get(r, 0))
+            # 白名单外、ACTIVE 快照里根本没有的文件：不进包，ACTIVE 侧永远数到 0，这是「比对不到」，不是「新增」。
+            (unmatched if (r not in base_files and not shipped(r)) else delta).append(line)
+        if unmatched:
+            print("  NOTE 比对不到（白名单外、ACTIVE 快照里没有这个文件，不进包，不算新增，不停）：" + "；".join(unmatched))
+        if delta:
+            print("  命中与 ACTIVE 不一致：" + "；".join(delta))
+            stops.append("本次改动命中数／命中文件与 ACTIVE 对不上（有新增或消失）：" + "；".join(delta))
+    if ENVOY in cand_files and ENVOY not in base_files and not shipped(ENVOY):
+        print("  NOTE %s 不进包、ACTIVE 快照里没有：③ 比对不到，不判「被改」（不是干净的证据，只是没有可对的东西）" % ENVOY)
+    elif ENVOY in cand_files and (ENVOY not in base_files or sha256(cand_files[ENVOY]) != sha256(base_files[ENVOY])):
         stops.append("③ %s 本身在这次改动里被改" % ENVOY)
     elif ENVOY not in cand_files and ENVOY in base_files:
         stops.append("③ %s 在候选里没了" % ENVOY)

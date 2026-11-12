@@ -21,8 +21,8 @@ CHANGELOG = os.path.join(HERE, 'CHANGELOG.md')
 FILES = {'SKILL.md': SKILL_MD, 'dsh_failure_scan.py': SCAN, 'CHANGELOG.md': CHANGELOG}
 DESCRIPTION_MAX = 1024
 
-SECTIONS = ('## 何时用', '## 一条命令', '## 三组怎么分', '## 输出怎么读', '## 11 个读数面',
-            '## 追得多久、什么时候会数少', '## 还没核实的', '## 相关')
+SECTIONS = ('## 何时用', '## 一条命令', '## 四组怎么分', '## 双面去重、保留期与', '## 计划延迟分档',
+            '## 输出怎么读', '## 13 个读数面', '## 追得多久、什么时候会数少', '## 还没核实的', '## 相关')
 DOC_RULES = (
     ('不相加：伴生句', 'attend.fallback'),
     ('不相加：伴生句口径', '不许相加'),
@@ -38,12 +38,23 @@ DOC_RULES = (
     ('偏移现读配对', '现读'),
     ('退出码 2 的读法', '判不了'),
     ('历史不进正文的指路', 'CHANGELOG'),
+    ('组 D 点名 fault_told', 'schedule.fault_told'),
+    ('组 D 点名 handoff_watch_failed', 'schedule.handoff_watch_failed'),
+    ('只数名册里的 type', '只数名册里的 type'),
+    ('双面去重：记录数与件数分开', '按事件去重'),
+    ('双面去重不许相加', '同一件事在两面各记一次'),
+    ('保留期越界的字样', '可能数少（超出保留期）'),
+    ('0 只报库里没有', '库里没有'),
+    ('延迟分档点名两把尺', '不是一把尺'),
+    ('延迟分档软肋', '量不到'),
+    ('一次性钟量不到写进未核实', '一次性钟的晚到'),
 )
 # 正文里不许出现「什么时候加的／为什么加的」那一类流水（这些是 CHANGELOG.md 的活）
 HISTORY_MARKERS = ('当年', '来路', '历史形状', '现读实测', '刚过期的文字', '20 分钟')
 DATE_STAMP = re.compile(r'\b\d{2}-\d{2}\b')
-CONST_NAMES = ('AUDIT_WITH_ERROR', 'AUDIT_SILENT', 'AUDIT_CONTRAST', 'REPORT_FAILURES',
-               'REPORT_SILENT', 'REPORT_CONTRAST', 'MISSING_CAUSES', 'STOP_FAILURES')
+CONST_NAMES = ('AUDIT_WITH_ERROR', 'AUDIT_SILENT', 'AUDIT_CONTRAST', 'AUDIT_SCHEDULE',
+               'REPORT_FAILURES', 'REPORT_SILENT', 'REPORT_CONTRAST', 'MISSING_CAUSES',
+               'STOP_FAILURES', 'OVERLAP_PAIRS')
 
 
 def read(path):
@@ -163,7 +174,7 @@ def main():
     check('分组常量都取得到', all(name in constants and constants[name] for name in CONST_NAMES),
           str(sorted(constants)))
     missing = []
-    for name in ('AUDIT_WITH_ERROR', 'AUDIT_SILENT', 'AUDIT_CONTRAST'):
+    for name in ('AUDIT_WITH_ERROR', 'AUDIT_SILENT', 'AUDIT_CONTRAST', 'AUDIT_SCHEDULE'):
         table = constants.get(name) or {}
         missing += ['%s（%s 组没进正文）' % (key, name) for key in table if str(key) not in body]
     for name in ('REPORT_FAILURES', 'REPORT_SILENT'):
@@ -178,6 +189,42 @@ def main():
     stops = set(constants.get('STOP_FAILURES') or {})
     check('非计划停机三样正文都有', {'killed', 'crashed', 'worker_down'} <= stops
           and all(word in body for word in stops), str(sorted(stops)))
+
+    # 组 D：五个 schedule.* type 必须在脚本名册里（正文点没点名由上面那格管）
+    schedule_types = constants.get('AUDIT_SCHEDULE') or {}
+    check('组 D 名册就是那五个 type',
+          set(schedule_types) == {'schedule.fault_told', 'schedule.fault_unreported', 'schedule.handoff_late',
+                                  'schedule.handoff_failed', 'schedule.handoff_watch_failed'},
+          str(sorted(schedule_types)))
+    check('组 D 名册每条都带说明', all(str(value or '').strip() for value in schedule_types.values()),
+          '名册里有序号没带读法')
+    check('组 D 与 A／B／C 不重叠',
+          not (set(schedule_types) & (set(constants.get('AUDIT_WITH_ERROR') or {})
+                                      | set(constants.get('AUDIT_SILENT') or {})
+                                      | set(constants.get('AUDIT_CONTRAST') or {}))))
+
+    # 双面去重：配对写死成 attend.failed ↔ missed_looks[error]（连接键＝回合 id，现读证实过）
+    check('双面配对写死成那一对',
+          tuple(tuple(one) for one in (constants.get('OVERLAP_PAIRS') or ()))
+          == (('attend.failed', 'missed_looks', 'error'),), str(constants.get('OVERLAP_PAIRS')))
+
+    # 保留期与「0」的说法：常数与字样都必须在脚本里（写了才算会打）
+    script_text = read(SCAN).decode('utf-8')
+    check('保留期常数带天数在脚本里',
+          'MISSED_KEPT_DAYS = 7' in script_text and 'AUDIT_KEPT_DAYS = 30' in script_text
+          and 'LANE_KEPT_DAYS = 30' in script_text, '保留期常数缺或值不对')
+    check('脚本里有「可能数少（超出保留期）」那行字样', '可能数少（超出保留期）' in script_text)
+    check('延迟分档的四档与巡查线说明在脚本里',
+          all(word in script_text for word in ('≤1 分钟', '1–2 分钟', '>2 分钟', '5 分钟巡查线')))
+    check('脚本里写明与 handoff_late 不是一把尺', '不是一把尺' in script_text)
+    # 通用判据由脚本 --selfcheck 钉着：这里查那些钉子还在（钉子掉了这格要红）
+    for pin in ('unlisted_type_counts_no_row', 'dedup_separates_records_and_events',
+                'dedup_cant_judge_is_not_zero', 'retention_flags_beyond_horizon',
+                'retention_quiet_inside_horizon', 'delay_bands_split',
+                'delay_null_mismatch_and_missing_separate', 'zero_words_never_never_happened',
+                'zero_group_says_library_empty', 'delay_ruler_is_not_handoff_late',
+                'delay_face_unread_says_so', 'dedup_failure_reason_shown'):
+        check('脚本自检钉着：%s' % pin, ("check('%s'" % pin) in script_text, '脚本 --selfcheck 里没这条')
 
     top, inside_try, touches_modules = asuna_import_is_bare(SCAN)
     check('依赖是真的：顶级 from asuna import', bool(top), str(top))

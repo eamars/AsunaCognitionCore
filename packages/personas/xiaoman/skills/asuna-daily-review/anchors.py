@@ -2,6 +2,8 @@
 """asuna-daily-review 锚点底稿：起止钟点、窗口边界、群清单、每群出站数、行号区间、并句、
 时刻、前后窗计数、机械接话行、段内行、迟到行、后窗未满、非 DELIVERED、跑批凭据，一次取齐，
 写成底稿，报告照抄，模型不再手找。语义判断（话题、凭据、a/b/c/d）不在这里，仍手判。
+特别是「话题结束」的凭据①②（SKILL.md 二、d 维第 1 条）：整条归语义层，机械层不负责（没实现，不是漏了）；底稿里的「无机械接话」只是「后窗没有机械接话行」，不等于「无回复」。
+「按人读数」「迟来接话的疑似派单」两格只是机械列出人和行号、标字面线索，是判词还是段子、是不是派单仍由我当场手判。
 
 用法（在 sandbox_run 或 development_run project=core 里，工作目录＝任务工作区；asuna.dbread 只读）：
     python3 anchors.py [--day YYYY-MM-DD] [--end 'YYYY-MM-DD HH:MM[:SS]'] [--out DIR]
@@ -29,6 +31,8 @@ INT = "asuna:internal"
 PLACEHOLDER = re.compile(r"^\[(图片|表情包|视频|语音|文件|合并转发)")
 RE_GIVE = re.compile(r"给\s*〔(\d+)〕")
 RE_NICK = re.compile(r"@[^\s，。！？】@]{0,12}小满")
+# 「疑似派单」字面线索（迟来接话那一桶的标注，11-09 实证：迟来的「接话」有时其实是一条派给我的活）：只标注、不改任何计数，是不是派单手判。
+RE_DISPATCH = re.compile(r"帮我|帮忙|麻烦你|劳驾|请你|给我(来|做|写|画|查|发|整理)|你(去|来|能不能|可以)?(查|做|画|写|发|整理|看|试)一?下?|去(查|做|画|写)")
 UNIT = 500
 
 
@@ -47,6 +51,11 @@ def utc_str(x):
 def is_placeholder(text):
     t = (text or "").strip()
     return (not t) or bool(PLACEHOLDER.match(t))
+
+
+def dispatch_suspect(text):
+    """字面上像派活（帮我／麻烦你／你去查…）：只给「疑似派单」标注用，不进任何计数。"""
+    return bool(RE_DISPATCH.search(text or ""))
 
 
 def hit_kind(text, qq, segs):
@@ -209,6 +218,10 @@ def sentence_anchor(S, others, qq, soft_ok, tz, start, end, internal_by_ep):
             and hit_kind(o.get("text"), qq, segs)]
     A["late_hit_n"] = len(late)
     A["late_hits_first3"] = late[:3]
+    # 迟来接话一桶的「疑似派单」标注（字面线索，只标注不改 late_hit_n；是不是派单手判）
+    A["late_dispatch_suspect"] = [o["scene_seq"] for o in others
+                                  if t1 + dt.timedelta(minutes=10) <= o["_t"] < end
+                                  and hit_kind(o.get("text"), qq, segs) and dispatch_suspect(o.get("text"))][:5]
     for label, mins in (("h30", 30), ("h90", 90), ("h6h", 360)):
         lim = t1 + dt.timedelta(minutes=mins)
         hs = [(o["scene_seq"], int((o["_t"] - t1).total_seconds())) for o in others
@@ -329,8 +342,50 @@ def gen(db, args):
             "note_doc_ids": [x["_id"] for x in notes],
             "note_lookup": "按 sha 前缀与旧格式正则查；0 行只说明这两种形状没命中，不是「没有群笔记」的凭据"
             if not notes else "命中",
+            "by_person": by_person(others, sa, qq, start, end, tz),
             "sentences": sa}
     return result
+
+
+def by_person(others, sentences, qq, start, end, tz):
+    """按人读数（纯机械，不判语义）：每个别人的「指向我的行」（@我的号、或昵称@小满）和「接了我哪句的行」（机械接话命中，每句取 6 小时内前 12 条），逐条带行号和时刻；
+    指向行里字面像派活的标「疑似派单」。「这条指向行是判词还是段子」「是不是真派单」归语义层，这里不判。"""
+    who = {}
+    seq_author = {o["scene_seq"]: o.get("author") for o in others}
+    for o in others:
+        if not (start <= o["_t"] < end):
+            continue
+        kinds = []
+        if "@" + qq in (o.get("text") or ""):
+            kinds.append("@qq")
+        elif RE_NICK.search(o.get("text") or ""):
+            kinds.append("昵称@")
+        if kinds:
+            e = who.setdefault(o.get("author"), {"directed": [], "connected": []})
+            e["directed"].append({"seq": o["scene_seq"], "t": local_str(o["_t"], tz), "kind": kinds[0],
+                                  "suspect_dispatch": dispatch_suspect(o.get("text"))})
+    for a in sentences:
+        for seq, _lat in (a.get("h6h") or {}).get("hits", []):
+            au = seq_author.get(seq)
+            if au is None:
+                continue
+            e = who.setdefault(au, {"directed": [], "connected": []})
+            e["connected"].append({"seq": seq, "after_sentence": a["lo"]})
+    return {k: v for k, v in sorted(who.items(), key=lambda kv: str(kv[0]))}
+
+
+def person_md(g):
+    """「按人读数」表（按群）：人｜指向我的行（行号／类型／疑似派单）｜接了我哪句（行号←句首行）。只标注。"""
+    bp = g.get("by_person") or {}
+    if not bp:
+        return ["- 按人读数：本群窗口内没有指向我的行、也没有机械接话命中", ""]
+    L = ["按人读数（纯机械：指向行＝@我的号或昵称@；「疑似派单」是字面线索不是结论；判词还是段子、是不是真派单归语义层）：", "",
+         "| 人 | 指向我的行（行号·类型·疑似派单） | 接了我哪句（接话行←句首行） |", "|---|---|---|"]
+    for au, e in bp.items():
+        d = "、".join("%d·%s%s" % (x["seq"], x["kind"], "·疑似派单" if x["suspect_dispatch"] else "") for x in e["directed"]) or "—"
+        c = "、".join("%d←%d" % (x["seq"], x["after_sentence"]) for x in e["connected"]) or "—"
+        L.append("| %s | %s | %s |" % (au, d, c))
+    return L + [""]
 
 
 def sem_cell(a):
@@ -377,16 +432,17 @@ def md_of(res):
                 continue
             pl = a["pre_last"]
             f = lambda k: ("%s%s" % (a[k]["hits"][0][0] if a[k]["hits"] else "无", "·窗未满" if a[k]["unfull"] else ""))
-            L.append("| %d–%d | %s–%s | %d | %s | %d/%d/%s | %d/%d/%s | %s/%s/%s | %s | %s | %d | %d/%s | %s | %s |" % (
+            L.append("| %d–%d | %s–%s | %d | %s | %d/%d/%s | %d/%d/%s | %s/%s/%s | %s | %s | %s | %d/%s | %s | %s |" % (
                 a["lo"], a["hi"], a["t0"], a["t1"], a["n_seg"], ",".join(a["states"]),
                 a["pre_n"], a["pre_people"], ("%ds" % pl["gap_sec"]) if pl else "场冷",
                 a["post_n"], a["post_people"], "后窗未满" if a["post_unfull"] else "满",
                 f("h30"), f("h90"), f("h6h"),
                 sem_cell(a),
                 "、".join("%d(+%ds)" % (x[0], x[3]) for x in a["gap_hits_inside_segments"]) or "无",
-                a["late_hit_n"], a["after_n"], (a["after_last"] or {}).get("seq", "—"),
+                ("%d" % a["late_hit_n"]) + (("（疑似派单：" + "、".join(str(x) for x in a["late_dispatch_suspect"]) + "）") if a.get("late_dispatch_suspect") else ""), a["after_n"], (a["after_last"] or {}).get("seq", "—"),
                 a["cls_hint"].split("(")[0], a["text80"].replace("|", "｜")))
         L.append("")
+        L += person_md(g)
     return "\n".join(L) + "\n"
 
 
@@ -471,6 +527,14 @@ def selftest():
     ok.append(sem_label("美女们早安呀～", "今天天气真好") == "无字面重叠")
     ok.append(sem_label("给 〔123〕 你 点了「爱心」", "今天天气真好") in ("空正文", "无字面重叠"))
     ok.append(seq_range("9552–9553") == 9552 and seq_range("x") is None)
+    ok.append(dispatch_suspect("麻烦你帮我查一下") and not dispatch_suspect("哈哈哈这个好笑"))
+    _t = dt.datetime(2026, 11, 9, 12, 0, tzinfo=dt.timezone.utc)
+    _o = [{"scene_seq": 5, "author": "qq:a", "text": "@900000001 帮我查一下", "_t": _t},
+          {"scene_seq": 6, "author": "qq:b", "text": "笑死", "_t": _t}]
+    _bp = by_person(_o, [{"lo": 3, "h6h": {"hits": [(6, 40)]}}], "900000001", _t - dt.timedelta(hours=1),
+                    _t + dt.timedelta(hours=1), dt.timezone.utc)
+    ok.append(_bp["qq:a"]["directed"][0]["suspect_dispatch"] and _bp["qq:b"]["connected"] == [{"seq": 6, "after_sentence": 3}]
+              and not _bp["qq:b"]["directed"])
     print("selftest %d/%d" % (sum(ok), len(ok)))
     return 0 if all(ok) else 1
 

@@ -44,7 +44,7 @@ explicit `stay_silent`, which turns silence into an act she must perform (§1).
 
 ## 3. Decision (proposed, the owner's framing of 11-13)
 
-**D1. `speak` at home, as on QQ.** Her home conversations list `speak` with the parts the place can carry: `text`,
+**D1. `speak` at home, as on QQ.** Her Web chat conversations (§4) list `speak` with the parts the place can carry: `text`,
 `sticker` and `picture`, with `file` if the home page can show one. There is no `poke`, `react` or `recall`, because
 there is no platform behind them; ADR-079's `PART_NEEDS` rule already lists a part only where it is declared. It takes
 the same parts, writes the same outbound rows (`queue_reply`) and returns the same receipt as on QQ. `attach_image`
@@ -69,12 +69,10 @@ without a click, through DSH's own disclosure row. Today a sticker part is drawn
 the sticker itself on the page is the point of stickers at home (owner's point 3); if that needs more than DSH's own
 image facilities, it is a UI change and needs the owner's approval first.
 
-## 4. Open for the owner
+## 4. Where (decided by the owner, 11-13)
 
-1. **Which home lines.** He asked for her home line (the Web chat). Recommendation: every conversation where her words
-   are plain speech today, which means the Web chat, the agent lines and the peer line, for the same reasons there. Cost:
-   the agent tools that collect her answers (`agent_line.py poll`) must take several parts per turn (to read before
-   building). The alternative is the Web chat only.
+All of her Web chat: every conversation of hers in the DSH Web page. The agent lines and the peer line keep what they
+have now. In this ADR, "home" means her Web chat.
 
 ## 5. Read before building (not yet checked)
 

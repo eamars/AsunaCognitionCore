@@ -202,7 +202,7 @@ python3 -c "import hashlib,sys;print(hashlib.sha256(sys.stdin.buffer.read()).hex
 
 - **alternates 文件必须 LF 行尾**：写成 CRLF 会报 `object directory …objects? does not exist`（行尾那个 CR 被当成路径的一部分）。写完按字节数一遍 CR。
 - **路径写相对路径**：Windows 盘符路径（`C:/…`）里的冒号会被当成多目录分隔符；从工作仓 `.git/objects/info/` 往上数到主检出 `.git/objects` 写 `../` 串。
-- **远端只用 https**：本地路径的 clone／fetch 要起 msys 的 `sh.exe`，沙箱里起不来（`0xC0000022`）；对象走 alternates，远端走 https。
+- **远端只用 https**：本地路径的 clone／fetch 要起 msys 的 `sh.exe`，沙箱里起不来（报 `STATUS_ACCESS_DENIED`）；对象走 alternates，远端走 https。
 
 推前远端尖只认 `git ls-remote origin refs/heads/main`，推后再读回，两个号都报；推前闸照常 `check_staged_secrets.py --personal --paths <要推的文件>`（临时工作仓绕开仓里的推送闸，走它就当没过闸）。主检出 porcelain 前后各数一次 0 行，才能说没在别人的工作树里留东西。来路：2026-11-10 主检出一次 amend 那趟，第二次靠这套真把 merge 推了上去；「默认就这么取对象」那一条是同批想法里的另一枚，与本节同族。
 

@@ -152,6 +152,8 @@ def deployment_zone():
     return (z, "config/local.json 的 timezone") if z else (None, "config/local.json 里 timezone 没值")
 
 
+# 口径（下面这枚 httpx 假模块是旧写法，不重构）：以后加判据，别往这种 stub 掉依赖里加；
+# 要加就加「依赖缺席时必须红」的判据——依赖没装上不许长得像「过了」。
 def script_module():
     """把 enlighten_read.py 当模块读进来（httpx 不在就塞一枚假的：这一档不发消息，只碰配置）。"""
     import importlib.util

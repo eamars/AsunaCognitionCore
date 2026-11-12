@@ -110,6 +110,7 @@ MISSED_KEPT_DAYS = 7              # core python/asuna/host_stops.py:213 MISSED_K
 AUDIT_KEPT_DAYS = 30              # core python/asuna/audit.py:141 RETENTION_DAYS（role_tool 365 天：audit.py:142）
 LANE_KEPT_DAYS = 30               # core python/asuna/lane_faults.py:27 KEEP_DAYS
 TAIL_MIB = TAIL_BYTES // (1024 * 1024)
+GATE_CAP = 5000                   # 闸拒型拆分一窗最多读这么多条 turn.rejected，读满就不拆
 DISPATCH_CAP = 5000               # 延迟分档一窗最多读这么多条 dispatched，超了要在输出里明说只读了前这么多
 LOG_LEVEL = re.compile(r'^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s+(\w+)')
 LOG_BAD = re.compile(r'\b(?:warn|warning|error|fatal|critical)\b|Traceback|Exception|Error:|\bexited\b', re.I)
@@ -240,7 +241,38 @@ def audit_face(window, types, note, name, cls):
         samples_by_type[kind] = ['%s %s %s' % (local_text(one.get('occurred_at'), window['offset']),
                                                short_id(one.get('stream_id')), audit_snippet(one.get('payload')))
                                  for one in found['rows']]
-    return face(name, note, audit_items(rows, samples_by_type, types, cls), cls=cls)
+    items = audit_items(rows, samples_by_type, types, cls)
+    if 'turn.rejected' in types and cls == 'A':
+        found = dbread.find('audit_events', {'type': 'turn.rejected', 'occurred_at': window['$bound']},
+                            fields=['occurred_at', 'payload'], sort=[('occurred_at', 1)], limit=GATE_CAP)['rows']
+        if len(found) < GATE_CAP:                       # 读满了就不分：判不了的照旧留在 A，不拿部分冒充全量
+            items = split_gate_refusals(found, items, window['offset'])
+    return face(name, note, items, cls=cls)
+
+
+def is_gate_refusal(payload):
+    """「闸拒型」：整回合被退回，原因是我自己这拍没先写心里话／没写要说的话（problem 字面是 unsent、或带「还没写心里话」／「没写要说的话」）。
+    连看三天天天同形，判过是噪声型（我自己的拍被闸拒，不是机器坏）；字面认不出来的 problem 照旧留在组 A。"""
+    problem = str((payload or {}).get('problem') or '') if isinstance(payload, dict) else ''
+    return problem == 'unsent' or '还没写心里话' in problem or '没写要说的话' in problem
+
+
+def split_gate_refusals(rows, items, offset):
+    """turn.rejected 那一型里闸拒型的那些拆出去进组 C 对照；A 里的条数相应减掉（不进报数）。"""
+    quiet = [row for row in rows if is_gate_refusal(row.get('payload'))]
+    if not quiet:
+        return items
+    out = []
+    for entry in items:
+        if entry['group'] == 'turn.rejected':
+            entry = dict(entry, n=max(0, entry['n'] - len(quiet)))
+        out.append(entry)
+    out.append(item('turn.rejected[闸拒型（噪声）]', '整回合被退回、原因是我自己这拍没先写心里话／没写要说的话（unsent）：连看三天天天同形，判为噪声型；'
+                    '降为对照、不进报数（同一类里字面认不出来的照旧留在组 A）',
+                    len(quiet), quiet[0].get('occurred_at'), quiet[-1].get('occurred_at'),
+                    ['%s %s' % (local_text(row.get('occurred_at'), offset), audit_snippet(row.get('payload')))
+                     for row in quiet[:SAMPLES]], 'C'))
+    return out
 
 
 def audit_items(rows, samples_by_type, types, cls):
@@ -388,7 +420,7 @@ def task_face(window, stale_hours):
                           len(found), found[0].get('created_at'), found[-1].get('created_at'),
                           ['%s state=%s' % (local_text(row.get('created_at'), offset), row.get('state'))
                            for row in found[:SAMPLES]], 'A'))
-    stuck, no_time = [], []
+    stuck, no_time, stock = [], [], []
     for row in dbread.find('tasks', {'state': {'$in': ['BLOCKED', 'UNKNOWN']}},
                            fields=['state', 'created_at', 'lease_expires_at', 'failure_type'],
                            sort=[('created_at', 1)], limit=500)['rows']:
@@ -397,6 +429,8 @@ def task_face(window, stale_hours):
             no_time.append(row)
         elif window['start'] <= moment < window['end']:
             stuck.append((moment, source, row))
+        elif moment < window['start']:
+            stock.append((moment, source, row))          # 存量：窗口前建的、至今还卡着
     if stuck:
         stuck.sort(key=lambda triple: triple[0])
         items.append(item('tasks.state[BLOCKED／UNKNOWN]', '卡住的任务（时刻按 created_at，缺则按 lease_expires_at）',
@@ -406,6 +440,13 @@ def task_face(window, stale_hours):
                                                  'failure_type=%s' % row.get('failure_type')
                                                  if row.get('failure_type') else '')
                            for moment, source, row in stuck[:SAMPLES]], 'B'))
+    if stock:
+        stock.sort(key=lambda triple: triple[0])
+        items.append(item('tasks.state[BLOCKED／UNKNOWN 存量]', '窗口前就建、至今仍卡着的存量（不是这一窗新发生的）：列在对照、不进报数；这些行该不该收尾另看',
+                          len(stock), stock[0][0], stock[-1][0],
+                          ['%s state=%s%s' % (stamp(moment, offset), row.get('state'),
+                                              '' if source == 'created_at' else '（时刻取 lease_expires_at）')
+                           for moment, source, row in stock[:SAMPLES]], 'C'))
     if no_time:
         items.append(item('tasks.state[BLOCKED／UNKNOWN 判不了]', '这些行既没 created_at 也没 lease_expires_at：'
                           '落不进窗口，单列不计数（n 列的是条数，时刻栏写 -）', len(no_time), None, None,
@@ -1134,6 +1175,14 @@ def selfcheck():
                  '2026-11-09T06:54:04.000Z info [asuna-host] fine\n')
     reset_hits = count_log_lines(reset_log, datetime(2026, 11, 9, tzinfo=timezone.utc),
                                  datetime(2026, 11, 10, tzinfo=timezone.utc))
+    gate_rows = [{'occurred_at': '2026-11-11T10:00:00', 'payload': {'problem': 'unsent'}},
+                 {'occurred_at': '2026-11-11T11:00:00', 'payload': {'problem': '这回合还没写心里话：先调用 think'}},
+                 {'occurred_at': '2026-11-11T12:00:00', 'payload': {'problem': '别的原因'}}]
+    gate_items = split_gate_refusals(gate_rows, [item('turn.rejected', 'x', 3, None, None, [], 'A')], timedelta(hours=13))
+    check('gate_refusal_split_to_contrast', [(one['group'], one['n'], one['cls']) for one in gate_items]
+          == [('turn.rejected', 1, 'A'), ('turn.rejected[闸拒型（噪声）]', 2, 'C')], str(gate_items))
+    check('gate_refusal_unknown_stays_in_A', split_gate_refusals(gate_rows[2:], [item('turn.rejected', 'x', 1)], timedelta(0))
+          [0]['n'] == 1)
     check('peer_disconnect_needs_all_three', len(reset_hits) == 1 and is_peer_disconnect(reset_hits[0])
           and not is_peer_disconnect(hits[0]), str([(is_peer_disconnect(one)) for one in reset_hits + hits]))
     check('running_cutoff_is_utc_iso', running_cutoff({'start': datetime(2026, 11, 11, 11, 0, tzinfo=timezone.utc)}, 6)

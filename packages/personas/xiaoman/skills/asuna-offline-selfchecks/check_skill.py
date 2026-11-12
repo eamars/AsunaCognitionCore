@@ -109,6 +109,8 @@ BACKLOG_PINS = [
     ("pin_i_temp_one_command", ["跨命令要留的东西一律写 `/task`", "别拿 TEMP 当中间存储"]),
     ("pin_j_local_hash_offline", ["别为了算 sha 出网", "哈希未算", "import hashlib,sys"]),
     ("pin_k_alternates_notes", ["alternates 文件必须 LF 行尾", "路径写相对路径", "远端只用 https"]),
+    ("pin_n_short_sha_by_command", ["rev-parse --short=12", "cat-file -t", "发布候选 sha"]),
+    ("pin_o_commit_subject_one_line", ["第一段只写一句", "80 字"]),
     ("pin_m_dates_by_script", ["脚本读钟面", "不手打日期", "假数"]),
     ("pin_l_fork_root_cause", ["主检出落后", "不许 merge／rebase／reset 硬挪", "先发布，再把自动提交"]),
 ]

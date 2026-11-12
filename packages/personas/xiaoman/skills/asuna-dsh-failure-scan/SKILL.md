@@ -33,6 +33,8 @@ python3 skills/asuna-dsh-failure-scan/dsh_failure_scan.py --no-files           #
 - **只数名册里的 type**：三张审计名册（A／B／D）就是查询的 `$in` 名单，库里另有别的 type 也不进任何一组——加新类型要动名册，不改名册就一行都数不到（自检钉着这一条）。
 
 - **本机断端类（推断）降对照**：`host.log` 里栈末落在 `channels.py` 的 `wfile.write`、异常是 ConnectionReset（10054）／ConnectionAborted（10053）的那一族，三样都在同一件事里才归这一类，列在组 C 下「`host.log[本机断端类（推断）]`」，不进报数。归类是推断（本机通道 HTTP 服务写回时对端提前断开），`lane_faults` 没行只是旁证，不是正面证据；只有异常名、没有 `channels.py` 栈帧的照旧留在组 A。
+- **闸拒型降对照**：`turn.rejected` 里 `problem` 是 `unsent`、或带「还没写心里话」／「没写要说的话」的那些（我自己这拍被闸拒，不是机器坏，连看三天天天同形）拆出去列在组 C 下「`turn.rejected[闸拒型（噪声）]`」，不进报数，组 A 里的 `turn.rejected` 相应减掉；字面认不出来的 `problem` 照旧留在组 A。一窗读满上限就不拆（判不了，不拿部分冒充全量）。
+- **BLOCKED／UNKNOWN 存量单列对照**：窗口前就建、至今仍卡着的任务（存量）不进这一窗的报数，列在组 C 下「`tasks.state[BLOCKED／UNKNOWN 存量]`」，提醒这些行该不该收尾另看；窗口内新建的仍进组 B。
 - **RUNNING 未回执的分界是 UTC 的 ISO 文本**：`tasks.created_at` 存的是 UTC 的 ISO 文本（带 `T`），分界文本必须用同一把尺算（窗口起点的 UTC 减阈值），不许拿本地钟面的「年-月-日 时:分:秒」去比：那样偏移差一个时区差，空格还排在 `T` 前面，同一天里比较恒偏小。
 
 ## 双面去重、保留期与「0」的说法

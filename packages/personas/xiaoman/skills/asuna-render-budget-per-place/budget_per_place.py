@@ -16,7 +16,7 @@ v2（2026-10-25）：同一份库有**两种口径**，并排打，不替哪一�
   （随身→always、手边→on_demand、收着→never）再渲染。
 
 两份口径的差逐节报：每节给出 doc 里的 inject／visibility／tags 对 memory_tiers 里的档，再给各场合 ±token。
-**自我层**（`self`、`core` 两份文档）不进 render.compose，不受 6144 管，单独一格计。
+**自我层**（`self`、`core` 两份文档）不进 render.compose，也不进这把按场合渲染的尺，上限以程序随身回执为准，单独一格计。
 自证锚点是跨场合的**形状**（哪些场合有、哪些场合是 0），不是绝对 token 数——绝对数跟着文档改，只当旁注。
 
 只读：读库里的 persona／voice／self／core 与 memory_tiers 行，不写任何东西，也不调 render_system
@@ -238,8 +238,8 @@ def main():
               "  ".join("%s %s" % (PLACE_CN.get(p, p), signed(whole[p])) for p, _ in places),
               "  ".join("%s %s" % (PLACE_CN.get(p, p), signed(whole[p] - sums[p])) for p, _ in places)))
 
-    # ── 自我层：不进 6144 那把尺 ──
-    print("\n自我层（单独一格，**不受 %s 管**）：" % (limit or "6144"))
+    # ── 自我层：不进这把按场合渲染的尺 ──
+    print("\n自我层（单独一格，**不受 %s 管**）：" % (limit or "这把尺（上限未取到：现读失败，原因见上面「上限」那行）"))
     print("  render.compose 只吃 persona＋voice；`self`、`core` 两本走 context 里的 self_state（current_self／character_core 那一块），"
           "放不放得下不看 render.budget_tokens（它有没有别的上限我没查）。所以「自我层省了 N」≠「预算省了 N」：预算那把尺（上限见上面「上限 N」那行）只认上面两列。")
     self_docs, self_revs = {}, {}

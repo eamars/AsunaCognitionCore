@@ -232,6 +232,42 @@ test('S3: a Web turn stopped while it waits: its message comes with the answer t
   assert.deepEqual(of(h.role, 'asuna/input-returned').map(e => e.data), [{ operation: 'web', messages: 1 }]);
 });
 
+test('S3: her message waiting behind a turn that stepped aside comes after the held stage, never into its turn', async t => {
+  const inputs = []; let n = 0;
+  const h = await harness(t, [], async (core, args) => { inputs.push(args.message_ids); },
+    async (core) => { if (inputs.length) await core.onEvent(stage('web' + (++n), { inputs: inputs.shift() })); });
+  h.role.followup(human('First words'));
+  await until(() => h.core.state('role').waiter, 'her first turn waits for the worker');
+  h.role.followup(human('Second words'));                    // waits as her next turn
+  await h.core.onEvent(stage('beat', { inputs: [] }));       // the worker's earlier work: the first turn steps aside
+  await until(() => h.results.length === 3, 'all answered');
+  await settled(h.role);
+  assert.deepEqual(h.results.map(r => r.token), ['beat', 'web1', 'web2']);
+  assert.ok(h.requests[0].includes('stage text beat'));
+  assert.ok(!h.requests[0].includes('First words') && !h.requests[0].includes('Second words'), 'the turn of the beat is its own');
+  assert.equal(count(h.requests[1], 'First words'), 1);
+  assert.equal(count(h.requests[1], 'Second words'), 1);
+  // A request holds the conversation so far: each of her messages is in it once, never carried twice.
+  assert.equal(count(h.requests[2], 'First words'), 1);
+  assert.equal(count(h.requests[2], 'Second words'), 1);
+});
+
+test('S2: a waiting stage whose episode the worker gave up on is dropped, not run', async t => {
+  let release;
+  const gate = new Promise(resolve => { release = () => resolve('ok'); });
+  const h = await harness(t, [gate]);
+  h.role.followup(createUserMessage({ content: [{ type: 'text', text: 'stale copy' }],
+    source: { kind: 'asuna', form: 'notice', summary: 'asuna:character:TURN', operation: 'old', lane: 'character', phase: 'TURN' } }));
+  while (h.requests.length === 0) await new Promise(resolve => setTimeout(resolve, 2));
+  await h.core.onEvent(stage('late'));
+  await h.core.onEvent({ kind: 'task_fenced', token: 'late', session_id: 'role', reason: 'STAGE_TIMEOUT' });
+  release();
+  await settled(h.role);
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.results.length, 0);
+  assert.deepEqual(of(h.role, 'asuna/stage-dropped').map(e => e.data), [{ operation: 'late', reason: 'STAGE_TIMEOUT' }]);
+});
+
 test('another and failureText', () => {
   assert.equal(another({ inputs: [] }, ['m1']), true, 'a beat while her input is admitted waits');
   assert.equal(another({ inputs: ['m0'] }, ['m1']), false, 'an answer to an earlier message of hers is still her answer');

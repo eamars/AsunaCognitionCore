@@ -982,9 +982,16 @@ export class CognitionCore {
     if (event.kind === 'collab') { await this.collab.entry(event); return; }
     if (event.kind === 'action_message') { await this.collab.message(event); return; }
     if (event.kind === 'task_fenced') {
-      const active = this.states.get(event.session_id)?.current;
-      if (active?.token === event.token) this.ctx.agents.get(event.session_id)?.cancel(
+      const fenced = this.states.get(event.session_id);
+      if (fenced?.current?.token === event.token) this.ctx.agents.get(event.session_id)?.cancel(
         { kind: 'hook', reason: event.reason }, { keepInbox: true });
+      // A stage of it still waiting would start a turn nobody reads (ADR-127 S2's queue): it goes, recorded.
+      const waited = fenced?.queue.findIndex(queued => queued.token === event.token) ?? -1;
+      if (waited >= 0) {
+        fenced.queue.splice(waited, 1);
+        this.ctx.agents.get(event.session_id)?.session.append('asuna/stage-dropped',
+          { operation: event.token, reason: String(event.reason ?? '') });
+      }
       return;
     }
     const state = this.state(event.session_id);
@@ -1040,7 +1047,12 @@ export class CognitionCore {
     state.current = event;
     state.system = event.system;
     this.selectRoute(agent, event.lane, event);
+    // ADR-127 S3: a turn claims one queued message, the first. Her messages already waiting there (left when a turn
+    // of hers stepped aside, which does not take the next one) come after this stage's turn, never into it.
+    const hers = agent.inbox.nextTurn.filter(message => message.source?.kind === 'user' && !message.source.channel);
+    for (const message of hers) agent.inbox.remove(message.id);
     agent.followup(this.message(event, agent.session, agent.inbox.nextStep));
+    for (const message of hers) agent.inbox.append('next-turn', message);
   }
 
   /** ADR-127 S1: one copy of a stage's message. A copy of the same stage still queued, in DSH's inbox (kept across a
@@ -1635,6 +1647,9 @@ export class CognitionCore {
         state.admitted = stage;
         return;
       }
+      // Answered by no stage (an error, the worker's word that no turn follows): the worker has them, so they are
+      // kept for its next answer rather than lost with this turn's refused step.
+      if (stage.kind !== 'stage') keep();
       if (stage.error) throw new Error(stage.error);
       // A group turn's pictures (role_tools.turn_pictures) become image parts of her turn's message.
       if (stage.pictures?.length && attachments) stage.pictureParts = await pictureParts(attachments, stage.pictures);

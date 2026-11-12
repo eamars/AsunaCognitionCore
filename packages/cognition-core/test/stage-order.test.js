@@ -72,7 +72,7 @@ test('R1: a malformed step is requested again once, and its turn answers once', 
   const h = await harness(t, ['MALFORMED_RESPONSE', 'ok']);
   await h.core.onEvent(stage('s1'));
   await settled(h.role);
-  assert.deepEqual(of(h.role, 'asuna/retry').map(event => event.data), [{ turn: 1, step: 1, code: 'MALFORMED_RESPONSE' }]);
+  assert.deepEqual(of(h.role, 'asuna/retry').map(event => event.data), [{ turn: 1, step: 1, code: 'MALFORMED_RESPONSE', by: 'retry' }]);
   assert.equal(of(h.role, 'assistant/message').length, 1);
   assert.equal(h.results.length, 1);
   assert.equal(h.results[0].result.content, 'answer 2');
@@ -110,10 +110,11 @@ test('R1: not when that step holds a tool call, nor when its records cannot be r
   assert.equal(core.retryBroken({ agent: own, turn: 3, step: 2, failure }, failed), failed);
   const other = agent([{ type: 'tool/call', data: { turn: 3, step: 1 } }, { type: 'tool/result', data: { turn: 3, step: 1 } }]);
   assert.deepEqual(core.retryBroken({ agent: other, turn: 3, step: 2, failure }, failed), { kind: 'retry' });
-  assert.deepEqual(other.session.appended, [['asuna/retry', { turn: 3, step: 2, code: 'MALFORMED_RESPONSE' }]]);
+  assert.deepEqual(other.session.appended, [['asuna/retry', { turn: 3, step: 2, code: 'MALFORMED_RESPONSE', by: 'retry' }]]);
   const unreadable = { session: { snapshotEvents() { throw new Error('unreadable'); }, append() { throw new Error('no'); } } };
   assert.equal(core.retryBroken({ agent: unreadable, turn: 3, step: 2, failure }, failed), failed);
-  const retried = agent([{ type: 'asuna/retry', data: { turn: 3, step: 2 } }]);
+  // The fallback took this step already (by: 'fallback'): one extra request per step, the two together.
+  const retried = agent([{ type: 'asuna/retry', data: { turn: 3, step: 2, by: 'fallback' } }]);
   assert.equal(core.retryBroken({ agent: retried, turn: 3, step: 2, failure }, failed), failed);
   assert.equal(core.retryBroken({ agent: other, turn: 3, step: 2, failure: { code: 'TIMEOUT' } }, failed), failed);
   // A retry DSH already decided stands as it is.

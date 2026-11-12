@@ -139,6 +139,8 @@ When one of her turns fails in the program (FAILED_RUNTIME), nobody may be left 
 - def `plan_line` — The once-only line for her next turn where a due plan of hers did not run, or None.
 - def `late_line` — The line in a plan's turn that reached her late, the times on her clock (「时间不详」 when unreadable).
 - def `her_line` — The once-only line for her next turn where a turn of hers failed, or None.
+- def `lost` — What of the failed turn went out (its delivered lines) and what was done (its tools that completed, by name), read when her line is made; requested again and broken again is said as such.
+- def `reported` — It was written into the developer inbox, and how many notes there nobody has read; that half is left out when the count cannot be read, never shown as 0.
 - def `told` — A turn ran to its end: the once-only marks its context showed (manifest `told`) are cleared, each only if it is still the mark that was shown (a newer one set meanwhile stays for the next turn).
 
 ## `caught_up`

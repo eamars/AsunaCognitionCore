@@ -65,7 +65,8 @@ export function another(event, inputs) {
 export function failureText(session, error) {
   const text = String(error).replace(/\s+/g, ' ');
   const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(error.code) ? error.code : null;
-  const line = code && !text.startsWith(code) ? code + ': ' + text : text;
+  // Already led by it (after the error's own name, `Error: CODE: …`): as it is.
+  const line = code && !text.replace(/^\w+: /, '').startsWith(code) ? code + ': ' + text : text;
   if (code !== MALFORMED) return line;
   try {
     const events = session.snapshotEvents();
@@ -1062,7 +1063,7 @@ export class CognitionCore {
       const events = agent.session.snapshotEvents();
       if (events.some(event => own(event) && ['tool/call', 'tool/result', 'asuna/retry'].includes(event.type)))
         return decision;
-      agent.session.append('asuna/retry', { turn, step, code: payload.failure.code });
+      agent.session.append('asuna/retry', { turn, step, code: payload.failure.code, by: 'retry' });
     } catch (error) {
       this.ctx.logger.warn('Asuna: a broken step was not requested again: ' + String(error));
       return decision;
@@ -1526,6 +1527,11 @@ export class CognitionCore {
       const rest = restFor(kind, this.routeFor('actionHigh')?.idleMinutes);
       if (rest) this.restHigh(rest, payload.failure.code);
       this.fall(payload.agent, state.current?.task, kind, payload.failure.code);
+      // Counted like R1's (one extra request per step, the fallback's and R1's together): R1 sees it and stays out.
+      try {
+        payload.agent.session.append('asuna/retry', { turn: payload.turn, step: payload.step, code: payload.failure.code,
+          by: 'fallback' });
+      } catch (error) { this.ctx.logger.warn('Asuna: the fallback\'s request was not recorded: ' + String(error)); }
       return { kind: 'retry' };
     });
     scope.on('agent/error', ({ agent, error }) => {

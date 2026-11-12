@@ -230,6 +230,8 @@ A model that refuses a picture must not end her turn, nor leave the conversation
 The Host plugin's core: `CognitionCore` starts the Python worker and runs the turns it prepares in her native DSH sessions, with her role and action tools served by the worker.
 
 - def `ERRAND_ROOM` — Room an errand's notice and turn take on top of the conversation it copies (ADR-066), in DSH's token measure.
+- def `another` — A stage the worker made for other input than the input being admitted (`inputs`, her message ids).
+- def `failureText` — A failed turn as the worker records it: one line led by its code, so the program names it by its code and never by what the error text carries; a broken step requested again once and broken again is marked (faults.RETRIED_MARK).
 - def `completedPrefix` — The end of a session's last completed turn, with the standalone events after it (DSH's own default fork cut), or undefined when no turn has completed.
 - def `name`
 - def `inject`
@@ -284,11 +286,15 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `validateSettings`
   - `applySettings`
   - `state`
-  - `next`
+  - `next` — The worker's next event for this conversation: a stage queued behind is taken first, unless `inputs` is given (her own input being admitted: only the worker's answer to those messages, never a stage that waits).
   - `message`
   - `restored` — A compaction committed since her notice was composed: what of its context the surface (with the messages this step adds) no longer shows, as a follow-up notice; null when nothing fell out.
   - `relay` — Her words for a running action session (collab.js), marked so its claim can be acknowledged.
   - `onEvent`
+  - `startStage` — The stage's message goes to DSH for the next turn: it is current from here.
+  - `replaceCopies` — ADR-127 S1: one copy of a stage's message.
+  - `resume` — A turn of this conversation has ended with no stage current: the next stage waiting starts (ADR-127 S2).
+  - `retryBroken` — ADR-127 R1: a step whose model answer came back malformed (MALFORMED_RESPONSE) is requested again, once, when it holds no tool call or result of its own (what cannot be read counts as one); `decision` stands otherwise.
   - `disposed` — A conversation's agent is gone: its stage state goes with it, unless it was closed to reopen the conversation.
   - `idle` — No stage running or queued in this session, nor in an action session it handed work to that is still working: an action session whose task has finished stays open and holds nothing.
   - `ownIdle` — No stage of this conversation itself running or queued: when a due turn-end compaction may run (ADR-094 §10.1).

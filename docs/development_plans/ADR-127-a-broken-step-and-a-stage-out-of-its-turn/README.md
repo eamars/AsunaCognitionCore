@@ -168,3 +168,36 @@ add a second: one `asuna/retry` by `fallback`, the task ends as now), and a job 
 goes on); and S1 and S2 by the staged sequence
 of §1 (a stage queued, the worker restarted and the stage sent again; a stage sent during a running turn), with no
 tool-less request. Then installed, and her sessions read with `toolless_steps.py` after the install.
+
+## 6. Shown (2026-11-12, isolated demo profile)
+
+The branch installed into its own DSH profile and database (`asuna_v2_demo_adr127`, the demo persona, dropped after),
+every route on a local stub model speaking the OpenAI protocol through DSH's pi-ai adapter, which turns tool
+arguments that are not JSON into `MALFORMED_RESPONSE` as her model server's did. No real model was called (the Host
+started without any model key in its environment). Read from the demo's own session records and database:
+
+- Her turn, malformed then good: `assistant/attempt`, `asuna/retry` (`by: retry`), the same step answered, one
+  `tool/call` and one `tool/result` in it.
+- Her turn, malformed twice: two requests, the turn `FAILED_RUNTIME`; the recorded failure led by
+  `ASUNA_RETRIED_ONCE` and `MALFORMED_RESPONSE` (the cut arguments stay in the episode's failure, never in her line);
+  the conversation's fault mark kept the code, the episode and `retried`; her next turn there read 「你在这里 11/12 19:03
+  那一回合没跑成：是程序出了错（模型回来的工具参数不成形），不是你做错了什么。程序为重请求过一次，第二次还是没跑成，没再
+  自动重跑——那件事到现在还是没做。这条已经记进开发者收件箱；开发者收件箱里还有 1 条没被读过。」
+- A job not on 高, malformed then good: `asuna/retry` (`by: retry`) once, the task completed.
+- A job on 高, malformed twice: two requests in all, one `asuna/retry` (`by: fallback`), no third request, the task
+  ended as now. The fallback's own request for that step still goes to 高's model (ADR-075 selects the action route
+  from the next step); unchanged here.
+- S2's admission of her Web input on a real worker. Staging found a fault the unit tests could not: the worker read
+  the input's message ids from the turn's context, which does not keep them, so her Web turn waited for an answer it
+  had already been sent and never began. Fixed (`065fe8b9689c`): the ids come from the turn's inbound line, and while
+  her input is admitted only a stage that answers no Web input of hers waits.
+- 0 requests on her lane or the action lane declared no tools in the whole staged run.
+
+Not staged live, and why: a stage arriving while a turn of hers runs (in the demo a delegated task starts only after
+the turn that delegated it ends, so no stage arrives mid-turn by itself), and a copy kept by DSH's inbox across a
+restart (it needs the Host to stop between a stage's queueing and its turn's start). Both are shown on DSH's own loop
+in `stage-order.test.js`, which fails or never ends on the code before this build.
+
+Seen in passing, not this ADR: a task-result turn that keeps failing the end-of-turn check is continued as a new
+generation with no limit (`coordinator._advance`, `feedback.continued`); with the stub it reached 209 generations in
+four minutes. Raised as its own task.

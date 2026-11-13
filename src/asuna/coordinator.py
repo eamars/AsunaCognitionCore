@@ -27,7 +27,7 @@ from .ingress import program_group_context
 from .lanes import Lane
 from .publish import PublishService
 from .render import episode_system
-from . import answers, visibility, outbound_media, role_tools
+from . import answers, faults, visibility, outbound_media, role_tools
 from .state import Store, Denied, now
 from .tasks import FeedbackStale, require_current_feedback
 from .queue import database_effects_lock
@@ -193,7 +193,7 @@ class Coordinator:
     def _task_turn(self, task, kind, event_key, text, trusted, before=None):
         """A turn of hers about a running task, in the conversation the task belongs to: for one begun on an errand,
         the home turn that sent it, whose place, person and scope the task carries (delegate); for work moved to the
-        Web chat from a line (ADR-111 §3.5), the task's own session. Runs it unless it already committed."""
+        Web chat from a line (ADR-111 §3.5), the task's own session. Runs it unless it already ended."""
         self.tasks.valid(task)
         scene=scene_records.authorize(self.store, task['scene_id'], task['requester_id'])
         from . import errands, whose as whose_of
@@ -236,8 +236,8 @@ class Coordinator:
                 'whose':whose_of.of_task(self.store,task),
                 **({'character_context':original['character_context']} if original.get('character_context') else {})},
                 stream=ep_id)
-        if ep['state']!='COMMITTED':
-            ep=self._turn(ep)
+        if ep['state'] in ('PREPARED','TURN'):
+            ep=self._turn(ep)          # a turn that failed is never run again under the same key
         return ep
 
     # ── one turn ────────────────────────────────────────────────────
@@ -271,21 +271,41 @@ class Coordinator:
         return ep_id+':TURN'+(':resume:'+str(generation) if generation else '')
 
     def _turn(self, ep):
-        """Run (or resume) the episode's native turn until it ends or she answers."""
+        """Run (or resume) the episode's native turn until it ends or she answers. A turn that fails its check ends
+        here, where every turn ends, and is told (ADR-128 D3); the caller gets the failed episode back."""
         try:
             try:
-                return self._run_turn(ep)
-            except SessionCarried as exc:
-                # ADR-028: the turn runs again, once, in the session that replaced the one that no longer fit.
-                self.store.audit(ep['_id'],'turn.carried',{'successor':exc.successor},ep['scope_key'])
-                ep=episode_records.get(self.store, ep['_id'])
-                ep=self._update(ep,resume_diagnostic=exc.note)
-                return self._run_turn(ep)
+                return self._carried(ep)
+            except ProtocolFailure as exc:
+                return self._failed(ep['_id'], exc)
         finally:
             # The native turn waits after each stage for another one (a repair note); tell it there is none.
             done=getattr(self.character,'turn_done',None)
             if done:
                 done(episode_records.get(self.store, ep['_id']) or ep)
+
+    def _carried(self, ep):
+        try:
+            return self._run_turn(ep)
+        except SessionCarried as exc:
+            # ADR-028: the turn runs again, once, in the session that replaced the one that no longer fit.
+            self.store.audit(ep['_id'],'turn.carried',{'successor':exc.successor},ep['scope_key'])
+            ep=episode_records.get(self.store, ep['_id'])
+            ep=self._update(ep,resume_diagnostic=exc.note)
+            return self._run_turn(ep)
+
+    def _failed(self, ep_id, exc):
+        """The turn failed its check: ended FAILED_PROTOCOL once, then the developer's note and her line where it
+        happened (faults.turn_failed). A report that fails is recorded on the turn and never becomes the next
+        failure."""
+        ep=episode_records.get(self.store, ep_id)
+        self.store.audit(ep_id,'phase.failed',{'reason':str(exc)},ep['scope_key'])
+        ep=self._update(ep,state='FAILED_PROTOCOL',failure=str(exc))
+        try:
+            faults.turn_failed(self.store, ep, ep['failure'])
+        except Exception as error:       # noqa: BLE001 recorded on the turn; the turn is still ended
+            self.store.audit(ep_id,'turn.fault_unreported',{'error':excerpt(str(error),300)},ep['scope_key'])
+        return ep
 
     def _run_turn(self, ep):
         kind=role_tools.turn_kind(ep)
@@ -296,8 +316,8 @@ class Coordinator:
         changes={}
         if not fresh:
             # A native turn whose result was saved (its lane receipt) is replayed from it, never generated
-            # again; one that never finished, or failed its checks, runs again as a new native turn.
-            if ep['state']=='FAILED_PROTOCOL' or not receipt_records.lane_get(self.store, self._operation(ep['_id'],generation)):
+            # again; one that never finished runs again as a new native turn.
+            if not receipt_records.lane_get(self.store, self._operation(ep['_id'],generation)):
                 generation+=1
             # delegate saves its task before the call is recorded: a task this episode made is its own.
             made=[row['_id'] for row in task_records.of_episode(self.store,ep['_id']).rows(fields=['_id'])]
@@ -596,12 +616,6 @@ class Coordinator:
                 return self._suppress_feedback(ep, exc)
             if self.native_session_resolver and not ep.get('native_session_id'):
                 ep=self._update(ep,native_session_id=self.native_session_resolver(ep))
-            if ep['state']=='FAILED_PROTOCOL' and ep.get('episode_kind')=='task_feedback':
-                scene=scene_records.authorize(self.store, ep['scene_id'], ep['person_id'])
-                if scene['policy_epoch']!=ep['policy_epoch']:
-                    raise Denied('FEEDBACK_POLICY_STALE')
-                ep=self._update(ep,resume_diagnostic=ep.get('failure',''))
-                self.store.audit(ep_id,'feedback.continued',{'generation':int(ep.get('turn_generation') or 0)+1},ep['scope_key'])
             if ep['state']=='INTERRUPTED':
                 # Explicitly resumed role generation keeps its scene/session. Completed tools and
                 # publications are not replayed: tool calls keep their recorded results.
@@ -614,16 +628,13 @@ class Coordinator:
                     ep=self._attend(ep)
                     if ep['state']=='COMMITTED':
                         return ep
-                if ep['state'] in ('PREPARED','TURN','FAILED_PROTOCOL'):
+                if ep['state'] in ('PREPARED','TURN'):
                     ep=self._turn(ep)
                 if ep['state']=='SPEAK_ACCEPTED':
                     ep=self._publish(ep)
                 return ep
             except FeedbackStale as exc:
                 return self._suppress_feedback(episode_records.get(self.store, ep_id), exc)
-            except ProtocolFailure as exc:
-                self.store.audit(ep_id,'phase.failed',{'reason':str(exc)},ep['scope_key'])
-                return self._update(episode_records.get(self.store, ep_id),state='FAILED_PROTOCOL',failure=str(exc))
 
     def _suppress_feedback(self, ep, error):
         self.store.audit(ep['_id'], 'feedback.suppressed', {'reason': str(error)}, ep['scope_key'])

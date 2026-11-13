@@ -131,7 +131,7 @@ Platform notices as one-off lines (ADR-064 phase 1): the adapter projects a noti
 
 [src/asuna/faults.py](../../src/asuna/faults.py)
 
-When one of her turns fails in the program (FAILED_RUNTIME), nobody may be left not knowing (ADR-076 R4).
+When one of her turns fails in the program (FAILED_RUNTIME), or fails its check (FAILED_PROTOCOL, ADR-128 D3), nobody may be left not knowing (ADR-076 R4).
 
 - def `cause` — The failure's name: its error code if it carries one, else the exception's class.
 - def `turn_failed` — Report a failed turn to the developer and mark its conversation for her next turn there.

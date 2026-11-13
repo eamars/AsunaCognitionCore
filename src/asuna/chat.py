@@ -422,11 +422,6 @@ class Chat:
                         continue
                     episode = result['_id']
                     self.latest = episode
-                    if result['state']=='FAILED_PROTOCOL' and not self.stopping.is_set():
-                        # The same durable feedback episode remains eligible.
-                        # Give its role session the original error on the next
-                        # normal queue turn; do not ingest or rerun the action.
-                        self.pending.put((event, task['episode_id']))
                 else:
                     scene = scene_records.authorize(self.app.store, event['scene_id'], event['person_id'])
                     source = message_records.get(self.app.store, 'in-' + episode)
@@ -479,7 +474,10 @@ class Chat:
                          if task_records.get(self.app.store, task_id, state='READY')]
                 for task_id in ready:
                     self._schedule(task_id)
-                if not ready and result.get('silent_reason'):
+                if result['state'] == 'FAILED_PROTOCOL':
+                    # Her turn failed its check; it is told to her and the developer where it ended (ADR-128 D3).
+                    self.emit(f"[系统] 她这一回合没跑成，状态：{result['state']}。请展开本轮执行详情查看原始过程。")
+                elif not ready and result.get('silent_reason'):
                     self.emit('[系统] 角色明确选择本轮不发言；请查看本轮执行详情中的原因。')
                 elif not ready and not messages:
                     self.emit(f"[系统] 本轮没有公开发言，状态：{result['state']}。请展开本轮执行详情查看原始过程。")
@@ -499,7 +497,7 @@ class Chat:
                         short = event.get('_short', False)
                         turn = episode_records.of_source(self.app.store, result_event_id(task, short),
                                                          kind='task_feedback')
-                        if turn and turn['state'] not in ('COMMITTED', 'WAITING_TASK'):
+                        if turn and turn['state'] not in ('COMMITTED', 'WAITING_TASK', 'FAILED_PROTOCOL'):
                             episode_records.save(self.app.store, {**turn, 'state': 'INTERRUPTED' if self.stopping.is_set()
                                                  else 'FAILED_RUNTIME', 'failure': error}, expected=turn['revision'], stream=turn['_id'])
                             if not self.stopping.is_set():
@@ -522,7 +520,7 @@ class Chat:
                         # next turn here says so (ADR-119 F1); the message itself is not delivered again.
                         self._report_fault({'_id': episode, 'scene_id': event['scene_id'], 'persona': self.settings['persona'],
                                             'episode_kind': event.get('episode_kind') or 'external'}, error)
-                    if ep and ep['state'] not in ('COMMITTED', 'WAITING_TASK'):
+                    if ep and ep['state'] not in ('COMMITTED', 'WAITING_TASK', 'FAILED_PROTOCOL'):
                         episode_records.save(self.app.store, {**ep, 'state': 'INTERRUPTED' if self.stopping.is_set() else 'FAILED_RUNTIME',
                                              'failure': error}, expected=ep['revision'], stream=episode)
                         if not self.stopping.is_set():
@@ -540,7 +538,7 @@ class Chat:
                             'episode_id': episode, 'traceback': redact(traceback.format_exc(), self.app.config)})
                 with self.state_lock:
                     self.active = None
-                    if event.get('_feedback_task') and not (result and result['state'] == 'FAILED_PROTOCOL'):
+                    if event.get('_feedback_task'):
                         self.handbacks.discard(event['_feedback_task'])
                 with self.ingress_lock:
                     self.enqueued.discard(episode)

@@ -1,9 +1,17 @@
 """Her line about a failed turn says what of it was lost (ADR-127 N1): the cause only through its table, what went out
 and what was done by count and name, requested again and broken again said as such, and the inbox count left out
-when it cannot be read. The records it reads are stand-ins."""
+when it cannot be read. The records it reads are stand-ins.
+
+ADR-128: a turn that fails its check is ended where every turn ends and told to the developer and to her (D3), with
+her words for the cause (D2), and a failed hand-back goes down ADR-030's ladder instead of being run again (D1). On
+the unit run's store holding the fixture world (conftest.py)."""
 import pytest
 
-from asuna import developer_inbox, faults
+from asuna import developer_inbox, faults, handover, ingress, role_tools, visibility, whose
+from asuna.coordinator import Coordinator, ProtocolFailure
+from asuna.lanes import FakeLane, FakeTurn
+from asuna.records import tasks as task_records
+from asuna.tasks import TaskService
 from asuna.records import episodes as episode_records
 from asuna.records import messages as message_records
 from asuna.records import scenes as scene_records
@@ -89,3 +97,130 @@ def test_the_retried_mark_and_the_episode_are_kept_with_the_fault(monkeypatch):
     faults.turn_failed(store, ep, 'Traceback\nRuntimeError: TRANSPORT: Error: down')
     assert [(m['cause'], m['episode_id'], m.get('retried')) for m in marks] == [
         ('MALFORMED_RESPONSE', 'ep-9', True), ('TRANSPORT', 'ep-9', None)]
+
+
+def test_a_capped_failed_check_gets_her_second_word(monkeypatch):
+    store = type('S', (), {'config': {'chat': {'persona': 'p'}}})()
+    marks = []
+    monkeypatch.setattr(developer_inbox, 'leave', lambda *a, **k: {'_id': 'n1'})
+    monkeypatch.setattr(developer_inbox, 'bump', lambda store, row: None)
+    monkeypatch.setattr(scene_records, 'note_fault', lambda store, scene, fault: marks.append(fault))
+    spent = {str(n): {} for n in range(role_tools.CALLS_HARD + 1)}      # the last call ran: every later one ends
+    for calls in (spent, dict(list(spent.items())[:-1])):
+        faults.turn_failed(store, {'_id': 'ep-c', 'scene_id': 'dm-a', 'tool_calls': calls},
+                           'INVALID_TURN_OUTPUT: {"problem": "x"}')
+    faults.turn_failed(store, {'_id': 'ep-r', 'scene_id': 'dm-a', 'tool_calls': spent}, 'TRANSPORT: Error: down')
+    assert [m.get('capped') for m in marks] == [True, None, None]
+
+
+def test_her_words_for_a_failed_check(turn):
+    assert '是程序出了错（收尾的检查三次没过），不是你做错了什么' in line({'cause': 'INVALID_TURN_OUTPUT'})
+    assert '是程序出了错（工具次数已经用完，收尾过不去），不是你做错了什么' in line(
+        {'cause': 'INVALID_TURN_OUTPUT', 'capped': True})
+
+
+LOCAL, OWNER, PERSONA = 'local-dm', 'local-user', 'P1'
+CUT = FakeTurn([], '', finish_reason='length')        # cut at the length limit, nothing said, nothing written
+
+
+@pytest.fixture
+def home(world, tmp_path, monkeypatch):
+    from asuna import sandbox_backend
+    monkeypatch.setattr(sandbox_backend, 'available', lambda config: True)
+    world.config['chat'] = {**world.config['chat'], 'scene_id': LOCAL, 'person_id': OWNER, 'persona': PERSONA,
+                            'workspace': str(tmp_path / 'local')}
+    scene_records.save(world, {'_id': LOCAL, 'kind': 'dm', 'scope_key': 'scene:' + LOCAL, 'policy_epoch': 1,
+                               'sequence': 0, 'members': [OWNER]})
+    return world
+
+
+def notes(store):
+    return [row for row in developer_inbox.unread(store) if (row.get('source') or {}).get('kind') == 'turn_failed']
+
+
+def failed_rows(store, ep_id):
+    return [row for row in store.collection('audit_events').find({'type': 'phase.failed'})
+            if row['stream_id'] == ep_id]
+
+
+def test_a_local_turn_cut_three_times_is_ended_and_told_where_it_ends(home):
+    lane = FakeLane(home, [CUT] * 3)
+    ep = Coordinator(home, lane).ingest({'event_id': 'e1', 'scene_id': LOCAL, 'person_id': OWNER, 'text': '在吗',
+                                         'episode_kind': 'external'}, persona=PERSONA)
+    assert ep['state'] == 'FAILED_PROTOCOL' and ep['failure'].startswith('INVALID_TURN_OUTPUT: ')
+    assert len(lane.calls) == 3 and len(failed_rows(home, ep['_id'])) == 1
+    assert [(n['source']['cause'], n.get('count')) for n in notes(home)] == [('INVALID_TURN_OUTPUT', 1)]
+    fault = scene_records.get(home, LOCAL)['fault']
+    assert (fault['cause'], fault['kind'], fault['episode_id'], fault.get('capped')) == (
+        'INVALID_TURN_OUTPUT', 'external', ep['_id'], None)
+    from asuna import schedule_rules
+    said = faults.her_line(home, scene_records.get(home, LOCAL), schedule_rules.her_zone(home.config))
+    assert '（收尾的检查三次没过）' in said and faults.REPORTED in said
+    # Ended: advanced again, it runs nothing (the lane has no output left) and tells no one again.
+    again = Coordinator(home, FakeLane(home, [])).advance(ep['_id'])
+    assert again['state'] == 'FAILED_PROTOCOL' and len(failed_rows(home, ep['_id'])) == 1 and len(notes(home)) == 1
+
+
+def asked_task(home, key='k1'):
+    """A task she sent from the Web chat, as delegate makes it."""
+    event = {'event_id': key, 'scene_id': LOCAL, 'person_id': OWNER, 'text': '帮我查一下', 'episode_kind': 'external',
+             'adapter_id': 'local'}
+    ingress.persist_input(home, event)
+    ep_id = ingress.episode_id(event)
+    scene = scene_records.get(home, LOCAL)
+    asked = home.put('episodes', {
+        '_id': ep_id, 'scene_id': LOCAL, 'scope_key': scene['scope_key'], 'policy_epoch': 1, 'persona': PERSONA,
+        'person_id': OWNER, 'episode_kind': 'external', 'state': 'TURN', 'source_event_id': key, 'monologue_refs': [],
+        'context': {}, 'manifest': {'session_class': visibility.session_class(home.config, home, scene, OWNER),
+                                    'persona_revision': 1},
+        'tool_calls': {}, 'whose': whose.of_turn(home, None, event)}, stream=ep_id)
+    coordinator = Coordinator(home, None)
+    coordinator.native_session_resolver = lambda proto: 'session-' + proto['scene_id']
+    return coordinator, coordinator.delegate(asked, 'c-' + key, '标题', '交代')
+
+
+def test_a_consult_that_never_answers_is_ended_told_and_answered_with_its_failure(home):
+    coordinator, task = asked_task(home)
+    made = task_records.get(home, task['_id'])
+    task = home.put('tasks', {**made, 'state': 'RUNNING', 'fencing_token': 1, 'lease_expires_at': 4e9},
+                    expected=made['revision'], stream=made['_id'])
+    coordinator.character = FakeLane(home, [FakeTurn([], '还在想')] * 3)
+    with pytest.raises(ProtocolFailure) as caught:
+        coordinator.consult(task, 'call-1', {'question': '用哪一个？'})
+    assert str(caught.value).startswith('CONSULT_NOT_ANSWERED: INVALID_TURN_OUTPUT: ')
+    consult = list(home.collection('episodes').find({'episode_kind': 'consult'}))
+    assert [ep['state'] for ep in consult] == ['FAILED_PROTOCOL']
+    assert len(failed_rows(home, consult[0]['_id'])) == 1
+    assert [(n['source']['cause'], n.get('count')) for n in notes(home)] == [('INVALID_TURN_OUTPUT', 1)]
+    assert scene_records.get(home, LOCAL)['fault']['kind'] == 'consult'
+    # The same call asked again runs no turn under the same key: it is answered with the failure again.
+    coordinator.character = FakeLane(home, [])
+    with pytest.raises(ProtocolFailure):
+        coordinator.consult(task, 'call-1', {'question': '用哪一个？'})
+
+
+def test_a_failed_hand_back_goes_down_the_ladder_and_is_never_run_again(home):
+    coordinator, task = asked_task(home)
+    done = task_records.get(home, task['_id'])
+    home.put('tasks', {**done, 'state': 'RETURNED', 'feedback_state': 'READY'}, expected=done['revision'],
+             stream=done['_id'])
+    service, seen = TaskService(home), []
+    service.on_collab = lambda task, entry: seen.append(entry)
+    coordinator.character = FakeLane(home, [CUT] * 3)
+    full = service.feedback(task_records.get(home, task['_id']), coordinator)
+    assert full['state'] == 'FAILED_PROTOCOL'
+    assert task_records.get(home, task['_id'])['feedback_state'] == 'READY'
+    assert [(e['state'], e.get('cause'), e.get('error')) for e in seen if e['kind'] == 'handback'][-1] == (
+        'missed', 'turn', 'INVALID_TURN_OUTPUT')
+    # Handed back again, the failed turn is returned as it is: no new generation, no delivery.
+    coordinator.character = FakeLane(home, [])
+    again = service.feedback(task_records.get(home, task['_id']), coordinator, again=True)
+    assert again['_id'] == full['_id'] and again['state'] == 'FAILED_PROTOCOL'
+    assert not list(home.collection('audit_events').find({'type': 'feedback.continued'}))
+    # The watchdog's ladder: the short version next, a new episode; when it fails too, give up.
+    current = task_records.get(home, task['_id'])
+    assert handover.next_step(home, current) == handover.SHORT and handover.cause(home, current) == 'turn'
+    coordinator.character = FakeLane(home, [CUT] * 3)
+    short = service.feedback(current, coordinator, short=True, again=True)
+    assert short['_id'] != full['_id'] and short['state'] == 'FAILED_PROTOCOL'
+    assert handover.next_step(home, task_records.get(home, task['_id'])) == handover.GIVE_UP

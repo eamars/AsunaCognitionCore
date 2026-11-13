@@ -61,12 +61,12 @@ def next_step(store, task):
     from .coordinator import RESUMABLE
     record = task.get('handback') or {}
     short = episode_records.of_source(store, result_event_id(task, True), kind='task_feedback')
-    if record.get('short_failed') or short and short['state'] not in (*RESUMABLE, 'FAILED_PROTOCOL', 'COMMITTED'):
+    if record.get('short_failed') or short and short['state'] not in (*RESUMABLE, 'COMMITTED'):
         return GIVE_UP
     if short:
         return SHORT                         # the short hand-back was cut off (a restart): resume it
     full = episode_records.of_source(store, result_event_id(task), kind='task_feedback')
-    if full and full['state'] not in (*RESUMABLE, 'FAILED_PROTOCOL', 'COMMITTED'):
+    if full and full['state'] not in (*RESUMABLE, 'COMMITTED'):
         return SHORT                         # her turn on it failed: the same full result would likely fail again
     if record.get('failures', 0) >= REPORT_FAILURES_BEFORE_SHORT:
         return SHORT
@@ -79,7 +79,7 @@ def cause(store, task):
     if (task.get('handback') or {}).get('failures'):
         return 'report'
     full = episode_records.of_source(store, result_event_id(task), kind='task_feedback')
-    return 'turn' if full and full['state'] not in (*RESUMABLE, 'FAILED_PROTOCOL', 'COMMITTED') else 'restart'
+    return 'turn' if full and full['state'] not in (*RESUMABLE, 'COMMITTED') else 'restart'
 
 
 # Her task list in words (ADR-030 D7): one phrase per task instead of raw state fields.

@@ -1,4 +1,5 @@
-"""When one of her turns fails in the program (FAILED_RUNTIME), nobody may be left not knowing (ADR-076 R4).
+"""When one of her turns fails in the program (FAILED_RUNTIME), or fails its check (FAILED_PROTOCOL, ADR-128 D3),
+nobody may be left not knowing (ADR-076 R4).
 
 The developer gets one `developer_inbox` note per kind of failure a day (`source.by: program`), its count kept
 current as the same failure comes again; the conversation where it happened is marked, and her next turn there reads
@@ -34,7 +35,11 @@ UNREAD = '开发者收件箱里还有 %d 条没被读过'
 # what the model wrote); one not in it is 「出错类型未辨」.
 CAUSES = {'MALFORMED_RESPONSE': '模型回来的工具参数不成形', 'TRANSPORT': '连不上模型', 'TIMEOUT': '模型超时没回',
           'CONTEXT_WINDOW_EXCEEDED': '对话太长，模型装不下', 'PI_AI_ERROR': '模型服务报错',
-          'INVALID_REQUEST': '模型拒收了这次请求', 'NO_ADAPTER': '没有能用的模型'}
+          'INVALID_REQUEST': '模型拒收了这次请求', 'NO_ADAPTER': '没有能用的模型',
+          'INVALID_TURN_OUTPUT': '收尾的检查三次没过'}
+# INVALID_TURN_OUTPUT when the turn's tool calls had passed the hard line, so every further call ended the turn and
+# no ending could pass (ADR-128 D2, her words, agent line 0433).
+CAPPED = '工具次数已经用完，收尾过不去'
 UNREADABLE = '出错类型未辨'
 # The plugin's mark on a turn whose broken step was requested again once (ADR-127 R1) and broke again.
 RETRIED_MARK = 'ASUNA_RETRIED_ONCE'
@@ -76,8 +81,11 @@ def turn_failed(store, ep, error, now=None):
                                 key=['turn_failed', kind, name, moment.date().isoformat()],
                                 source={'by': 'program', 'kind': 'turn_failed', 'cause': name})
     developer_inbox.bump(store, row['_id'])
+    from .role_tools import CALLS_HARD
+    capped = name == 'INVALID_TURN_OUTPUT' and len(ep.get('tool_calls') or {}) > CALLS_HARD
     scene_records.note_fault(store, ep.get('scene_id'), {'at': moment.isoformat(), 'cause': name, 'kind': kind,
-                             'episode_id': ep.get('_id'), **({'retried': True} if RETRIED_MARK in str(error or '') else {})})
+                             'episode_id': ep.get('_id'), **({'retried': True} if RETRIED_MARK in str(error or '') else {}),
+                             **({'capped': True} if capped else {})})
 
 
 def plan_failed(store, plan, error, goes_on, now=None):
@@ -127,8 +135,8 @@ def her_line(store, scene, zone):
     from .schedule_rules import line_stamp
     from .local_time import UNKNOWN
     code = fault.get('cause')
-    line = TURN_HEAD % (line_stamp(zone, fault.get('at')) or UNKNOWN,
-                        CAUSES.get(code, UNREADABLE) if code else NO_CAUSE)
+    word = CAPPED if fault.get('capped') else CAUSES.get(code, UNREADABLE) if code else NO_CAUSE
+    line = TURN_HEAD % (line_stamp(zone, fault.get('at')) or UNKNOWN, word)
     return line + lost(store, fault) + reported(store)
 
 

@@ -24,6 +24,7 @@ from urllib.parse import urlsplit
 from . import clock
 from . import animated, channel_kinds, media_children, visibility
 from .config import echoed
+from .faults import NO_CAUSE
 from .evidence import canonical, sha
 from .scene_links import message_times, read_scope
 from .state import Denied
@@ -652,7 +653,7 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
                             else '最近 %d 条消息里没有图，%s' % (SCENE_SCAN_MESSAGES, GIVE_UP)))
     if not entry.get('pullable'):
         raise ValueError('IMAGE_NOT_PULLABLE: 这张图拉不了（%s）；%s'
-                         % (entry.get('not_pullable_because') or '原因不明', GIVE_UP))
+                         % (entry.get('not_pullable_because') or NO_CAUSE, GIVE_UP))
     if entry.get('pull_via') == 'blob':
         # A picture from the owner's local chat: already stored when it arrived; read it back, store nothing new.
         data, blob = local_upload_bytes(store, blobs, task, config, entry, max_bytes)

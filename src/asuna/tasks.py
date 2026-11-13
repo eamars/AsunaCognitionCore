@@ -629,7 +629,6 @@ class TaskService:
         if not ep:
             ep=episode_records.of_source(self.store,handover.result_event_id(task,short),kind='task_feedback',
                                          scene=task['scene_id'])
-        continuing=bool(ep)
         if ep:
             if (ep.get('episode_kind')!='task_feedback' or ep.get('task_id')!=task['_id']
                     or ep.get('intent_revision')!=task['intent_revision'] or ep['scene_id']!=task['scene_id']
@@ -661,7 +660,7 @@ class TaskService:
                     observations_total=len(observations),finished_at=current.get('finished_at'))
             self.handback(task,'handing',short=short)
             ep=coordinator.ingest(event,persona=original['persona'])
-        if ep['state'] in (('FAILED_PROTOCOL',) if continuing else ()) or ep['state'] in ('PREPARED','TURN','SPEAK_ACCEPTED','INTERRUPTED'):
+        if ep['state'] in ('PREPARED','TURN','SPEAK_ACCEPTED','INTERRUPTED'):
             ep=coordinator.advance(ep['_id'])
         with self.lock:
             latest = task_records.get(self.store, task['_id'])
@@ -671,6 +670,11 @@ class TaskService:
             task_records.save(self.store, {**latest,'feedback_state':'READY' if ep['state']=='FAILED_PROTOCOL' else 'DELIVERED' if ep['state']=='COMMITTED' else ep['state'],'feedback_episode':ep['_id']},expected=latest['revision'],stream=latest['_id'])
         if ep['state']=='COMMITTED':
             self.handback(task,'taken',short=short)
+        elif ep['state']=='FAILED_PROTOCOL':
+            # Her turn on it failed its check, ended and told there (ADR-128): the result did not reach her, and the
+            # watchdog takes it from here (handover.next_step: the short version, then give up).
+            from . import faults
+            self.handback(task,'missed','turn',faults.cause(ep.get('failure')),short=short)
         if ep['state']=='COMMITTED' and original['state']=='WAITING_TASK':
             episode_records.save(self.store, {**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
         return ep

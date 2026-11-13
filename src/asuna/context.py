@@ -406,6 +406,7 @@ class ContextBuilder:
         history_projection={'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
             'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1,'received_at':1,'receipt_at':1,
             'attachment':1,'attachment_skipped':1,   # 附件位：只多带这两个小字段，字节仍在 BlobStore
+            'delivery_basis':1,                      # a picture the local sink delivered counts as sent (ADR-129 D4)
             'occurred_at':1,'event.raw.'+caught_up.CATCHUP_KEY:1,   # a caught-up line shows when it was said
             'platform_receipt.response.verification':1,   # what of her line the platform really stored
             'event.raw.asuna_notice':1,                   # a platform notice is the program's line (notices.py)
@@ -604,8 +605,11 @@ class ContextBuilder:
         from . import stickers as _stickers
         # What the guide explains is only what this conversation can get (ADR-103): the faces note is said where
         # its platform declares its faces and stickers can leave -- the condition that adds faces_from_program.
+        # Her local chat has a guide of its own: speak beside body text (ADR-129 D6).
+        from .role_tools import local_chat as _local_chat
         system,system_ref=render_system(self.store,persona,session_class,place,
-                                        bool(scene.get('channel_id')) and bool(_kinds.reply_parts(scene['_id'])),
+                                        'home' if _local_chat(self.store.config,scene['_id'])
+                                        else bool(scene.get('channel_id')) and bool(_kinds.reply_parts(scene['_id'])),
                                         _stickers.has_faces(scene))
         docs=DocumentStore(self.store,persona)
         persona_doc=docs.read('persona')[1]
@@ -699,6 +703,7 @@ class ContextBuilder:
             slot=outbound_media.history_slot(row,self.store)
             if slot:row['attachment']=slot
             else:row.pop('attachment',None)
+            row.pop('delivery_basis',None)
         found=self._memories(event,persona,scene,session_class,read,tail_sources,moment,recall=recall,
                              turn_kind=turn_kind,age_bound=age_bound,history_lines=history_lines)
         facts,memories,retrieval_manifest=found['facts'],found['memories'],found['retrieval']

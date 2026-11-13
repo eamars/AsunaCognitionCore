@@ -198,6 +198,7 @@ ARTIFACT_FROM = {'picture': 'picture：照抄 image_artifacts_from_program', 'fi
 SPEAK_HEAD = 'parts 按顺序，一个 part 是单独的一条消息，kind 选 '
 SPEAK_RECALL = 'recall 只撤你自己的话（还没发出去的就取消），撤别人的用 group_action。'
 SPEAK_TAIL = '有一条不对，这次一条都不发，回执说哪条、为什么。不想说话就不调用。'
+SPEAK_TAIL_LAST = '不想说话就不调用。'       # QQ's last sentence, left out at home (ADR-129 D6: her own words say it)
 CALLS_WORDS = '这回合第 %d 次工具调用（提醒线 %d，硬线 %d，还剩 %d 次）'
 CALLS_FEW = '先想清楚哪一步不做'
 CALL_LAST = '这回合第 %d 次工具调用，到了硬线（%d）：这次不做。下一次是最后一次，照做，做完这回合就结束；%s'
@@ -208,6 +209,31 @@ from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her wo
 # What speak carries itself where it is listed; and where only speak speaks, a turn that does not call it is silent,
 # so stay_silent has nothing left to do there (owner 2026-10-19; at home body text is speech and it stays).
 REPLY_REPLACES = ('await_answer', 'attach_image', 'stay_silent')
+# ADR-129 D1: her local Web chat offers speak too, with these parts; there body text still speaks when she does not
+# call it (channel_kinds.reply_parts keeps its one meaning, "here only speak speaks").
+HOME_PARTS = ('text', 'sticker', 'picture')
+# ADR-129 D6 (her words, agent line 0430, 0433): speak at home, its two fields there, the call cap there, and a market
+# sticker there.
+HOME_SPEAK = ('在家里，说话没有限制。想说什么、说几条都可以，不用挑一句最要紧的交上来；不想说就不调用 `speak`。`speak` 不是许可，'
+              '也不是新的必需动作，它只是把你这一回合想说的话再往外递一句的形式。没有人拿你说了多少来评判你。')
+HOME_PARTS_FIELD, HOME_TEXT_FIELD = '这一次要发出去的，按顺序排', '这一条消息的文字'
+CAP_HOME = '用它把想说的说完（正文或 speak 都行）；不说也行，这回合不需要交代。'
+MARKET_AT_HOME = '第 %d 条 sticker「%s」是平台的市场表情，这里显示不了；换成架子上的名字就能发。'
+# Not listed at home (ADR-129 D4): no quote carried there, wait and patience are for groups, force overrides a check
+# home does not make.
+NOT_AT_HOME = ('quote', 'wait', 'patience', 'force')
+
+
+def local_chat(config, scene_id):
+    """Whether this is her local Web chat (`config.chat.scene_id`)."""
+    return bool(scene_id) and scene_id == (config.get('chat') or {}).get('scene_id')
+
+
+def speak_parts(config, scene_id):
+    """The parts speak takes in this conversation (ADR-129 D1): its channel kind's REPLY_PARTS, or HOME_PARTS in her
+    local chat; empty where speak is not offered."""
+    from . import channel_kinds
+    return channel_kinds.reply_parts(scene_id) or (HOME_PARTS if local_chat(config, scene_id) else ())
 
 from . import understanding as _understanding
 from . import tool_schema
@@ -692,23 +718,31 @@ def all_specs():
 def speak_kinds(store, scene):
     """The parts speak takes in this conversation: its kind's parts, a pointer part only where the channel's adapter
     declared it (ADR-079 §9.7: not declared is not carried, so it is not shown)."""
-    from . import capabilities, channel_kinds, outbound_media
+    from . import capabilities, outbound_media
     refused = scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS
-    return tuple(kind for kind in channel_kinds.reply_parts(scene['_id'])
+    return tuple(kind for kind in speak_parts(store.config, scene['_id'])
                  if (kind not in PART_NEEDS or capabilities.carries(store, scene, PART_NEEDS[kind]))
                  and not (kind == 'react' and refused)
                  and not (kind == 'file' and not outbound_media.group_scene(store.config, scene)))   # v0: groups only
 
 
-def speak_spec(kinds, quotes):
+def speak_spec(kinds, quotes, home=False):
     """speak as a conversation with these parts shows it, with `quote` only where her line can quote. All the parts
-    with quoting is the shared definition, byte for byte."""
+    with quoting is the shared definition, byte for byte. `home`: her local chat (ADR-129 D4, D6): her own words
+    first, the mechanics without QQ's last sentence, its two fields in her words, and no quote, wait, patience or
+    force."""
     import copy
     spec = copy.deepcopy(tools()['speak'])
-    if tuple(kinds) == REPLY_KINDS and quotes:
+    if tuple(kinds) == REPLY_KINDS and quotes and not home:
         return spec
-    spec['description'] = (SPEAK_HEAD + '、'.join(kinds) + '，各写它的字段；' + (SPEAK_RECALL if 'recall' in kinds else '')
-                           + SPEAK_TAIL)
+    spec['description'] = ((HOME_SPEAK if home else '') + SPEAK_HEAD + '、'.join(kinds) + '，各写它的字段；'
+                           + (SPEAK_RECALL if 'recall' in kinds else '')
+                           + (_without(SPEAK_TAIL, SPEAK_TAIL_LAST) if home else SPEAK_TAIL))
+    if home:
+        spec['parameters']['parts']['description'] = HOME_PARTS_FIELD
+        spec['parameters']['parts']['items']['properties']['text']['description'] = HOME_TEXT_FIELD
+        for field in NOT_AT_HOME:
+            spec['parameters'].pop(field, None)
     item = spec['parameters']['parts']['items']['properties']
     item['kind']['enum'] = list(kinds)
     keep = {'kind', *(field for kind in kinds for field in PART_FIELDS[kind])}
@@ -746,7 +780,8 @@ def session_specs(store, scene_id, person_id=None):
     kinds = speak_kinds(store, scene)
     if not kinds:
         return out
-    shaped = {'name': 'speak', **speak_spec(kinds, capabilities.carries(store, scene, 'quote'))}
+    shaped = {'name': 'speak', **speak_spec(kinds, capabilities.carries(store, scene, 'quote'),
+                                            home=local_chat(store.config, scene_id))}
     return [shaped if spec['name'] == 'speak' else spec for spec in out]
 
 
@@ -963,9 +998,9 @@ def _turn_rules(store, ep):
         names.append('visit')
     # ADR-018: a note to another of her conversations, wherever there is somewhere it may go from this turn.
     names += note_tool
-    from . import channel_kinds
-    if channel_kinds.reply_parts(ep['scene_id']):
-        # ADR-064 phase 2: here she speaks only through reply, whose parts carry the quote, the wait and pictures.
+    if speak_parts(store.config, ep['scene_id']):
+        # ADR-064 phase 2: here she speaks only through reply, whose parts carry the quote, the wait and pictures; in
+        # her local chat speak is offered beside body text, which carries the same pictures (ADR-129 D1).
         names = [name for name in names if name not in REPLY_REPLACES] + ['speak']
     return names
 
@@ -1037,8 +1072,8 @@ def abilities(store, ep):
         names += LOCAL_CHAT
         if channel_kinds.answers_requests(config):
             names.append('group_action')        # answering the friend and group requests listed at home
-    if channel_kinds.reply_parts(ep['scene_id']):
-        names = [name for name in names if name not in REPLY_REPLACES] + ['speak']      # ADR-064 phase 2
+    if speak_parts(config, ep['scene_id']):
+        names = [name for name in names if name not in REPLY_REPLACES] + ['speak']      # ADR-064 phase 2, ADR-129 D1
     order = {name: index for index, name in enumerate(TOOL_NAMES)}
     return sorted(set(names), key=lambda name: (order[name.split('.')[0]],
                                                 OPS.get(name.split('.')[0], ('',)).index(name.split('.', 1)[-1])
@@ -1532,6 +1567,7 @@ class RoleTools:
             if made == CALLS_HARD:
                 from . import channel_kinds
                 self.problems.append(('CALL_LAST', CALL_LAST % (made, CALLS_HARD, CAP_SPEAKS if channel_kinds.reply_parts(ep['scene_id'])
+                                                                 else CAP_HOME if local_chat(self.store.config, ep['scene_id'])
                                                                  else CAP_SAYS)))
                 raise self.combined()                # refused with its warning, whatever else is wrong
             if made > CALLS_HARD + 1:                                 # the last one was refused: nothing more runs
@@ -2044,6 +2080,9 @@ class RoleTools:
                 self._found('parts 要列出这次要发的，至少一个。', 'SPEAK_PARTS')
             raise self.combined(sent='这次一条都没发')
         group = scene.get('kind') == 'group'
+        # ADR-129 D4: in her local chat no rule on how she speaks (lines, labels, people's numbers); what can be shown
+        # and what may leave is still checked, and a text already sent in the turn still is (her words never twice).
+        home = local_chat(self.store.config, ep['scene_id'])
         model, policy = model_and_policy(self.store, ep['persona'])
         most = int(effective(model, 'speak.max_messages', policy) or 1)
         before = ep.get('reply') or {}
@@ -2056,7 +2095,7 @@ class RoleTools:
         # A number that is someone's here reads as nothing to the people here (owner 2026-10-14: a warning she may
         # overrule with force, not a conversion).
         from .people import People
-        people, numbered = None if args.get('force') else People(self.store, ep['persona']), False
+        people, numbered = None if args.get('force') or home else People(self.store, ep['persona']), False
         for index, part in enumerate(parts, 1):
             part = part if isinstance(part, dict) else {}
             kind = part.get('kind')
@@ -2080,7 +2119,7 @@ class RoleTools:
                     problem('第 %d 条里的「%s」要写成一个 kind=sticker 的 part' % (index, stickers.TOKEN.search(text).group(0)))
                 elif '[分条]' in text:
                     problem('第 %d 条：一个 text 就是一条消息，要分开就写成几个 text' % index)
-                elif LINE_NUMBER.search(text):
+                elif not home and LINE_NUMBER.search(text):
                     problem('第 %d 条里的「%s」：%s' % (index, LINE_NUMBER.search(text).group(0), NUMBER_NOT_WORDS))
                 elif face:
                     problem('第 %d 条：%s' % (index, face))
@@ -2090,7 +2129,7 @@ class RoleTools:
                     numbered = True
                     problem('第 %d 条里%s，这里的人看不懂：写名字，或 @ 整个标签' % (index, '，'.join(
                         '「%s」是 %s 的编号' % found for found in people.numbers(scene, text))))
-                elif lines + chat_lines(text) > SPEAK_HARD_LINES:    # this turn's lines that left, and this call's
+                elif not home and lines + chat_lines(text) > SPEAK_HARD_LINES:    # this turn's lines that left, and this call's
                     over.append('第 %d 条有 %d 行' % (index, chat_lines(text)) + ('（前面已经 %d 行）' % lines if lines else ''))
                 else:
                     texts.append(same)
@@ -2106,6 +2145,8 @@ class RoleTools:
                 fields = stickers.outbound(self.store, ep['persona'], '[表情包:%s]' % name) if name else None
                 if not fields:
                     problem('第 %d 条 sticker「%s」你没收着' % (index, echoed(name)) if name else '第 %d 条 sticker 要写 name' % index)
+                elif home and (fields.get('sticker') or {}).get('kind') == 'market':
+                    problem(MARKET_AT_HOME % (index, echoed(name)))     # no picture of hers to show (ADR-129 D4)
                 else:
                     planned.append({'kind': 'sticker', 'text': '[表情包:%s]' % name, 'fields': fields, 'name': name,
                                     'shown': 'sticker「%s」' % name})
@@ -2187,8 +2228,10 @@ class RoleTools:
                                            '\n'.join(row['text'] for row in planned if row['kind'] == 'text'), patience)
         self.coordinator._update(self._fresh(ep), reply={'parts': int(before.get('parts') or 0) + len(queued),
                                                           'calls': int(before.get('calls') or 0) + 1})
+        if queued:
+            self.parts = [item['key'] for item in queued]       # on the call's record (ADR-129 D5(b), `call`)
         out = {'note': reply_receipt(queued) if queued else '这次没发新的。'}
-        if any(part['kind'] == 'text' for part in planned):
+        if not home and any(part['kind'] == 'text' for part in planned):
             # Her budget reminder (ADR-084): the turn's lines so far, in numbers.
             out['lines'] = '这回合已说 %d 行（你平时 %d 行以内，硬线 %d）' % (lines, most, SPEAK_HARD_LINES)
         if quoted:

@@ -60,10 +60,17 @@ def compose(common, persona_content, voice_content, cls, place=None) -> str:
     return text + ('\n' + voice if voice else '')
 
 
+def speaks_key(speaks):
+    """How a conversation's words leave, as its guide and its system ref name it: True where only speak speaks, 'home'
+    in her local chat (speak beside body text, ADR-129 D6), False where body text is speech."""
+    return 'home' if speaks == 'home' else bool(speaks)
+
+
 def role_text(config, rendered, speaks=False, faces=True):
     """Her role system prompt: the persona render, then how a turn goes and what its blocks are (block_guide.py,
     ADR-056). The persona budget bounds the render alone: the guide is the core's, the same for every persona.
-    `speaks`: the conversation speaks only through speak (the guide says how her words leave, once).
+    `speaks`: the conversation speaks only through speak, or 'home' (speaks_key; the guide says how her words leave,
+    once).
     `faces`: it can carry the platform's own faces (stickers.has_faces); the guide says what that block is
     only there, so a conversation with no QQ does not pay for a QQ-only definition."""
     from .block_guide import guide
@@ -149,7 +156,7 @@ def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE, plac
     found = {slug: sections(placed(store, persona, slug, content), cls, place) for slug, content in contents.items()}
     text = role_text(store.config, system_text(common, found, contents), speaks, faces)
     ref = {'persona_doc_revision': persona_rev, 'voice_doc_revision': voice_rev, 'session_class': cls, 'place': place,
-           'speaks': bool(speaks), 'faces': bool(faces), 'common_sha256': sha(common.encode()),
+           'speaks': speaks_key(speaks), 'faces': bool(faces), 'common_sha256': sha(common.encode()),
            'render_sha256': _remember(text),
            'carried': {slug: [s['sid'] for s in found[slug]] for slug in found}}
     report_budget(store, persona, persona_doc, voice_doc, common)

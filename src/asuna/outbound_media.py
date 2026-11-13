@@ -218,7 +218,10 @@ def edits_back_to(store, scope_key, *, limit=MAX_ITEMS_OFFERED):
 
 def target_allowed(config, scene, session_class):
     """收件方向：任何一个私聊（路由 dm），或她在的任何一个群。主人的私聊能发这一边读得到的图；群和别人的
-    私聊只发她自己做的图（own_only，owner 2026-10-06：家往外不担心，发什么由她判断）。"""
+    私聊只发她自己做的图（own_only，owner 2026-10-06：家往外不担心，发什么由她判断）。她的本地私聊也收：图走本地
+    sink，网页画出来（ADR-129 D1）。"""
+    if (scene or {}).get('_id') and scene['_id'] == (config.get('chat') or {}).get('scene_id'):
+        return True, ''
     target = route_target(config, scene)
     if target is None:
         return False, 'scene_has_no_channel_route' if not (scene or {}).get('channel_id') else 'channel_route_not_authorized'
@@ -436,9 +439,10 @@ def image_artifacts(store, scope_keys, *, limit=MAX_ITEMS_OFFERED, own_scope=Non
     return out
 
 
-def _offer_note(scene):
-    from . import channel_kinds
-    return SPEAK_OFFER_NOTE if channel_kinds.reply_parts((scene or {}).get('_id')) else OFFER_NOTE
+def _offer_note(scene, config=None):
+    """speak's picture where speak takes parts (ADR-129 D1: her local chat too), else attach_image."""
+    from .role_tools import speak_parts
+    return SPEAK_OFFER_NOTE if speak_parts(config or {}, (scene or {}).get('_id')) else OFFER_NOTE
 
 
 def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEMS_OFFERED, picked=None):
@@ -457,7 +461,7 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
             item.pop('from_linked_scene', None); item.pop('scene_id', None)
         items = edits + [item for item in items if item['artifact_id'] not in {e['artifact_id'] for e in edits}]
         note = GROUP_NOTE if group_scene(config, scene) else DM_NOTE
-        return ({'items': items, 'note': _offer_note(scene) + note + (EDITS_NOTE if edits else '')}
+        return ({'items': items, 'note': _offer_note(scene, config) + note + (EDITS_NOTE if edits else '')}
                 if items else None)
     own_scope = (scene or {}).get('scope_key')
     items = image_artifacts(store, image_scopes(store, config, scene, session_class, person_id),
@@ -472,7 +476,7 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
             items.append(item); listed.add(item['artifact_id'])
     if not items:
         return None
-    note = (_offer_note(scene) + (PEER_NOTE if any(item.get('from_linked_scene') for item in items) else '')
+    note = (_offer_note(scene, config) + (PEER_NOTE if any(item.get('from_linked_scene') for item in items) else '')
             + (EDITS_NOTE if edits else ''))
     return {'items': items, 'note': note}
 
@@ -687,6 +691,8 @@ def sent_attachment(row, store=None):
         return None
     if row.get('delivery_state') != 'DELIVERED' or row.get(SKIPPED_KEY):
         return None
+    if row.get('delivery_basis') == 'local_sink':
+        return dict(declared, attested=True)        # delivered to her local chat by the program itself (ADR-129 D4)
     evidence = receipt_evidence(row, store)
     if evidence is None:
         return dict(declared, attested=False)

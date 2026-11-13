@@ -1498,10 +1498,12 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       if (!shipped) return null;
       const blocks = props.node?.data?.blocks ?? [];
       const text = blocks.filter(block => block.kind === 'text').map(block => block.text ?? '').join('\n\n').trim();
-      if (!spoke || !text) return h(shipped.component, props);
-      const rest = { ...props, node: { ...props.node, data: { ...props.node.data,
+      const fold = spoke && !!text;
+      const rest = !fold ? props : { ...props, node: { ...props.node, data: { ...props.node.data,
         blocks: blocks.filter(block => block.kind !== 'text') } } };
-      return h(React.Fragment, null, h(shipped.component, rest), props.groupPart !== 'reasoning' && h(Mumble, { text }));
+      // One root whatever the mark: DSH's own row keeps its place, so it is not remounted when the mark arrives mid-Turn.
+      return h(React.Fragment, null, h(shipped.component, rest),
+        fold && props.groupPart !== 'reasoning' ? h(Mumble, { text }) : null);
     }
     ctx.slots.inject('conversation.chat.node', () => {
       try {

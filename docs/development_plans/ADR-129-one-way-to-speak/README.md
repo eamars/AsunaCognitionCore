@@ -87,7 +87,9 @@ as today (`_publish`, key `<ep>:speak:0`). The two never meet in one turn, so th
 happen: `_publish`'s `<ep>:speak:0` taking the first part's key (its text silently lost), and her history ordering
 parts before text written earlier in the step (the page showing the other order).
 
-**D3. Silence needs no act at home.** A home turn with no `speak` and no body text commits silent, in every turn kind
+**D3. Silence needs no act at home.** A home turn with no `speak` and no body text commits silent, a missing thought
+included (nothing is mandated at home; QQ's silence still asks for one), unless the model's answer was cut at the
+length limit: a cut is not her silence, and it is handed back as today (上一段到了长度上限还没写完). Every turn kind
 but one (the owner's message, a heartbeat, a note, a task's result, self-development). The one: a consult turn, where
 the action brain waits for her answer, keeps its hand-back (else the brain gets `CONSULT_NOT_ANSWERED`).
 The consult turn is told by `role_tools.turn_kind(ep) == CONSULT` (`'consult'`: the episode's `turn_kind`, else its
@@ -132,7 +134,8 @@ A picture the local sink delivered counts as attested (`outbound_media.history_s
   same record). The node names the episode by its turn's `asuna/stage` operation and asks Asuna's API (the page's
   existing `asunaApi` RPC): one call for the parts of (episode, call id) as they left (text after the worker's
   rewrites, a sticker's name, whether a part has a picture), and one call per picture (base64 in JSON, one part per
-  request, cached on the page by episode, call and part, since DSH remounts nodes as the list scrolls). The plugin
+  request; the page keeps what a call sent by episode and call, and pictures by their sha256, so a repeated sticker
+is fetched once; each cache holds 64 entries, oldest dropped, since DSH remounts nodes as the list scrolls). The plugin
   serves only a call found in that session's own events, of a character session; the worker only the rows that call's
   record names. Nothing is written into her session; no picture can reach her model; animated stickers stay animated
   (DSH's attachment store would flatten them). While loading, on any error (an older worker or plugin, an unknown
@@ -179,8 +182,10 @@ words by it, and a stored ref with `True`/`False` re-renders as written. A turn 
 guide it was prepared with.
 
 **D7. What she said, for its readers.** One helper gives a turn's words: its published body text, or, when that is
-empty and the turn queued `speak` parts, the texts of those parts as they left (a sticker as its row's own
-[表情包:name]; a picture adds nothing). Read once per turn, not per thought. The affect appraisal and the reasons line
+empty and the turn queued `speak` parts, the texts of its text and sticker parts as they left (a sticker as its row's
+own [表情包:name]; a picture, a file, and QQ's react, recall and poke rows, whose text is the program's, add nothing).
+Read from the rows each time (no cache: a part that fails or is taken back after it was read must not stay in her
+words). The affect appraisal and the reasons line
 read it, so a turn that spoke through `speak` is not read as saying nothing. It also closes the same gap on QQ (wider
 than the ask, one helper; the owner told).
 
@@ -256,3 +261,12 @@ link from a call to its rows existed (D5(b) adds one, with its lifecycle); the p
 session); the assistant-step delegate must forward DSH's `inject` and child slots (D5(c)); `speak_spec` cannot vary by
 home today (D4); the repeat check covers text only (D4, §5); `HOME_NOTE` must name the local chat, since her 家里 also
 means her agent lines (D6); D7 reads parts once per turn.
+
+**The build's review (2026-11-13).** A fresh reviewer read the build against this page and DSH's real code. Fixed:
+the node's tool results were marked as updates, which DSH's assembler refuses when a turn's first tool result (her
+`think`) comes before the `speak` call, breaking every page with `speak` (every match is now a start; a test runs a
+think → speak turn through DSH's own assembler); D7's cache kept words that never left, and it read QQ's action rows
+as speech (D7); an empty answer cut at the length limit would have committed as silence (D3); the page's caches grew
+without bound and fetched a repeated sticker each time (D5(b)); the fold's root changed mid-turn (D5(c)). Her image
+skill (`asuna-image-generation-and-display`, hers) still says pictures at home go by `attach_image`: she is told at the
+install, and edits it herself.

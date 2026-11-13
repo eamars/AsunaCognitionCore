@@ -8,6 +8,28 @@ import { workspaceTitle } from './navigation.js';
 import { applyLanguage } from './ui-language.js';
 
 const initializers = [];
+
+/** A session's events, live or persisted (collab.js reads an action session the same way). */
+export async function sessionEvents(ctx, sessionId) {
+  const live = ctx.agents?.get(sessionId)?.session.snapshotEvents();
+  if (live) return live;
+  if (!await ctx.sessionPersistence.stat(sessionId)) return [];
+  const handle = await ctx.sessionPersistence.open(sessionId, 'read');
+  try { return (await handle.read()).events; } finally { await handle.close(); }
+}
+
+/** Whether these events hold her speak call `callId` with a result that is not an error, made in a step of the stage
+ * `operation` (its `asuna/stage` mark, index.js): the page asks only about a call of this session (ADR-129 D5(b)). */
+export function speakCallIn(events, callId, operation) {
+  const call = events.find(event => event.type === 'tool/call' && event.data?.callId === callId);
+  if (!call || !['speak', 'reply'].includes(call.data.name)) return false;
+  const result = events.find(event => event.type === 'tool/result' && event.seq > call.seq
+    && event.data?.message?.toolCallId === callId);
+  if (!result || result.data.message.isError) return false;
+  return events.some(event => event.type === 'asuna/stage' && event.seq < call.seq && event.data?.operation === operation
+    && event.data.turn === call.data.turn && event.data.step === call.data.step);
+}
+
 export class AsunaApi extends TypertRemoteService {
   constructor(ctx, core) {
     super(ctx, 'asunaApi'); this.core = core;
@@ -123,6 +145,30 @@ export class AsunaApi extends TypertRemoteService {
       .filter(preset => typeof preset === 'string' && preset)), 'asuna-action'];
   }
 
+  /** ADR-129 D5(b): what one speak call of hers sent, for its node on the page: the parts as they left. */
+  async speakParts(request) {
+    const call = await this.speakCall(request);
+    return this.core.worker.call('speak.parts', call);
+  }
+
+  /** ADR-129 D5(b): one part's picture of that call (base64), one part per request. */
+  async speakPicture(request) {
+    if (!Number.isInteger(request?.index) || request.index < 0) throw new Error('INVALID_PART');
+    const call = await this.speakCall(request);
+    return this.core.worker.call('speak.picture', { ...call, index: request.index });
+  }
+
+  /** The fence of both: a character session's own speak call, found with its result in that session's events. */
+  async speakCall(request) {
+    const { session_id: sessionId, operation, call_id: callId } = request ?? {};
+    if ([sessionId, operation, callId].some(value => typeof value !== 'string' || !value)) throw new Error('INVALID_SPEAK_CALL');
+    await this.core.ready();
+    const binding = await this.core.worker.call('session', { session_id: sessionId }).catch(() => null);
+    if (binding?.lane !== 'character') throw new Error('ROLE_SESSION_REQUIRED');
+    if (!speakCallIn(await sessionEvents(this.core.ctx, sessionId), callId, operation)) throw new Error('SPEAK_CALL_NOT_FOUND');
+    return { session_id: sessionId, operation, call_id: callId };
+  }
+
   async personaSources() {
     await this.core.ready();
     return this.core.worker.call('persona.sources', {});
@@ -161,7 +207,7 @@ export class AsunaApi extends TypertRemoteService {
 
 // Standard Remote decorators, applied without requiring a TS build at install.
 // The native Gateway's source mode owns discovery, auth, request scope and RPC.
-for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'brainPresets', 'sessionKinds', 'workspaceTitles', 'uiLanguage', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport']) {
+for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'brainPresets', 'sessionKinds', 'workspaceTitles', 'uiLanguage', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport', 'speakParts', 'speakPicture']) {
   Remote(AsunaApi.prototype[name], { name, kind: 'method', static: false, private: false,
     addInitializer: initialize => initializers.push(initialize) });
 }

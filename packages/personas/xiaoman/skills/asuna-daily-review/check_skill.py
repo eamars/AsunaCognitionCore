@@ -4,7 +4,8 @@
 这份技能是「每日自省」的取数＋初判做法，所以这里查四件事：
 1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译、换行是 LF（读字节数 CR）；
 2. 内容要点：头判据句、取数各步、四维判据 a／b／c／d、c 的五种候选形态、d 的排除凭据、报告四块（含发起统计与主动开话题读数表）、主动开话题维的判据要点、
-   「改不改」三答案、四个落口、「夜间回合的边界」三拍与时间顺序都在；
+   「改不改」三答案、四个落口、「夜间回合的边界」三拍与时间顺序都在；发起／回复归类的本机口径（`reply_to` 不可当机械锚点、归类须标「手判」）与「查空只报查过哪些面」也在；
+2b. 一份反向名单 STALE：旧口径的原句被抄回正文就红（正向断言查不出这种事）；
 3. 家规：正文无日期、无来历叙述；不带别人的个人信息（禁词表、字面编号、这台机器的私密名单；
    名单配不上或 0 条有效词记红 `leak_scan_ran`，「没跑」不许长得像「过了」）；
 4. 没有占位符残留；随书 CHANGELOG.md 首条是「10-30 新建：金主委托每日自省」。
@@ -63,6 +64,8 @@ FETCH = [
     ("fetch_late_reply", "迟到接话"),
     ("fetch_no_reply", "无回复"),
     ("fetch_line_number_is_scene_seq", "行号＝`messages.scene_seq`"),
+    ("fetch_reply_to_not_anchor", "**`reply_to` 这一格在本机不许当「她在回复谁」的机械锚点**"),
+    ("fetch_zero_hit_reports_faces", "**查空只报查过哪些面，不报「没有」**"),
 ]
 
 DIMENSIONS = [
@@ -102,14 +105,19 @@ REPORT = [
     ("report_initiation_stats", "**发起统计**"),
     ("report_stats_dedup_rows", "去重 K 行"),
     ("report_stats_both_scales", "同尺不同刻度只并看不换算"),
+    ("report_manual_mark_in_stats", "发起与回复的归类逐句标「手判」并带凭据行号"),
+    ("report_verdict_manual_mark", "拿本机 `reply_to` 机械值得出的归类当判据"),
 ]
 
 NEWDIM = [
     ("newdim_qq_group_only", "只计 QQ 群场景"),
     ("newdim_internal_not_message", "「指向我的消息」不含 `internal` 行"),
     ("newdim_this_scene_only", "前 10 分钟窗口只看本场景，不跨群"),
-    ("newdim_reply_to_rule", "`reply_to` 有值且指向他人行 → 该句归回复"),
-    ("newdim_reply_to_self", "`reply_to` 指向我自己上一句算续话，视同无值"),
+    ("newdim_reply_to_unusable", "**本机 `reply_to` 不可用作机械锚点，发起／回复只能语义手判**"),
+    ("newdim_reply_to_key", "解析键是 `messages._id`"),
+    ("newdim_clshint_not_trusted", "（机械算出来的那一列，取值是 回复／发起候选 一族）**不采信**"),
+    ("newdim_manual_mark", "标「**手判**」"),
+    ("newdim_manual_basis_row", "并标「手判」——本机没有能替这一判的机械字段"),
     ("newdim_proxy_two_conditions", "**且**内容是他人托付的话"),
     ("newdim_proxy_zero_normal", "代发为 0 属常态"),
     ("newdim_visit_mixed", "够判据仍归发起"),
@@ -179,6 +187,14 @@ TWELVE = [
     ("twelve_landing_table", "| 修订 | 落在哪一节 |"),
     ("twelve_own_author_rows", "也剔她自己的角色 id——她自己发出去的行"),
     ("twelve_topic_end_first", "「话题结束」（带凭据）优先报"),
+]
+
+# 旧口径的原句钉在这里。正向名单只查「新字面在不在」，旧句子被顺手抄回正文时它照样绿，
+# 所以另立一份反向名单（同族先例：另一份技能为一句旧口径补出来的 old_sandbox_blind_* 那种条目）。
+STALE = [
+    ("stale_reply_to_anchor", "`reply_to` 有值且指向他人行 → 该句归回复"),
+    ("stale_reply_to_self", "`reply_to` 指向我自己上一句算续话，视同无值"),
+    ("stale_reply_to_mechanical_judge", "按机械字段判"),
 ]
 
 PERSONAL_TOKENS = ["主人", "旧居", "交流群", "姐姐", "金主"]
@@ -298,6 +314,7 @@ def main():
     check("description_has_initiation_dimension", "主动开话题" in desc)
     check("description_outlets_four_plus_report", "四口＋报告正本落口" in desc)
     check("description_anchors_by_script", "anchors.py" in desc)
+    check("description_manual_classification", "归类语义手判" in desc, desc[:80])
     check("body_no_three_blocks", "写成三块" not in body)
     kinds = re.findall(r"[a-z]+", (fields or {}).get("scene_kinds", ""))
     check("scene_kinds_home", "home" in kinds, "scene_kinds=%s" % ((fields or {}).get("scene_kinds") or "没写"))
@@ -313,6 +330,10 @@ def main():
     for group in (FETCH, DIMENSIONS, REPORT, NEWDIM, ANCHORS, OUTLETS, BOUNDARY, TWELVE):
         for name, token in group:
             check(name, token in body, token)
+
+    # 反向名单：旧字面出现在正文即红（这些句子说的是本机不成立的那套机械锚点口径）
+    for name, token in STALE:
+        check(name, token not in body, token)
 
     # 边界节三拍都在该节里（不是散在别处）
     start = body.find("\n## 夜间回合的边界")

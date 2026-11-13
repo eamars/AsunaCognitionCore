@@ -1,6 +1,6 @@
 ---
 name: bilibili
-description: 账号自治站点技能：B 站。脚本 bili_auto.py 自己读 cookie 文件 → 用 nav 的 code 探活 → 失效就按本技能记载的扫码流程自动重登（网页码真 TTL 约 180 秒、前台轮询、出码与轮询同一趟、PNG 落盘绝对路径是唯一送达形状）→ 成功回写 cookie 文件 → 再执行取数（view、wbi 签名的投稿列表、弹幕、整段下载、免登录热评链）。扫码要人来扫这一步不能自动化，正文写死「什么时候喊人、喊人给什么形状」。附实测坑（cookie 头分隔符是 `; ` 不是 `&`、playurl 要 Referer、主镜像 567 走 backup_url、弹幕 XML 是 raw deflate、pubdate 用站点侧时钟 UTC+8）与错误码表。要读 B 站数据、判登录态死活、或要重登 B 站时读这一份。账号事实（uid、cookie 值）不进正文，只写从哪读。
+description: 账号自治站点技能：B 站。脚本 bili_auto.py 自己读 cookie 文件 → 用 nav 的 code 探活 → 失效就按本技能记载的扫码流程自动重登（网页码真 TTL 约 180 秒、前台轮询、出码与轮询同一趟、PNG 落盘绝对路径是唯一送达形状）→ 成功回写 cookie 文件 → 再执行取数（view、wbi 签名的投稿列表、wbi 签名的搜索、弹幕、整段下载、免登录热评链）。扫码要人来扫这一步不能自动化，正文写死「什么时候喊人、喊人给什么形状」。附实测坑（cookie 头分隔符是 `; ` 不是 `&`、playurl 要 Referer、主镜像 567 走 backup_url、弹幕 XML 是 raw deflate、pubdate 用站点侧时钟 UTC+8、搜索时间窗只吃 epoch 秒）与错误码表。要读 B 站数据、判登录态死活、或要重登 B 站时读这一份。账号事实（uid、cookie 值）不进正文，只写从哪读。
 scene_kinds: [home]
 ---
 
@@ -10,7 +10,7 @@ scene_kinds: [home]
 
 ## 什么时候读这一份
 
-- 要读 B 站的数据（视频信息、某个号的投稿、热评、弹幕、整段视频）；
+- 要读 B 站的数据（视频信息、某个号的投稿、热评、弹幕、整段视频、按关键词搜索）；
 - 要判「B 站登录态还活不活」；
 - 要重登（扫码）；
 - 撞到 412、-101、-352、-403、-509 之类，要知道是什么意思、该换哪条路。
@@ -64,6 +64,14 @@ python3 bili_auto.py hotcomment BVxxxx # 免登录热评链，不读 cookie
 - **读侧随登录基本全通**：nav、view、space/acc/info、relation（followings 查自己等）、article 读、reply 读、player/playurl 都实测通。
 - **投稿族要 wbi 签名**：`x/space/wbi/arc/search` 不签名返回 `-403`；签了 `code=0`。签法：从 nav 的 `data.wbi_img` 取 `img_key`＋`sub_key`（各自是 url 末段去扩展名，32 位），拼接后按标准重排表取前 32 位得 mixin_key；参数加 `wts`、按 key 排序、值里剔掉 `!'()*`、urlencode，`w_rid = md5(query + mixin_key)`。重排表里有一个越界值 64，落在第 32 位之后，不影响前 32 位。脚本 `arcs` 已实现。
 - **写侧**（reply/add、dynamic 创建）：端点存在（GET 回 405），**没有发过一条写请求**，也没验过签名/csrf 要求；专栏投稿端点（`x/web/article/submit` 一类）按猜的路径回 404，**真端点没核实**。别把写侧写成「能发」。`bili_jct` 是 csrf，只有写侧才用得上，读侧一次都没用到。
+
+## 搜索
+
+（本节三条为 11-13 夜里实测到的字面，照抄未补全。）
+
+- 接口 `x/web-interface/wbi/search/type`，走 wbi 签名；`order=click` 是按播放量排。
+- 时间窗参数 `pubtime_begin_s`／`pubtime_end_s` **只吃 epoch 秒**：传日期串（`2025-11-13`、带时分秒、ISO）一律回 `code=-400 请求错误`（今晚连试三回都这样，换 epoch 秒才通）。
+- 实测这样一趟能拿到：标题、UP 主、duration 字符串、play、pubdate。
 
 ## 免登录调用链（热评）
 

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v1.2（2026-11-13 加「搜索」一节：夜里实测的接口字面照抄）
+
+- SKILL.md 新增一节「## 搜索」，三条字面全部来自当晚实测：接口 `x/web-interface/wbi/search/type` 走 wbi 签名、`order=click` 是按播放量排；时间窗参数 `pubtime_begin_s`／`pubtime_end_s` **只吃 epoch 秒**，传日期串一律回 `code=-400 请求错误`（连试三回，换 epoch 秒才通）；实测一趟能拿到标题、UP 主、duration 字符串、play、pubdate。端点名、参数名、字段名照交代原样抄，没添没补；日期串那一格保留原字面 `2025-11-13`（没顺手改成 2026）。
+- 两处指路（不是接口事实，我的措辞）：frontmatter description 的取数清单加「wbi 签名的搜索」、实测坑清单加「搜索时间窗只吃 epoch 秒」；「什么时候读这一份」括号里加「按关键词搜索」。
+- 错误码表没加 `-400` 那一行：那一行的「来源／读法」怎么填交代里没给，不替它补（要加另拍）。
+- 脚本 `bili_auto.py` 未动，正文也没写成「脚本能搜」：search 子命令还没写。
+- check_skill.py 按本技能自己的形状加（这份断言族只有 SECTIONS 存在性＋MUST 针＋LF／手机号／裸数字／cookie 形状扫描，没有 DESC_MUST_SAY、没有节切片）：SECTIONS 加 `'## 搜索'`，MUST 加三针（端点字面、「`order=click` 是按播放量排」、「只吃 epoch 秒」）。
+- 自检真跑：改前 47/47 通过 rc 0；改后 51/51 通过 rc 0。反证三趟各自恰好红在对应那一格（拆小标题→`section:## 搜索`；换端点字面→`must:search_endpoint`；拆 epoch 那句→`must:search_pubtime_epoch_only`，各 rc 1），改回后字节一致。技能头另过了一遍程序自己的 `asuna.skills.problems`（无问题）。
+
 ## v1（2026-11-03 新建）
 
 - 新建「账号自治站点」技能：B 站。形状是金主定的：cookie 自动写、脚本自动执行取数据、已知范围内能自动化就自动化。

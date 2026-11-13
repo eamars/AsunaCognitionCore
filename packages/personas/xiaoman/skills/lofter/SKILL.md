@@ -1,6 +1,6 @@
 ---
 name: lofter
-description: 账号自治站点技能：LOFTER。脚本 lofter_auto.py 自己读登录态文件 → 用 loginCheck.do 探活（401 死、200 活）→ 失效就按 asuna-lofter-login 记载的流程自动重登（login.do 撞 4071 → 取拼图 → 四把算法投票判缺口 → 唯一一次 check → 带 capttoken 重登，凭据只从保险箱 xiaoman-lofter 的环境变量读）→ 成功回写登录态文件 → 再执行取数（已验端点：loginCheck.do、postCollection.api 的 getCollectionList）。LOFTER 的滑块能自动过，所以平时不需要喊人；只有 4071 之外的新风控字样、凭据缺失、滑块连续凑不出一致时才停下报字面。账号事实（blogdomain、blogId、token、手机号）不进正文，只写从哪读。要读 LOFTER 数据、判登录态死活、或要重登时读这一份；登录细节与滑块口径读 asuna-lofter-login。
+description: 账号自治站点技能：LOFTER。脚本 lofter_auto.py 自己读登录态文件 → 用 loginCheck.do 探活（401 死、200 活）→ 失效就按 asuna-lofter-login 记载的流程自动重登（login.do 撞 4071 → 取拼图 → 四把算法投票判缺口 → 唯一一次 check → 带 capttoken 重登，凭据只从保险箱 xiaoman-lofter 的环境变量读）→ 成功回写登录态文件 → 再执行取数（已验端点：loginCheck.do、postCollection.api 的 getCollectionList）。LOFTER 的滑块能自动过，所以平时不需要喊人；只有 4071 之外的新风控字样、凭据缺失、滑块连续凑不出一致时才停下报字面。账号事实（blogdomain、blogId、token、手机号）不进正文，只写从哪读。读某个 tag 页走 m.lofter.com/tag/<tag> 302 之后的 front/blog/tag 服务端渲染页，正文数据在 window.__initialize_data__.tagInfoData（实测）。要读 LOFTER 数据、判登录态死活、或要重登时读这一份；登录细节与滑块口径读 asuna-lofter-login。
 scene_kinds: [home]
 ---
 
@@ -11,6 +11,7 @@ scene_kinds: [home]
 ## 什么时候读这一份
 
 - 要读 LOFTER（自己的合集；以后再加已验端点）；
+- 要读某个 tag 页上可见的帖子（见「tag 页读法」，11-13 实测）；
 - 要判「LOFTER 登录态还活不活」；
 - 登录态死了要自动重登。
 
@@ -45,6 +46,15 @@ python3 lofter_auto.py collections     # ensure → getCollectionList（已验�
 - `GET www.lofter.com/loginCheck.do`（cookie 登录态）：401→200 才算登录真换到了东西；`response` 给 `blogName`／`blogId`／`blogNickName`。
 - `POST api.lofter.com/v1.1/postCollection.api?product=lofter-android-7.6.12`，body `method=getCollectionList&blogdomain=<blogdomain>`，头带 `lofter-phone-login-auth: <token>`：`meta.status` 200 为通；合集为空是 `list len=0`，正常。
 - **登录态 cookie**：服务端不下发，要按前端口径自己种 `LOFTER-PHONE-LOGIN-AUTH`、`token`、`LOFTER-PHONE-LOGIN-FLAG=1`（和 `deviceid`），域 `.lofter.com`、path `/`。
+
+## tag 页读法
+
+（本节四条为 11-13 夜里实测到的字面，照抄未补全。）
+
+- `m.lofter.com/tag/<tag>` 302 → `https://www.lofter.com/front/blog/tag/<tag>`；这一页是服务端渲染，正文数据在 `window.__initialize_data__.tagInfoData`（`postList[].postView` 有 title／tagList／publishTime／digest／permalink，`postList[].blogInfo` 有 blogNickName／blogName；`type=1` 是文章）。
+- `digest` 去标签就是列表里可见的开头。
+- 老 `www.lofter.com/tag/<tag>` 只有模板没有数据；`api.lofter.com` 除 `postCollection.api` 以外试过的 22 个文件名全 404；DWR `plaincall` 回 `SecurityException: Batch IDs...`。
+- 核对正文用 `https://<blogName>.lofter.com/post/<permalink>`。
 
 ## 什么时候该停、什么时候喊人
 

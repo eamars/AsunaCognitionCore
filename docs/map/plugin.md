@@ -21,7 +21,7 @@ The action brain's preset plugin: each action agent gets the executor's system p
 The `asunaApi` remote service the Web page calls: worker and model status, the settings card's save and apply, her memory pages, brain context views, session kinds and titles, and persona jobs.
 
 - def `sessionEvents` — A session's events, live or persisted (collab.js reads an action session the same way).
-- def `speakCallIn` — Whether these events hold her speak call `callId` with a result that is not an error, made in a step of the stage `operation` (its `asuna/stage` mark, index.js): the page asks only about a call of this session (ADR-129 D5(b)).
+- def `speakCallIn` — Whether these events hold her speak call `callId` made in a step of the stage `operation` (its `asuna/stage` mark, index.js), with a result in the same Turn that is not an error: the page asks only about a call of this session (ADR-129 D5(b
 - class `AsunaApi`
   - `status`
   - `memory`

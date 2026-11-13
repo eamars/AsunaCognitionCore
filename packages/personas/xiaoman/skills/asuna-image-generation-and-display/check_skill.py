@@ -2,7 +2,7 @@
 """asuna-image-generation-and-display 的零依赖离线自检。
 
 只查技能文件自己：frontmatter 能不能解析、name 与目录名是否一致、关键工具名 / 端点别名 /
-服务路径 / 关键步骤 / 边界语句在不在、发图那条路（QQ（napcat）speak 的 picture，别处 attach_image）的清单字段与失败码在不在、
+服务路径 / 关键步骤 / 边界语句在不在、发图那条路（所有对话都是 speak 的 picture part，artifact_id 从 image_artifacts_from_program 照抄）的清单字段与失败码在不在、
 改图那条路（「改图与 generate_image」一节：source_image 入口、路线条数现读口径、三条 IMAGE_WORKFLOW_*
 即时拒绝码、改图归属、本地 Pillow 修字、剥文字块判据、排队成本）在不在、
 群聊生图上限那条（「群聊生图上限」一节标题、节内「最多 4 张」与「到顶默认不发」、
@@ -18,6 +18,13 @@
 2026-10-14 起再改口径（ADR-064 phase 2，REPLY_PARTS）：QQ（napcat）的 channel kind 声明了 reply parts，
 那一轮她只通过 speak 说话，发图是 picture 那一项；没声明的对话（列着 attach_image 的那些）照旧。
 判据押这两条路的说法在不在，不押裸字面量 attach_image 的在/不在——既不许硬要求它在，也不许硬要求它不在。
+
+2026-11-13 起改成一条规则（这台机器 20:12 装的 loaded.commit 816e825ea84f 那一版）：所有对话只有 speak 能把话说出去，
+正文不再发出去也不进消息库；发图在每一处都是 speak 的 picture part（artifact_id 照抄 image_artifacts_from_program）；
+attach_image 与 stay_silent 这两个工具全线拿掉。跟着换的只有三条锚点的字面（断言条数不减、名单结构与节切片不动）：
+description 那条改钉「发图都只有 speak 的 picture part」，正文路由那条改钉「speak 的 picture part」，静默那条改钉
+「要么用 speak 发出去，要么这一回合到此为止」；attach_image、stay_silent 反进 STALE_CLAIMS——不带反引号写回散文
+（当现行工具在用）才红，反引号里引用退役工具名照旧不算。
 
 2026-10-16 起再补口径（改图通路现场验收）：「改图与 generate_image」一节必须在，且该节切片里
 source_image 入口与三条 IMAGE_WORKFLOW_* 即时拒绝码必须齐（错误码在别处出现不算数——那一节才是教改图的地方）；
@@ -144,10 +151,10 @@ BOUNDARIES = [
 # QQ 私聊 attach_image 发图：前提、来源、写法、失败码，一条都不能漏
 ATTACH = [
     # 前提
-    # 2026-10-14 口径：QQ（napcat）用 speak 的 picture；别处列着 attach_image 就用它。
-    # 押这两条路的说法，不押裸字面量 attach_image 的在/不在。
+    # 2026-11-13 一条规则：所有对话都只有 speak 的 picture part；attach_image 这个工具全线拿掉。
+    # 押「同一条路」的说法，不押裸字面量 attach_image 的在/不在（退役工具名反进 STALE，反引号里的引用不算）。
     ("attach_qq_speak_picture", "speak 的 picture"),
-    ("attach_non_qq_route", "别处列着 attach_image"),
+    ("attach_non_qq_route", "speak 的 picture part"),
     ("attach_context_offer", "image_artifacts_from_program"),
     ("attach_owner_private", "owner_private"),
     ("attach_dm_route", "target.type=dm"),
@@ -171,7 +178,7 @@ ATTACH = [
     ("attach_speak_no_see_image", "见图"),
     ("attach_metadata_first_row", "第一行"),
     ("attach_adapter_capability", "supports=image"),
-    ("attach_silent_no_send", "stay_silent"),
+    ("attach_silent_no_send", "要么用 speak 发出去，要么这一回合到此为止"),
     # 工具侧失败码（工具错误，同回合可改）
     ("attach_reject_is_tool_error", "工具错误"),
     ("attach_fix_same_turn", "同一回合"),
@@ -326,6 +333,10 @@ STALE_CLAIMS = [
     # 失败码表那格也改成按来源前缀写；这两种旧说法不带反引号写回散文（当现行事实）才红。
     "两条，都由程序登记",
     "群里只发她自己生成并导入的图",
+    # 2026-11-13 一条规则：这两个工具全线拿掉，发图在所有对话都是 speak 的 picture part。
+    # 不带反引号把名字写回散文（当现行工具在用）才红；反引号里的引用不算。
+    "attach_image",
+    "stay_silent",
 ]
 
 # 人像实测（2026-11-05 落正文；11-04 四张人像实测 + 11-05 一趟便宜档复核）。
@@ -788,8 +799,8 @@ def main():
     check("description_specific_enough", len(desc) >= 120, "len=%d" % len(desc))
     check("description_mentions_picture_route", "picture" in desc,
           "frontmatter description 没提 QQ 用 speak 的 picture 发图这条路")
-    check("description_mentions_non_qq_attach", "attach_image" in desc,
-          "frontmatter description 没提非 QQ 那类对话仍用 attach_image（非 QQ 路径判据）")
+    check("description_mentions_non_qq_attach", "发图都只有 speak 的 picture part" in desc,
+          "frontmatter description 没提所有对话发图都只有 speak 的 picture part 这一条路（一条规则判据）")
     check("description_mentions_edit_route", "source_image" in desc,
           "frontmatter description 没提 generate_image 的 source_image 改图入口（2026-10-16 判据）")
 
@@ -985,7 +996,7 @@ def main():
     if failed:
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
-    print("%d/%d 通过：技能文件、工具名、发图那条路（QQ speak 的 picture／别处 attach_image）的清单与失败码、"
+    print("%d/%d 通过：技能文件、工具名、发图那条路（所有对话都是 speak 的 picture part）的清单与失败码、"
           "改图那条路（source_image／IMAGE_WORKFLOW_* 即时拒绝码／归属／剥文字块）、"
           "群聊生图上限那条（节标题／最多 4 张／到顶默认不发／唯一的例外是 10:59 版）、"
           "已有图进清单那条（第二条通路／剥 PNG 文字块的 sha 与字节／账面看不见那两格）、"

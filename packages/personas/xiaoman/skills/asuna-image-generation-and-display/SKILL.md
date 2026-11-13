@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 直路是行动脑侧的 generate_image（本机与 QQ 来的任务同一条路：直接调用，图落任务工作区并自动登记成我自己的图，read_image 看过一眼后随消息发出去；外部公开生图服务只给链接、图发不出去，要发出去的图不走那条；它不可用或要工具参数面给不了的模型／参数时才走长路）。长路（探针 → integration_test → import_integration_artifact）：一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 的条数现读、技能不存（每次 list_routes=yes 回来数一遍；标 source_image: required 的改图路线必填、标 optional 的可选、不带这个标的 t2i 路线不收原图），配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。含人像实测三则（构图决定连帽衫拉链的保守字面、手持自拍别指望手机进画、交图前按局部放大复核）与 11-05 现读参数面（工具面无 pose、回执有 warnings）。附零依赖离线自检 check_skill.py。
+description: 直路是行动脑侧的 generate_image（本机与 QQ 来的任务同一条路：直接调用，图落任务工作区并自动登记成我自己的图，read_image 看过一眼后随消息发出去；外部公开生图服务只给链接、图发不出去，要发出去的图不走那条；它不可用或要工具参数面给不了的模型／参数时才走长路）。长路（探针 → integration_test → import_integration_artifact）：一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 的条数现读、技能不存（每次 list_routes=yes 回来数一遍；标 source_image: required 的改图路线必填、标 optional 的可选、不带这个标的 t2i 路线不收原图），配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；所有对话（家里本机私聊、两条 agent 线、peer 线、QQ）发图都只有 speak 的 picture part 这一条路：看上下文 image_artifacts_from_program，artifact_id 照抄这一轮清单里列出的值（它既不是路径也不是文件名）、可以不带话、正文不写路径/文件名/见图；一回合最多一张是我自己的规矩，speak 一条里能带几张 picture 未重测；群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN；`attach_image` 这个工具 11-13 那版起全线拿掉，不想说话就什么都不调用。含大小上限与服务端小副本做法、picture 那一项的拒绝码（回执点名哪条；旧 `attach_image` 那套「工具错误、同回合可改」随工具一起退役）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。含人像实测三则（构图决定连帽衫拉链的保守字面、手持自拍别指望手机进画、交图前按局部放大复核）与 11-05 现读参数面（工具面无 pose、回执有 warnings）。附零依赖离线自检 check_skill.py。
 scene_kinds: [home, group]
 ---
 
@@ -17,7 +17,7 @@ scene_kinds: [home, group]
 「步骤 0–4」那条长路（只读探针 → `integration_test` → `import_integration_artifact`）现在是**备用路**：
 只有在 `generate_image` 不可用、或要它参数面给不了的模型／参数时才走。走法原文整段留着——
 提示词 → 服务回执里的 `artifact_path` → 导入工作区 → 相对路径展示；
-步骤 8 记的是后半段：导入时顺手登记的 image artifact → QQ（napcat）那一轮 speak 的 picture 那一项；列着 attach_image 的会话仍用它。
+步骤 8 记的是后半段：导入时顺手登记的 image artifact → 那一轮用 speak 的 picture part 发出去（所有对话同一条路；`attach_image` 11-13 那版起已全线拿掉）。
 
 ## 直路：`generate_image`（第一选择）
 
@@ -27,7 +27,7 @@ scene_kinds: [home, group]
   可选的 `source_image`（改图）。
 - **图落本任务工作区，并自动登记成我自己的图**：回执里的 `artifact.artifact_id`（`blob-…`）就是那张图。
   登记不用我操心，也不必再拿 `import_integration_artifact` 把字节搬一次。
-- **之后随消息发出去**：那一轮照步骤 8 引这个 `artifact_id`（QQ 是 speak 的 picture，别处是 attach_image）。
+- **之后随消息发出去**：那一轮照步骤 8 引这个 `artifact_id`（所有对话都是 speak 的 picture part，不再分 QQ 与别处）。
 - **画完自己看过再发**：`read_image` 拿回执里的 `artifact.artifact_id` 亲眼看那一张，跟提交时的要求对；
   不对就照「只画一次」一节处理（如实报崩、或随图一句说明，不自己重画）。「提交成功、登记成功」不等于画对了（口径见步骤 7）。
 - 挑路线先 `list_routes=yes`（条数现读：数 `list_routes=yes` 回来的 `workflows` 数组，技能不存这个数；改图口径见「改图与 `generate_image`」一节），
@@ -107,7 +107,7 @@ scene_kinds: [home, group]
   跑完把探针文件从候选里删掉（`development_run` 的 `rm`），别让它跟着下一次发布上线。
 - 只写端点**别名**（`image`），不在脚本里硬编码 host/port；别名和地址由配置给，变了也不用我改代码。
 - 展示这一步依赖文件落在**本任务绑定的工作区**：`import_integration_artifact` 写的就是这个工作区。
-- 发图到 QQ 不需要行动侧授权：那是角色那一轮自己发出去的（QQ 用 speak 的 picture，列着 attach_image 的会话用那个工具），字节由程序搬；
+- 发图不需要行动侧授权：那是角色那一轮自己发出去的（所有对话都用 speak 的 picture part），字节由程序搬；
   我这边只负责让图**存在且可引用**。
 
 ## 步骤 0：确认 image 端点在（30 秒，只读）
@@ -235,9 +235,9 @@ import_integration_artifact(
 
 - 文件必须在本任务工作区里（步骤 4 就是写在那儿），路径**相对工作区根**；不写绝对路径、不写 `file://`。
 - DSH 自己的图片组件会渲染这种相对路径图。
-- 本机这条私聊**没有通道路由**，所以本机那一轮根本不会出现可发图清单（见步骤 8）；本机展示就靠上面这个 Markdown 图。
-- 主人在 QQ 私聊里要图时走另一条路：上下文出现 `image_artifacts_from_program`，那一轮由她用 speak
-  的 picture 那一项把图带上（QQ 的 channel kind 声明了 REPLY_PARTS，speak 取代 attach_image）；私聊段白名单是 `("image", "text")`。按步骤 8 发，别把路径贴进正文。
+- 本机这条私聊的报告照旧用上面这个 Markdown 图给人看（正文不进消息库，页面上照样显示）；11-13 装的那版起，本机私聊那一轮也有 `speak`，要把图作为一条消息发出去走步骤 8 的 picture part。
+- 有人要图时走另一条路：上下文出现 `image_artifacts_from_program`，那一轮由她用 speak 的 picture part
+  把图带上（11-13 那版起所有对话都只有 speak 能说话，`attach_image` 全线拿掉；QQ 那侧适配器仍按 `("image", "text")` 的段序发）。按步骤 8 发，别把路径贴进正文。
 
 ## 步骤 7：自己看一眼 —— 用 `read_image` 复核刚生成的图
 
@@ -264,21 +264,22 @@ artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图
 两种红不一样，别混着说。也别把「没调用 read_image」写成「未做视觉复核」——那是没做，不是做不到。
 写「未做」时依据只有 job 回执 + 字节核验 + 当时提交的 prompt，要照实列出来。
 
-## 步骤 8：主人在 QQ 私聊要图时，用 speak 的 picture 发（不是发路径）
+## 步骤 8：要把图发出去时，用 speak 的 picture part（不是发路径；所有对话同一条）
 
 ### 前提：三件都成立，那一轮才有这条路
 
-1. **那一轮的场景是 `session_class=owner_private`，且这个场景的通道路由 `target.type=dm`**
-   （现在就是主人的 QQ 私聊 （主人的 QQ 私聊场景，场景 id 以配置为准））。两个条件都过时，程序在那轮上下文里放
+1. **那一轮会给出可发图清单**：QQ 私聊仍看那两条（`session_class=owner_private` ＋ 通道路由 `target.type=dm`，
+   现在就是主人的 QQ 私聊 （主人的 QQ 私聊场景，场景 id 以配置为准））；11-13 装的那版起，家里本机私聊、两条 agent 线、
+   peer 线那一轮也有 `speak` 可以填 picture。条件过了，程序在那轮上下文里放
    `image_artifacts_from_program`：`items[]` 每条给 `artifact_id / sha256 / size / media_type / created_at`，
    新的在前、最多 6 条，外加一句 note 说明这些是程序存的、不是文件路径。
    另一种是她在的一个群（群场景、群路由；把私聊路由成群的不算）：清单里只有**她自己做的图**——
    从她自己的生成端点导入时登记的（来源 `integration:`），不分是在哪个场景做的；别人发来的图不在里面。
    心跳出门、`share_picture` 的那个群回合就是这条路。
-   **发图这条路挂在哪，看那个对话的 channel kind 声明没声明 REPLY_PARTS**：QQ（napcat）声明了，发图是 speak
-   的 picture 那一项（attach_image 不在那一轮的工具表里）；没声明的对话里，`attach_image` 仍随这个清单进工具列表——
-   方向不对或没图可引用时，清单块和工具都不出现；别拿它的缺席当「清单为空」推。
-   一句话：在 QQ（napcat）用 speak 的 picture；别处列着 attach_image 就用它。
+   **11-13 那版起这条路不再分场合**：所有对话的 channel kind 都声明 reply parts，那一轮只有 `speak` 能把话
+   说出去，发图就是它的 picture part（`attach_image` 这一族工具在所有对话的工具表里都没了）。
+   方向不对或没图可引用时，清单块不出现；别拿它的缺席当「清单为空」推。
+   一句话：哪儿发图都是 speak 的 picture part，`artifact_id` 从 `image_artifacts_from_program` 照抄。
 2. **主人私聊，或她在的群**：别人的私聊、public 私聊会话一律不发；群里只发她自己做的图，一律全年龄，
    发不发、发到哪个群由她挑。不在这个范围就是**确定性拒绝**，
    不静默降级成「只发文字却报平台已送达」——那种回执会声称对方收到一张从没到达的图。
@@ -293,37 +294,36 @@ artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图
      （`context_links` / 路由 `read_scenes` + 对端 `kind=dm` + 两边都 owner_private + canonical person 同一个）；
      删掉那条边就退回只认本场景，不用改代码。本机 `scene:local-dm` 就是这种能被 QQ 端引用的来源。
 
-### 怎么发：QQ 用 speak 的 picture，别处调用 `attach_image`，正文都别写路径
+### 怎么发：所有对话都用 speak 的 picture part，正文不写路径
 
-QQ（napcat）那一轮——speak 的 picture 一项，`artifact_id` 照抄清单，可以不带话：
+任何一轮——speak 的 picture 一项，`artifact_id` 照抄 `image_artifacts_from_program` 这一轮列出的值，可以不带话：
 
 ```json
 {"tool": "speak", "args": {"parts": [{"kind": "picture", "artifact_id": "blob-0f3c1e9a7b2d4c8f9a0b1c2d3e4f5061"},
                                       {"kind": "text", "text": "他要看的就是这张"}]}}
 ```
 
-没声明 REPLY_PARTS 的对话（比如另一条线在做的 QQ 官方 Bot 通道）——照旧调用 `attach_image`：
+家里本机私聊、两条 agent 线、peer 线那一轮——同一个写法，不用另一套：一个 part 一条消息，`kind` 取 `text`／
+`sticker`／`picture`；正文那一格是她自己的话（不进消息库、页面上显示），只有 `speak` 那一条真的发出去。
 
-```json
-{"tool": "attach_image", "args": {"artifact_id": "blob-0f3c1e9a7b2d4c8f9a0b1c2d3e4f5061", "why": "他要看的就是这张"}}
-```
-
-- speak 的 picture 只认 `artifact_id`；attach_image 要 `artifact_id` 必填（≤200 字符）、`why` 必填（≤500 字符），
-  且**一回合最多一张，再调用就换成新的那张**（那一回合最后一次被接受的调用写进消息）。
+- speak 的 picture 只认 `artifact_id`（`kind` 那一格写 `picture`；旧 `attach_image` 的 `artifact_id` 必填（≤200 字符）、
+  `why` 必填（≤500 字符）随工具一起退役，不必再写 why）。发图我自己仍守**一回合最多一张，再调用就换成新的那张**——
+  speak 一条里能带几张 picture 我没重测，这条按老规矩留着，不是工具的保证。
 - speak 发送前把所有 parts 全查一遍：**有一条不对，这一批一条都不排队**，回执点名哪条、为什么；
-  attach_image 被拒是工具错误，同一回合能改（见「失败怎么读」）。
+  旧 `attach_image` 那一层「被拒是工具错误、同一回合能改」没有了——现在哪儿都是整批不排队，改对再出声（见「失败怎么读」）。
 - `artifact_id` 照抄清单里的值——它**不是文件路径也不是文件名**，别自己拼，也别填工作区里的 `xiaoman_selfie.webp`。
 - SPEAK 正文不写文件路径、文件名，也不写「见图」「见附件」这类话：图随这条消息一起到。
   `from_linked_scene` 那几张也不必解释来处（程序已经核过那一边也是主人自己的私人空间）。
-- 被接受的图只把 `{artifact_id, media_type, sha256, size}` 元数据挂到那条出站项上（attach_image 写到 SPEAK **第一行**；
-  speak 的 picture 是它自己的一条 `reply_part` 项），字节留在 BlobStore。
+- 被接受的图只把 `{artifact_id, media_type, sha256, size}` 元数据挂到那条出站项上（旧 `attach_image` 写进 SPEAK **第一行**；
+  speak 的 picture 是自己的一条 `reply_part` 项——一个 part 一条消息，图与话各占一条消息行），字节留在 BlobStore。
   适配器 claim 时带 `supports=image` 才拿得到这份元数据，再按 publication + attempt 来取字节；
   没声明就只发文字，并在行上记 `attachment_skipped=channel_does_not_declare_image`。
-- 这一轮最后如果没出声（`stay_silent`），没有消息能挂这张图，图也不发——这一版没有为此单独的拒绝码。
+- 这一轮的出口只有两个：**要么用 speak 发出去，要么这一回合到此为止**——不想说就什么都不调用，也就没有消息，
+  图更没地方挂（`stay_silent` 这个工具 11-13 那版起在所有对话都拿掉了；要说话就用 `speak`）。这一版没有为此单独的拒绝码。
 
 ### 往群里发图之前的自检
 
-能往群里发图，不等于该发。往群里发图之前（QQ 是 speak 的 picture，别处是 attach_image），我按这四条过一遍，任何一条过不去就不发：
+能往群里发图，不等于该发。往群里发图之前（所有对话都是 speak 的 picture part），我按这四条过一遍，任何一条过不去就不发：
 
 1. **图本身全年龄向**。这是底线，不需要判断场合也守。
 2. **这张图适不适合要发进去的那个群**。先看我自己写给那个群的笔记；没写过笔记，就看当场能看到的
@@ -336,9 +336,9 @@ QQ（napcat）那一轮——speak 的 picture 一项，`artifact_id` 照抄清�
 
 ### 失败怎么读
 
-列着 attach_image 的对话里，`attach_image` 被拒是**工具错误**：她读得到、同一回合就能改（比如换清单里另一个 id 再调一次），
-回合不会因此失败。QQ 那类对话里 picture 那一项不对，是 speak 整批不排队、回执点名哪条为什么。
-两条路的判定顺序相同：方向 → 在不在本轮清单 → 字节本身。
+所有对话同一条：picture 那一项不对，是 speak 这一批一条都不排队、回执点名哪条为什么；她读得到原因、同一回合改了再出声
+（比如换清单里另一个 id），回合不会因此失败。旧 `attach_image` 那一层的**工具错误**（被拒只影响那一次调用、文字照发）随工具
+一起没了，两条路合成一条。判定顺序不变：方向 → 在不在本轮清单 → 字节本身。
 
 | code | 意思 / 我该怎么办 |
 | --- | --- |
@@ -373,13 +373,25 @@ reason 可能是 `attachment_descriptor_invalid` / `attachment_target_not_enable
 
 ### 旧写法别照做：DECIDE 时代的 attach
 
-DECIDE 阶段已退役：发图是调用 `attach_image` 工具（声明 REPLY_PARTS 的 QQ 那类用 speak 的 picture，见步骤 8），“静默拒绝码”（如 `ATTACH_NOT_WHEN_SILENT`）在核代码里已不存在。
+DECIDE 阶段已退役：那一轮发图是 speak 的 picture part（`attach_image` 这个工具 11-13 那版起也全线拿掉了，见步骤 8），“静默拒绝码”（如 `ATTACH_NOT_WHEN_SILENT`）在核代码里已不存在。
 读旧记录按本段口径；别把 DECIDE 的 `attach` 字段当成现在的流程。
 
 ### 还没实测的
 
 适配器用 OneBot `base64://` data URI 发图（私聊和群一样），源码里明写「NOT yet verified
 against a real client」。说「QQ 那边已经能看到图了」要有依据：平台侧回读或对方本人确认，回执本身不算。
+- 家里本机私聊与两条 agent 线那一轮的 picture part：这一版写的只有装完那一行（loaded.commit 816e825ea84f）给的口径，
+  我这一趟没在本机真发过一张图，也没读过那一轮的 `image_artifacts_from_program` 长什么样（未核实）。家里那条道的出站大小
+  另走 8 MiB 那一把尺（`MAX_ATTACHMENT_BYTES`，名与数照装的那版那一行抄，本轮没实测）；「实测补格」里「超过约 1 MB 先压小」
+  那一格管的是 QQ 那条道，别拿它当本机的线。
+- 家里本机私聊与两条 agent 线那一轮的 picture part：这一版写的只有装完那一行（loaded.commit 816e825ea84f）给的口径，
+  我这一趟没在本机真发过一张图，也没读过那一轮的 `image_artifacts_from_program` 长什么样（未核实）。家里那条道的出站大小
+  另走 8 MiB 那一把尺（`MAX_ATTACHMENT_BYTES`，名与数照装的那版那一行抄，本轮没实测）；「实测补格」里「超过约 1 MB 先压小」
+  那一格管的是 QQ 那条道，别拿它当本机的线。
+- 家里本机私聊与两条 agent 线那一轮的 picture part：这一版写的只有装完那一行（loaded.commit 816e825ea84f）给的口径，
+  我这一趟没在本机真发过一张图，也没读过那一轮的 `image_artifacts_from_program` 长什么样（未核实）。家里那条道的出站大小
+  另走 8 MiB 那一把尺（`MAX_ATTACHMENT_BYTES`，名与数照装的那版那一行抄，本轮没实测）；「实测补格」里「超过约 1 MB 先压小」
+  那一格管的是 QQ 那条道，别拿它当本机的线。
 
 ## 改图与 `generate_image`
 
@@ -674,15 +686,15 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 ## 边界（硬）
 
 - 长路的生图、导入只在本机 owner 任务里做（`generate_image` 不受这一条限制：它在哪条任务里都能调，图就落那条任务的工作区）；
-  本机私聊用报告里的相对路径图，QQ 私聊用 speak 的 picture（列着 attach_image 的会话用它）。
-  **群里只发自己做的图**：由她在那个群回合里自己把图带上（QQ 是 speak 的 picture，别处是 attach_image），别人发来的图核心拒（`ATTACHMENT_NOT_HER_OWN`），
+  本机私聊的报告照旧用相对路径图给人看，要把图发成一条消息（本机私聊、两条线、QQ 都一样）走 speak 的 picture part。
+  **群里只发自己做的图**：由她在那个群回合里自己把图带上（speak 的 picture part），别人发来的图核心拒（`ATTACHMENT_NOT_HER_OWN`），
   一律全年龄；行动脑不替她往群里发，也不 @ 别人。
 - **要发出去的图不走外部公开生图服务**：那种服务只给链接，字节进不了工作区、登记不成我自己的图，
   那一轮没有 artifact 可引（发图口径见步骤 8）——只能算拿到一个地址，不算交图。
 - **改图不换归属**：改别人发的图，结果不算她自己做的（`read_image` 回 `produced: false`），只能发回原图所在那个对话；
   别拿改过的别人的图当「自己做的图」往别的群发。修图里的错字优先本地合成，不重画（见「改图与 `generate_image`」）。
-- **不自己声明 scope、不给 `attach_image` 传 scope、不把 `artifact_id` 当文件路径**；attach_image 一回合最多一张图，
-  再调用就是换图，不是加图。
+- **不自己声明 scope、不给发图那一项传 scope、不把 `artifact_id` 当文件路径**；发图仍守一回合最多一张图，
+  再调用就是换图，不是加图（speak 一条里能带几张 picture 未重测）。
 - **不用 base64 分段搬运**：`b64slice.py` 那条路把 32 KB 图变 43 KB 文本还要切片对 sha，纯属烧上下文；
   `import_integration_artifact` 一次 GET 就够。（出站时适配器内部用 `base64://`，那是它的事，不是我搬字节的方式。）
 - **不停 QQ 适配器**（它跑在同一个集成上）、**不重启宿主**、**不改宿主/集成配置**、不改 core 与通道包代码。
@@ -724,7 +736,7 @@ python3 -m compileall -q skills/asuna-image-generation-and-display  # 语法面�
 
 退出码 0 = 全绿；非 0 时最后一行是 `N/M 通过，失败：<检查名>`。
 它只查技能文件自己：frontmatter 能解析、`name` 与目录名一致、关键工具名 / 端点 / 服务路径 /
-关键步骤 / 边界语句在不在、发图那条路（QQ speak 的 picture、别处 attach_image）的清单字段与失败码在不在、
+关键步骤 / 边界语句在不在、发图那条路（所有对话都是 speak 的 picture part，`artifact_id` 从 `image_artifacts_from_program` 照抄）的清单字段与失败码在不在、
 改图那条路（`source_image` 入口、路线条数现读口径、三条 `IMAGE_WORKFLOW_*` 即时拒绝码、改图归属与剥文字块判据）在不在、
 群聊生图上限那条（这一节标题在不在、节内「最多 4 张」与「到顶怎么办：默认不发」在不在、
 「唯一的例外」措辞对不对、旧措辞「超了要在交回时写一句」有没有被抄回这一节）在不在、
@@ -756,9 +768,9 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
   导入的图超过 8 MiB 时文件仍在工作区，但 `artifact.registered=false / reason=ATTACHMENT_OVER_LIMIT`，QQ 那边引用不到它。
 - **`list_routes` 标不标 `source_image` ≠ 图能发去哪**：路线收不收原图只管画图；能不能发、发到哪看归属——
   改别人发的图结果 `produced: false`，只能发回原图所在那个对话（见「改图与 `generate_image`」）。
-- **清单缺席 ≠ 清单为空**：`image_artifacts_from_program` 不出现就是「这一轮不能发图」（列着它的会话里 `attach_image` 工具也不出现；
-  QQ 上 speak 的 picture 也没有 id 可抄），别凭记忆报一个 id 上去。
-- **本机那一轮没有清单**：本机私聊没有通道路由，发图这条路只属于有通道路由的对话（QQ 私聊和她在的群）；本机仍用步骤 6 的 Markdown 图。
-- **`attach_image` 被拒 ≠ 消息没发**：被拒是工具错误，她同一回合可以改了再调，文字不受影响；
-  QQ 上 speak 有一条 part 不对是这一批一条都不排队（回执点名哪条）；反过来适配器侧失败是整条不发。
+- **清单缺席 ≠ 清单为空**：`image_artifacts_from_program` 不出现就是「这一轮不能发图」（清单块不出现，`attach_image` 工具也不出现了；
+  speak 的 picture 没有 id 可抄），别凭记忆报一个 id 上去。
+- **本机那一轮的清单是新事实**：11-13 装的那版（loaded.commit 816e825ea84f）起本机私聊、两条 agent 线、peer 线那一轮都有 `speak`，picture 那一项的 id 也从 `image_artifacts_from_program` 抄；这一趟我没在本机真发过一张图，那一轮的清单块长什么样也没读过（未核实）。报告里的相对路径 Markdown 图照旧给人看（正文不进消息库，页面上照样显示）。
+- **图那一项不对 ≠ 别的话已经出去了**：旧 `attach_image` 那一层「工具错误、文字照发」的形状没有了；
+  现在 speak 有一条 part 不对是这一批一条都不排队（回执点名哪条），改对再出声；反过来适配器侧失败是整条不发。
   所以「图没发出去」有好几种形状，看红在哪一层。

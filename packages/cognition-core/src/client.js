@@ -612,24 +612,15 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
   /** What she said through speak (ADR-129 D5(a)): a node of its own for each call whose result is not an error,
    * placed in the session at the call as the repair note is, so it shows whether DSH folds the Turn's process or not.
    * It carries the call as recorded and the operation of its step's stage (the `asuna-stage` context), by which the
-   * page asks what the call sent. And the Turn's mark `asuna-spoke`: a speak result in it that is not an error
-   * (D5(c) folds her body text by it). */
+   * page asks what the call sent. */
   const SPEAK_NAMES = ['speak', 'reply'];
   function speakDefinitions() {
     const isCall = event => event.type === 'tool/call' && SPEAK_NAMES.includes(event.data?.name);
     const isResult = event => event.type === 'tool/result' && typeof event.data?.message?.toolCallId === 'string';
     const resulted = (state, event) => isResult(event) && state && event.data.message.toolCallId === state.callId
       ? { ...state, done: true, ok: event.data.message.isError !== true } : state;
-    const spoke = (state, event) => {
-      if (!state) return state;
-      if (isCall(event)) return { ...state, calls: [...state.calls, event.data.callId] };
-      if (isResult(event) && !state.spoke && state.calls.includes(event.data.message.toolCallId)
-          && event.data.message.isError !== true) return { ...state, spoke: true };
-      return state;
-    };
     // Every match is a start, as asuna-stage's are (a start on a started Context is an update): DSH refuses a start
-    // after an update in one Context, and a Turn's or a call's first loaded event may be a result (a think call's,
-    // or one whose call is on an older page).
+    // after an update in one Context, and a call's first loaded event may be its result (its call on an older page).
     return [{ kind: 'asuna-speak', target: 'chat',
       // Keyed by Turn and call id: some providers number calls per request, so an id comes back in a later Turn.
       match: event => isCall(event) && typeof event.data.callId === 'string'
@@ -647,16 +638,6 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       buildViewNode: context => !context.state?.called || !context.state.done || !context.state.ok ? null : ({
         key: context.key, kind: 'asuna-speak', id: context.id, target: 'chat', anchorSeq: context.state.seq,
         location: { kind: 'session' }, visibility: 'visible', data: context.state }),
-    }, { kind: 'asuna-spoke',
-      match: event => (isCall(event) || isResult(event)) && Number.isInteger(event.data.turn)
-        ? { id: String(event.data.turn), role: 'start' } : null,
-      start: (_context, match) => spoke({ turn: match.event.data.turn, calls: [], spoke: false }, match.event),
-      update: (context, match) => spoke(context.state, match.event),
-      buildLocationData: (context, scope, previous) => {
-        if (scope !== 'turn' || !context.state?.spoke) return null;
-        if (previous?.value === true) return previous;
-        return { kind: 'turn', turn: context.state.turn, key: 'asuna-spoke', value: true };
-      },
     }];
   }
 
@@ -1205,10 +1186,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       name: 'conversation.composer.dock', id: 'asuna-brain-meters', order: 100 }, BrainMeters));
 
     // Add only Asuna business attribution in public extension points. Never
-    // take assistant-step over or replace the native Chat grouping definition:
-    // the one delegate of assistant-step (AssistantStep, ADR-129 D5(c)) changes
-    // only her Turns that spoke through speak and hands DSH's shipped component
-    // everything else (ADR-007).
+    // shadow assistant-step or replace the native Chat grouping definition.
     ctx.effect(() => {
       const style = document.createElement('style');
       style.textContent = brainPalette;
@@ -1475,51 +1453,6 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }
     ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
       name: 'conversation.chat.node', key: 'asuna-speak', locale: NS }, SpeakNode));
-
-    // ── her body text in a Turn that spoke through speak, folded (ADR-129 D5(c)) ──
-    // A delegate of DSH's assistant-step node, registered as the turn-trigger and max-tokens notices are: in a Turn
-    // with a speak result that is not an error (`asuna-spoke`), the step's text blocks are drawn closed under a row
-    // of their own; DSH's shipped component draws the rest (its reasoning, tool-call and image blocks), and draws
-    // every other step as it is. It forwards the shipped entry's inject and declares its child slots.
-    const shippedAssistant = () => ctx.slots.entries('conversation.chat.node')
-      .find(entry => entry.options.key === 'assistant-step' && entry.component !== AssistantStep);
-    // Its row reads her own first sentence (no label of the program's), and opens to the whole text, as her thought's.
-    function Mumble({ text }) {
-      const [open, setOpen] = React.useState(false);
-      const Icon = primitives[TOOL_ICONS.think] ?? primitives.IconInfoOutlineRegular;
-      return h(DisclosureRow, { icon: h(Icon), previewChevron: false,
-        title: h('span', { style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          fontSize: 'var(--dsh-content-font-size-secondary, 13px)' } }, firstSentence(text) || text),
-        keepContentWhenOpen: true, open, expandable: true, expandOnRowClick: true, onToggle: () => setOpen(value => !value) },
-        open && h('div', { style: { padding: '4px 0 4px calc(22px + var(--dsh-content-font-delta, 0px))', minWidth: 0 } },
-          h(MarkdownText, { text, labels: markdownLabels(t), variant: 'compact' })));
-    }
-    function AssistantStep(props) {
-      const spoke = props.useTurnData?.('asuna-spoke') === true;
-      const shipped = shippedAssistant();
-      if (!shipped) return null;
-      const blocks = props.node?.data?.blocks ?? [];
-      const text = blocks.filter(block => block.kind === 'text').map(block => block.text ?? '').join('\n\n').trim();
-      const fold = spoke && !!text;
-      const rest = !fold ? props : { ...props, node: { ...props.node, data: { ...props.node.data,
-        blocks: blocks.filter(block => block.kind !== 'text') } } };
-      // One root whatever the mark: DSH's own row keeps its place, so it is not remounted when the mark arrives mid-Turn.
-      return h(React.Fragment, null, h(shipped.component, rest),
-        fold && props.groupPart !== 'reasoning' ? h(Mumble, { text }) : null);
-    }
-    ctx.slots.inject('conversation.chat.node', () => {
-      try {
-        return ctx.slots.register({ name: 'conversation.chat.node', key: 'assistant-step', priority: -1, locale: 'chat',
-          children: { 'conversation.chat.reasoning.body': { kind: 'single', scope: 'session' },
-            'conversation.chat.message.images': { kind: 'single', scope: 'session' } },
-          inject: sessionId => shippedAssistant()?.inject?.(sessionId) ?? {} }, AssistantStep);
-      } catch (error) {
-        // DSH refused the delegate: its own assistant rows stay as they are, and the rest of this page starts.
-        const text = 'Asuna: the assistant-step delegate was not registered: ' + (error?.message ?? error);
-        if (ctx.logger?.warn) ctx.logger.warn(text); else console.error(text);
-        return () => {};
-      }
-    });
 
     // ── where a conversation is: the local workspace's name, a group or a DM ──
     // DSH stores workspace titles as plain text: the client gives the words it shows, again on a switch.

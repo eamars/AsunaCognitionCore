@@ -155,8 +155,8 @@ test('each block of a thread is its own node where it happened; an earlier one r
   assert.equal(words('collab.state.continued'), 'Continued below');
 });
 
-test('a think then speak Turn draws her speak node and marks the Turn, loaded whole, live, or from mid-Turn', () => {
-  // ADR-129 D5(a), (c): the think call's result comes before the speak call. DSH refuses a start after an update in one
+test('a think then speak Turn draws her speak node, loaded whole, live, or from mid-Turn', () => {
+  // ADR-129 D5(a): the think call's result comes before the speak call. DSH refuses a start after an update in one
   // Context, so a result read as an update broke the whole conversation's assembly.
   const args = JSON.stringify({ parts: [{ kind: 'text', text: '回来啦' }] });
   const call = (seq, step, id, name) => entry(seq, 'tool/call', { turn: 1, step, callId: id, name, arguments: name === 'speak' ? args : '{}' });
@@ -169,9 +169,9 @@ test('a think then speak Turn draws her speak node and marks the Turn, loaded wh
   const drawn = engine => {
     const view = snapshot(engine);
     return [view.nodes.filter(node => node.kind === 'asuna-speak').map(node => [node.id, node.anchorSeq, node.location.kind,
-      node.data.operation, node.data.args.parts[0].text]), view.timeline.turns.get(1)?.data.get('asuna-spoke')];
+      node.data.operation, node.data.args.parts[0].text])];
   };
-  const expected = [[['1:c-speak', 7, 'session', 'ep-1:TURN', '回来啦']], true];
+  const expected = [[['1:c-speak', 7, 'session', 'ep-1:TURN', '回来啦']]];
   const whole = assembler([...stageDefinitions(), ...speakDefinitions()]);
   whole.replaceWindow(events, false);
   assert.deepEqual(drawn(whole), expected, 'loaded whole');
@@ -202,8 +202,6 @@ test('a speak call whose id an earlier Turn already used is drawn in its own Tur
   const view = snapshot(engine);
   assert.deepEqual(view.nodes.filter(node => node.kind === 'asuna-speak').map(node => [node.anchorSeq, node.data.operation]),
     [[9, 'ep-b:TURN']]);
-  assert.equal(view.timeline.turns.get(8).data.get('asuna-spoke'), true);
-  assert.equal(view.timeline.turns.get(3).data.get('asuna-spoke'), undefined);
 });
 
 test('the program sending her final text back shows between the draft and the rewrite, never folded away', () => {

@@ -27,7 +27,7 @@ async function load(path) {
   return result;
 }
 const { ConversationNodeAssembler } = await load(require.resolve('@deepseek-ai/dsh-client-ui-conversation/client'));
-const { stageDefinitions, collabDefinitions, repairDefinitions, threadOf, subscribeInputPolicies, toolRow, DICTIONARY, isolatedRow } = await load(new URL('../src/client.js', import.meta.url));
+const { stageDefinitions, collabDefinitions, repairDefinitions, speakDefinitions, threadOf, subscribeInputPolicies, toolRow, DICTIONARY, isolatedRow } = await load(new URL('../src/client.js', import.meta.url));
 const words = (key, params = {}) => DICTIONARY.en[key].replace(/\{(\w+)\}/g, (_, name) => params[name]);
 
 test('one tool row DSH refuses is skipped and named; the other rows and the page still start', () => {
@@ -153,6 +153,36 @@ test('each block of a thread is its own node where it happened; an earlier one r
   assert.equal(current.title, 'skills');
   assert.equal(threadOf([...rows[1].data.entries, { id: 's', kind: 'status', state: 'done', at }]).live, null);
   assert.equal(words('collab.state.continued'), 'Continued below');
+});
+
+test('a think then speak Turn draws her speak node and marks the Turn, loaded whole, live, or from mid-Turn', () => {
+  // ADR-129 D5(a), (c): the think call's result comes before the speak call. DSH refuses a start after an update in one
+  // Context, so a result read as an update broke the whole conversation's assembly.
+  const args = JSON.stringify({ parts: [{ kind: 'text', text: '回来啦' }] });
+  const call = (seq, step, id, name) => entry(seq, 'tool/call', { turn: 1, step, callId: id, name, arguments: name === 'speak' ? args : '{}' });
+  const result = (seq, step, id) => entry(seq, 'tool/result', { turn: 1, step, message: { role: 'tool', toolCallId: id, isError: false, content: [] } });
+  const events = [entry(0, 'turn/start', { turn: 1 }), entry(1, 'step/start', { turn: 1, step: 1 }),
+    entry(2, 'asuna/stage', { turn: 1, step: 1, lane: 'character', phase: 'TURN', operation: 'ep-1:TURN' }),
+    call(3, 1, 'c-think', 'think'), result(4, 1, 'c-think'), entry(5, 'step/start', { turn: 1, step: 2 }),
+    entry(6, 'asuna/stage', { turn: 1, step: 2, lane: 'character', phase: 'TURN', operation: 'ep-1:TURN' }),
+    call(7, 2, 'c-speak', 'speak'), result(8, 2, 'c-speak'), entry(9, 'turn/end', { turn: 1, reason: { kind: 'completed' } })];
+  const drawn = engine => {
+    const view = snapshot(engine);
+    return [view.nodes.filter(node => node.kind === 'asuna-speak').map(node => [node.id, node.anchorSeq, node.location.kind,
+      node.data.operation, node.data.args.parts[0].text]), view.timeline.turns.get(1)?.data.get('asuna-spoke')];
+  };
+  const expected = [[['c-speak', 7, 'session', 'ep-1:TURN', '回来啦']], true];
+  const whole = assembler([...stageDefinitions(), ...speakDefinitions()]);
+  whole.replaceWindow(events, false);
+  assert.deepEqual(drawn(whole), expected, 'loaded whole');
+  const live = assembler([...stageDefinitions(), ...speakDefinitions()]);
+  live.replaceWindow([], false);
+  for (const event of events) live.append(event);
+  assert.deepEqual(drawn(live), expected, 'appended as it happened');
+  const paged = assembler([...stageDefinitions(), ...speakDefinitions()]);
+  paged.replaceWindow(events.slice(8), true);                 // the window starts at the speak result
+  paged.prepend(events.slice(0, 8), false);
+  assert.deepEqual(drawn(paged), expected, 'a window that starts mid-Turn, then the older page');
 });
 
 test('the program sending her final text back shows between the draft and the rewrite, never folded away', () => {

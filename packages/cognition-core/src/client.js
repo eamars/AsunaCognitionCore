@@ -627,22 +627,27 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           && event.data.message.isError !== true) return { ...state, spoke: true };
       return state;
     };
+    // Every match is a start, as asuna-stage's are (a start on a started Context is an update): DSH refuses a start
+    // after an update in one Context, and a Turn's or a call's first loaded event may be a result (a think call's,
+    // or one whose call is on an older page).
     return [{ kind: 'asuna-speak', target: 'chat',
       match: event => isCall(event) && typeof event.data.callId === 'string' ? { id: event.data.callId, role: 'start' }
-        : isResult(event) ? { id: event.data.message.toolCallId, role: 'update' } : null,
+        : isResult(event) ? { id: event.data.message.toolCallId, role: 'start' } : null,
       start: (_context, match, reader) => {
-        const event = match.event, stage = reader.previous('asuna-stage')?.state;
+        const event = match.event;
+        if (!isCall(event)) return resulted({ callId: event.data.message.toolCallId, called: false }, event);
+        const stage = reader.previous('asuna-stage')?.state;
         const here = stage && stage.turn === event.data.turn && stage.step === event.data.step;
-        return { seq: event.seq, callId: event.data.callId, args: parseArgs(event.data.arguments),
+        return { seq: event.seq, callId: event.data.callId, args: parseArgs(event.data.arguments), called: true,
           operation: here ? stage.stage?.operation : undefined, done: false, ok: false };
       },
       update: (context, match) => isCall(match.event) ? context.state : resulted(context.state, match.event),
-      buildViewNode: context => !context.state?.done || !context.state.ok ? null : ({ key: context.key,
-        kind: 'asuna-speak', id: context.id, target: 'chat', anchorSeq: context.state.seq, location: { kind: 'session' },
-        visibility: 'visible', data: context.state }),
+      buildViewNode: context => !context.state?.called || !context.state.done || !context.state.ok ? null : ({
+        key: context.key, kind: 'asuna-speak', id: context.id, target: 'chat', anchorSeq: context.state.seq,
+        location: { kind: 'session' }, visibility: 'visible', data: context.state }),
     }, { kind: 'asuna-spoke',
       match: event => (isCall(event) || isResult(event)) && Number.isInteger(event.data.turn)
-        ? { id: String(event.data.turn), role: isCall(event) ? 'start' : 'update' } : null,
+        ? { id: String(event.data.turn), role: 'start' } : null,
       start: (_context, match) => spoke({ turn: match.event.data.turn, calls: [], spoke: false }, match.event),
       update: (context, match) => spoke(context.state, match.event),
       buildLocationData: (context, scope, previous) => {

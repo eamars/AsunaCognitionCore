@@ -384,14 +384,6 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
   我这一趟没在本机真发过一张图，也没读过那一轮的 `image_artifacts_from_program` 长什么样（未核实）。家里那条道的出站大小
   另走 8 MiB 那一把尺（`MAX_ATTACHMENT_BYTES`，名与数照装的那版那一行抄，本轮没实测）；「实测补格」里「超过约 1 MB 先压小」
   那一格管的是 QQ 那条道，别拿它当本机的线。
-- 家里本机私聊与两条 agent 线那一轮的 picture part：这一版写的只有装完那一行（loaded.commit 816e825ea84f）给的口径，
-  我这一趟没在本机真发过一张图，也没读过那一轮的 `image_artifacts_from_program` 长什么样（未核实）。家里那条道的出站大小
-  另走 8 MiB 那一把尺（`MAX_ATTACHMENT_BYTES`，名与数照装的那版那一行抄，本轮没实测）；「实测补格」里「超过约 1 MB 先压小」
-  那一格管的是 QQ 那条道，别拿它当本机的线。
-- 家里本机私聊与两条 agent 线那一轮的 picture part：这一版写的只有装完那一行（loaded.commit 816e825ea84f）给的口径，
-  我这一趟没在本机真发过一张图，也没读过那一轮的 `image_artifacts_from_program` 长什么样（未核实）。家里那条道的出站大小
-  另走 8 MiB 那一把尺（`MAX_ATTACHMENT_BYTES`，名与数照装的那版那一行抄，本轮没实测）；「实测补格」里「超过约 1 MB 先压小」
-  那一格管的是 QQ 那条道，别拿它当本机的线。
 
 ## 改图与 `generate_image`
 

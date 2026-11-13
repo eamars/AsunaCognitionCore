@@ -110,7 +110,6 @@ No local root of this computer reaches her character brain (ADR-098): the root t
 - def `current` — This worker's table; a process that never attached one (a tool, a test) builds it from the machine once.
 - def `contract` — `Table.contract` with this worker's table (the value as it is without one).
 - def `contract_text`
-- def `speech` — Her words about to leave, with a raw root written as its placeholder (D5).
 - def `outbound` — `Table.outbound` with this worker's table; without one, any placeholder is refused.
 - def `kept` — The placeholders of a text she hands the action brain that this line does not hand over: they go as written, a name the action brain cannot open, and the tool result says so (`kept_words`).
 - def `kept_words` — Her words for `kept`: what stayed as written, and that only home can hand it over; None for none.

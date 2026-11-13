@@ -1447,12 +1447,10 @@ class BusinessWorker:
                 'quote': bool(speak and 'quote' in speak['parameters'])}, record.get('scope_key', 'operator'))
             return specs
         if method == 'role_tool_aliases':
-            # Her old names as a role session's guard applies them: that conversation's (ADR-129 D3); with no session,
-            # the global map (a plugin that asks once at start).
-            from .role_tools import aliases, session_aliases
-            record = (session_records.get(self.app.store, args['session_id'], native=True)
-                      if (args or {}).get('session_id') else None)
-            return session_aliases(record['scene_id']) if record else aliases()
+            # Her old names, one map for every conversation (a plugin asks once at start; one that names a session
+            # gets the same).
+            from .role_tools import aliases
+            return aliases()
         if method in ('speak.parts', 'speak.picture'):
             # ADR-129 D5(b): what one speak call of her role sessions sent, for the page; only the rows its own record
             # names, in the session's conversation (the plugin found the call in that session's events).

@@ -13,7 +13,8 @@ Web server; she talks with it in one direct-message conversation of her own.
 - **Outbound:** her words leave through the channel outbox. The bridge sends them as prompts to the session,
   with `label` as the first line and `replyNote` (her own words on how to answer her) before her text, and records
   the platform receipt (`platform_message_id` = the prompt's
-  `requestId`).
+  `requestId`). The line carries text only (`TEXT_ONLY`): no picture is offered there, and a sticker part fails at
+  the claim (`CHANNEL_DOES_NOT_DECLARE_STICKER`).
 - **Scope:** only `session/follow` and `session/prompt`, only on the configured session.
 
 It is its own adapter: the bridge runs in this Host's plugin process (no sandboxed integration). It reaches the

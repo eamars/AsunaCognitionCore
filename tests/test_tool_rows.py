@@ -6,9 +6,10 @@ from pathlib import Path
 from asuna import param_names, role_tools, tasks
 
 CLIENT = (Path(__file__).resolve().parents[1] / 'packages/cognition-core/src/client.js').read_text(encoding='utf-8')
-# update_self is retired (ADR-069) and its calls stay in her history: the names DSH recorded in every one of them (75
-# calls, 606 copies across her live and archived sessions, read 2026-11-02; one also carried revision_id).
-RECORDED_UPDATE_SELF = {'target', 'body', 'reason'}
+# Retired tools whose calls stay in her history, by the names DSH recorded in them. update_self (ADR-069): every one of
+# its calls (75 calls, 606 copies across her live and archived sessions, read 2026-11-02; one also carried revision_id).
+# stay_silent (ADR-129 D8): the name she was shown (ADR-060) and the handler's, which older calls carry.
+RECORDED = {'update_self': {'target', 'body', 'reason'}, 'stay_silent': {'why', 'reason'}}
 
 
 def table(name):
@@ -21,8 +22,8 @@ def shown(row):
     options = {row_name: key.split('.')[0] for key, row_name in table('OPTION_ROWS').items()}
     tool = options.get(row, row)
     action = {spec['name']: spec for spec in (tasks.ASK_TOOL, tasks.PROGRESS_TOOL)}
-    if tool == 'update_self':
-        return RECORDED_UPDATE_SELF
+    if tool in RECORDED:
+        return RECORDED[tool]
     spec = role_tools.TOOLS.get(tool) or action[tool]
     return set(spec['parameters'] if tool in role_tools.TOOLS else param_names.shown(tool, spec['parameters']))
 
@@ -33,7 +34,7 @@ def test_every_field_a_row_reads_is_one_she_is_shown():
     old = table('OLD_NAMES')
     for which in ('TOOL_SUMMARY', 'TOOL_BODY'):
         for row, field in table(which).items():
-            names = {field, old.get(field)} if row == 'update_self' else {field}
+            names = {field, old.get(field)} if row in RECORDED else {field}
             assert names & shown(row), '%s reads %s.%s, which she is not shown' % (which, row, field)
 
 

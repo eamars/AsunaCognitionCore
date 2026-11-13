@@ -64,7 +64,6 @@ async function harness(t, finish = 'stop', composition) {
   core.onEvent = async event => { if (event.kind === 'stage') stages.set(event.token, event.session_id); return onEvent(event); };
   core.worker = { async call(method, args) {
     if (method === 'role_tool_specs') return [];          // her tools for the session: none in these fixtures
-    if (method === 'role_tool_aliases') return null;      // and its old names (ADR-129 D3): the global map
     business.push({ method, args });
     if (method === 'input') await core.onEvent({ kind: 'stage', session_id: args.session_id,
       token: 'stage-' + args.session_id, phase: 'TURN', lane: 'character',

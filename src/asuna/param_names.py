@@ -13,7 +13,6 @@ RENAMED = {
     'group_action': {'do': 'kind', 'why': 'reason'},
     'plan': {'place': 'line'},
     'peer_line': {'place': 'line'},
-    'stay_silent': {'why': 'reason'},
     'task': {'why': 'reason'},
     'write_document': {'why': 'reason', 'section': 'sid', 'content': 'body', 'when_shown': 'inject'},
     'set_policy': {'why': 'reason'},

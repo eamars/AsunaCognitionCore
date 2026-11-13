@@ -259,6 +259,7 @@ A channel kind that declares `ROUTE_KEYS` (the `agent` kind) also accepts a key 
 |---|---|
 | `POST …/events` | only with its own `route_id` (`ROUTE_KEY_OTHER_ROUTE`) |
 | `GET …/outbox` | only its own line's messages; admin actions are never handed out |
+| `GET …/outbox/{id}/attachment` | only for its own line's messages (`ROUTE_KEY_OTHER_ROUTE`) |
 | `POST …/outbox/{id}/receipt` | only for its own line's messages (`ROUTE_KEY_OTHER_ROUTE`) |
 | any other | `ROUTE_KEY_ENDPOINT_DENIED` |
 
@@ -406,7 +407,7 @@ The answer is `{"items": [], "lane": …, "epoch": …}` or `{"items": [item], "
 | `admin` | an admin action (publication id `ga-…`, no `text`): `{"kind": "mute", "account", "seconds"}`, `unmute` or `kick` with `account`, `recall` with `message_id`, or a request's `accept` / `decline` |
 
 - **Order.** A claim with the channel's token gets queued admin actions first. Conversations take turns by when their oldest queued message was queued (`queued_at`); within a conversation, messages come in its order. A part with `not_before` waits for its time, and a later part of one reply waits until the part before it is delivered (or she cancelled it); either holds only its own conversation. A part whose earlier part ended without arriving is cancelled when it comes up (`CANCELLED_AFTER_FAILURE`).
-- **Speaking in parts.** Where a kind declares `REPLY_PARTS`, one reply is several items, each sent as its own platform message and confirmed with its own receipt. A part that ends `failed` or `unknown` cancels the parts after it (`CANCELLED_AFTER_FAILURE`). A `recall` action takes back her own delivered line.
+- **Speaking in parts.** She speaks only through `speak`, in every conversation: one reply is several items, each sent as its own platform message and confirmed with its own receipt. A part that ends `failed` or `unknown` cancels the parts after it (`CANCELLED_AFTER_FAILURE`). A `recall` action takes back her own delivered line.
 - **Not declared.** An action the claim does not declare fails its row (`CHANNEL_DOES_NOT_DECLARE_POKE`, `…_REACT`, `…_RECALL`); a sticker fails with `CHANNEL_DOES_NOT_DECLARE_STICKER`, a file with `CHANNEL_DOES_NOT_DECLARE_FILE`. A picture without `image` declared: the text goes out and the row records `attachment_skipped`.
 - **Files.** A file row fails at claim time, before anything is sent, with `FILE_OVER_CHANNEL_LIMIT` (over the declared `file:<bytes>`; the row keeps `file_limit` `{bytes, limit}`) `FILE_BYTES_EXPIRED` (its bytes were removed; the row keeps `source_present`, whether the task folder still holds the original), or `FILE_ERASED` (a privacy erasure deleted its bytes, [Erased media](#erased-media)). Each row carries `failure_detail` in words.
 - **Kept.** The host keeps each channel's last `supports` (`artifacts` kind `channel_capabilities`) across restarts; what she is offered there follows it (`src/asuna/capabilities.py`).
@@ -754,7 +755,7 @@ The kind module tells the core one platform's id formats and adapter conventions
 | `ROUTE_KEYS` | no | each route has its own key ([Route keys](#route-keys)) |
 | `MARKS_ANSWERS`, `answerer(scene)` | no | who on a line marks the lines that answer her questions |
 | `REQUESTS` | no | its adapter posts friend and group requests ([notices](#post-a-notice-for-her-home)) |
-| `REPLY_PARTS` | no | she speaks there only in these parts (`text`, `sticker`, `picture`, `file`, `poke`, `react`, `recall`); `file` is offered only in groups whose adapter declares `file` |
+| `REPLY_PARTS` | no | the parts her `speak` takes there (`text`, `sticker`, `picture`, `file`, `poke`, `react`, `recall`; `file` only in groups whose adapter declares `file`), with QQ's rules on it: the line limit, `#number` and person-number checks with `force`, `quote`, `wait`, `patience`, typing pace, a turn with no thought handed back. A kind without it is local: `speak` takes `text`, `sticker` and `picture`, with none of those rules |
 | `OWN_RECALL_SECONDS` | no | how long after delivery she may take back her line (none where she is a group's owner or admin) |
 | `SERVICE_ARGV` | no | the managed adapter's resident command |
 | `MEDIA_KEYS`, `media_key_name`, `media_key_in`, `sign_media`, `media_refusal` | no | signed media links ([media keys](#post-the-current-media-link-keys)) |
@@ -929,8 +930,8 @@ No local root of this computer reaches the character brain; the action brain wor
   `..` segment in a path at a root or placeholder (naming that root), and in a public place a relative path that climbs.
 - **Her writing.** Every other string argument of her tools is stored contracted, except a credential's values and her
   private words.
-- **Her speech.** A raw root in a `speak` text or her end-of-turn text is replaced by its placeholder before it is
-  queued, each replacement one `roots.speech_replaced` count. Her weekly tool readings (`local_paths`) say that count,
+- **Her speech.** A raw root in a `speak` text is replaced by its placeholder before it is queued, each replacement
+  one `roots.speech_replaced` count. Her weekly tool readings (`local_paths`) say that count,
   which should be 0, and her requests rewritten per conversation (`roots.tally`), normally above 0.
 - **The image note.** The read-only path DSH's DeepSeek adapter writes beside each image while it builds a request
   comes from DSH's fs service (`processPathFromHostPath`); her lanes' requests run in a scope in which that mapping
@@ -1029,7 +1030,9 @@ does not declare `voice_in` keeps its placeholder.
 
 ### Sending pictures
 
-A picture leaves with her words as a message's `attachment` ([Claim public output](#claim-public-output), [Fetch attachment bytes](#fetch-attachment-bytes)).
+A picture leaves as a `speak` picture part, its own message carrying an `attachment` ([Claim public output](#claim-public-output), [Fetch attachment bytes](#fetch-attachment-bytes)).
+
+- Her local Web chat takes pictures too: a part there is delivered to the local sink and drawn on the page.
 
 - Pictures go to a conversation whose route targets a `dm`, or a group, on a kind that is not `TEXT_ONLY` (`outbound_media.target_allowed`).
 - In a group and in anyone's private chat but the owner's, only pictures she made go out (`outbound_media.own_only`): source `integration:` (drawn, imported or rendered), and her edits of pictures that came from that conversation. A sticker on her shelf goes wherever stickers go. Anything else is refused with `ATTACHMENT_NOT_HER_OWN`.

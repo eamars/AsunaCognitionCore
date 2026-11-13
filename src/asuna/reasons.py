@@ -1,9 +1,9 @@
 """The reasons behind her actions: what she did after each thought, and the thought behind each action.
 
 A thought (`think`, a `monologue` memory) belongs to the turn she wrote it in; what she did after it in that turn,
-before her next thought, is what it led to: her words or her silence, and the tool calls with consequences. Read back
-from the turn's records, never summarised: her words and her silence's reason as she wrote them (shortened), the
-actions in plain first-person words, one per line, with no field names or ids. Lookups (recall, reading a picture,
+before her next thought, is what it led to: her words, and the tool calls with consequences. Read back from the turn's
+records, never summarised: her words as they left (shortened), the actions in plain first-person words, one per line,
+with no field names or ids. Lookups (recall, reading a picture,
 listing) and her other thoughts are not actions.
 
 The other way round: each call with consequences is recorded with her newest thought in the turn (`reason_ref`), and
@@ -140,10 +140,6 @@ def then(store, unit):
             break
         if 'refused' in payload or not isinstance(payload.get('args'), dict):
             continue
-        if payload.get('tool') == 'stay_silent':
-            reason = _short(payload['args'].get('reason'), SAID_CHARS)
-            lines.append('所以我没说话' + ('：%s' % reason if reason else ''))
-            continue
         words = _action(payload.get('tool'), payload['args'])
         if words:
             lines.append('所以我' + words)
@@ -155,22 +151,19 @@ def then(store, unit):
 
 
 def said(store, episode):
-    """What a turn said, for its readers (ADR-129 D7): its published body text, or, when that is empty and the turn
-    queued speak parts, the texts of its text and sticker parts as they left (a sticker as its row's own
-    [表情包:name]; a picture adds nothing; a poke, a reaction, a recall or a file is the program's wording, not hers).
-    `episode`: the turn, or its id."""
-    if not isinstance(episode, dict):
-        found = episode_records.get(store, episode, fields=['speech', 'reply']) if episode else None
-        episode = {**(found or {}), '_id': episode}
-    speech = episode.get('speech')
-    if speech or not int((episode.get('reply') or {}).get('parts') or 0) or not episode.get('_id'):
-        return speech
+    """What a turn said, for its readers (ADR-129 D7, D8): the texts of its lines that left, in order -- her speak
+    parts' texts and stickers (a sticker as its row's own [表情包:name]); a picture adds nothing; a poke, a reaction, a
+    recall or a file is the program's wording, not hers. Her body text is never speech. Read from the rows each time,
+    so a line that failed or was taken back is not in it; None when nothing left. `episode`: the turn, or its id."""
+    episode_id = episode.get('_id') if isinstance(episode, dict) else episode
+    if not episode_id:
+        return None
     from .records import messages as message_records
     from .role_tools import NEVER_LEFT
-    rows = message_records.turn_parts(store, episode['_id'], reply_parts=True, not_states=NEVER_LEFT,
-                                      by='segment_index').rows(fields=['text', 'action', 'file'])
+    rows = message_records.turn_parts(store, episode_id, outbound=True, not_states=NEVER_LEFT).rows(
+        fields=['text', 'action', 'file'])
     return '\n\n'.join(text for text in ((row.get('text') or '').strip() for row in rows
-                                         if 'action' not in row and 'file' not in row) if text)
+                                         if 'action' not in row and 'file' not in row) if text) or None
 
 
 def consequential(tool, args):

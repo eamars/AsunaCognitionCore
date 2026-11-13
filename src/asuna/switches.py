@@ -25,7 +25,7 @@ from .config import echoed
 DEFAULT_HOURS = 24
 MAX_HOURS = 168
 ENDED_SHOWN = timedelta(hours=12)                # an ended switch is listed at home this long, then gone
-KEEP = ('think', 'recall', 'stay_silent')        # a turn needs these: never switched off
+KEEP = ('think', 'recall')                      # a turn needs these: never switched off
 WORDS = {'mute': '静音', 'tools_off': '关了工具', 'block': '屏蔽'}
 NOTE = ('你自己开着的开关（静音、关工具、屏蔽），until_at 到点自己结束；要提前结束，在家里用 set_policy：'
         'key=switch_off，value 写开关的 id。ended 是最近结束的。')

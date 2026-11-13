@@ -18,7 +18,7 @@ from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TO
 # 20,990 characters (tiered memory on: 21,426), against 21,915 (22,211) measured on the definitions before: the aim and the line
 # stated for her prose (D4a) and the new `line` field (D2) cost, the enum arrays and the nested part schema they replace save more.
 # Her tools as she is sent them, tiered memory's (ADR-062 phase 2: let_go, nature, from, about, the recall sentence).
-CHARACTER = (30, 21254)                  # ADR-126: write_document names her documents as she writes them, kind needed to make one +96; ADR-119 F14 §9.7: set_policy's home lines said as the gate is +36; F14: set_policy null clears, home only +30; ADR-117 L4: correction -47; ADR-112 §12.10: task's settle +103; §12.2: task's more +34; ADR-103: 贴纸 -> 表情包 +1, 表情名 -> 小黄脸名 +1; ADR-106: place_timezone removed, 31 -> 30 tools, -426 declared (21,426 -> 21,000); ADR-102: received_file +499; ADR-097: recall's bare word +19, elsewhere and past notes +19; ADR-096: pin and what each place carries +49; ADR-092 D1: speak's file part +49
+CHARACTER = (29, 21098)                  # ADR-129 D8: stay_silent removed, 30 -> 29 tools, -156 declared; ADR-126: write_document names her documents as she writes them, kind needed to make one +96; ADR-119 F14 §9.7: set_policy's home lines said as the gate is +36; F14: set_policy null clears, home only +30; ADR-117 L4: correction -47; ADR-112 §12.10: task's settle +103; §12.2: task's more +34; ADR-103: 贴纸 -> 表情包 +1, 表情名 -> 小黄脸名 +1; ADR-106: place_timezone removed, 31 -> 30 tools, -426 declared (21,426 -> 21,000); ADR-102: received_file +499; ADR-097: recall's bare word +19, elsewhere and past notes +19; ADR-096: pin and what each place carries +49; ADR-092 D1: speak's file part +49
 ACTION = (27 + len(ACTION_DSH_CAPABILITIES), 16490)        # the worker's tools, plus DSH's own (skill, todo, web);
                                                            # ADR-102: received_file, 26 -> 27 tools, +291; its copy (part 3) +58;
                                                            # ADR-092 D2: offer_file, 25 -> 26 tools, +441 (15,467 -> 15,908 measured)
@@ -49,7 +49,8 @@ def test_the_character_brain_stays_within_its_tool_budget():
 
 
 def test_retired_tools_never_come_back():
-    retired = {'update_self', 'pass_note', 'leave_note'}                    # ADR-069: retired, never back
+    # ADR-069: retired, never back; ADR-129 D8: stay_silent, gone from every conversation, aliased by nothing.
+    retired = {'update_self', 'pass_note', 'leave_note', 'stay_silent'}
     assert not retired & set(role_tools.aliases()) and not retired & {spec['name'] for spec in role_tools.all_specs()}
 
 

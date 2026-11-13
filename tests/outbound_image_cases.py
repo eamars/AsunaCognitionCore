@@ -3,8 +3,8 @@
 本机跑：``python3 tools/outbound_image_offline_check.py`` —— 不需要 Mongo、不需要 pytest、
 不联网、不发 QQ。装真的跑的是仓库里那份代码：``outbound_media`` 的全部围栏、
 ``channels`` 的 claim / attachment / HTTP 层（真在 127.0.0.1 上起服务、真发请求）、
-她的 ``attach_image`` 工具（``role_tools``，逐次判定、退回给她的话）、整回合（真 ``Coordinator``
-跑 think → attach_image → 正文或 stay_silent → SPEAK 行）、``history_query`` 的命中投影与渲染、
+她的 ``speak`` 的 picture（``role_tools``，逐条判定、退回给她的话）、整回合（真 ``Coordinator``
+跑 think → speak（text、picture）→ SPEAK 行）、``history_query`` 的命中投影与渲染、
 ``BlobStore`` 的 sha 复核与字节读。假掉的只有存储（内存集合 + 内存字节存储，**无论环境装没装
 pymongo 都用替身**：这套用例假的就是存储本身）与模型（``FakeLane`` 按剧本给工具调用，
 不调真模型）。这套是独立跑的离线套件，不要在用真 Mongo 的 pytest 会话里 import 它——它会把自己的
@@ -12,7 +12,7 @@ pymongo 都用替身**：这套用例假的就是存储本身）与模型（``Fa
 
 覆盖：端点围栏（token / 只发这条声明的 artifact / attempt 必须属于这条且正在 SENDING /
 scope / sha 复核 / 不是图就拒）、claim 元数据（声明 supports=image 才给，不带 base64）、
-attach_image 校验（清单外、群方向、非 owner_private、非图片、超限、参数逐次退回、沉默的回合不发图）、
+speak 的 picture 校验（清单外、群方向、非 owner_private、非图片、超限、行上只有元数据）、
 历史投影（我发过这张图 / 回执对不上 / 没带图的行逐字不变）。
 
 记录主人读写这些行走 fake_collections（内存适配器，它的匹配语义由 integration/store_contract.py 对着真 Mongo 核）；
@@ -730,22 +730,6 @@ def offered_ep(store, kind='dm', session='owner_private'):
         store, store.config, scene_row(kind), session, 'owner-p')})
 
 
-def call_tool(store, ep, args, tools=None, name='attach_image'):
-    '''这一回合（已 think）里调用一次工具：成功 ('ok', 结果, 回合)，退回 ('refused', 给她看的话, 回合)。'''
-    current = store.db.episodes.find_one({'_id': ep['_id']})
-    names = tools if tools is not None else role_tools.exposed(store, current)
-    current = store.put('episodes', dict(current, state='TURN', turn_tools=names, turn_thought=True,
-                                         tool_calls=current.get('tool_calls') or {}),
-                        expected=current['revision'], stream=ep['_id'])
-    call_id = '%s:TURN#%d' % (ep['_id'], len(current['tool_calls']))
-    try:
-        result, _conclude = role_tools.RoleTools(FakeCoordinator(store)).call(ep['_id'], call_id, name, args)
-        outcome = ('ok', result)
-    except role_tools.Refused as exc:
-        outcome = ('refused', str(exc))
-    return outcome + (store.db.episodes.find_one({'_id': ep['_id']}),)
-
-
 def code(after):
     """The code of the last refused call, which the record keeps (her words do not carry it, ADR-060)."""
     calls = sorted((after.get('tool_calls') or {}).values(), key=lambda call: call.get('seq', 0))
@@ -753,12 +737,21 @@ def code(after):
     return refused[-1].get('code') if refused else None
 
 
-def attach(store, ep, artifact_id, tools=None):
-    return call_tool(store, ep, {'artifact_id': artifact_id, 'why': '给他看这张'}, tools)
+def pick(store, ep, artifact_id):
+    '''speak 的一个 picture part 怎么判（RoleTools._picture，speak 每一条 picture 都过它）：
+    ('ok', 那张图的元数据) 或 ('refused', 给她看的话, 代码)。'''
+    current = store.db.episodes.find_one({'_id': ep['_id']})
+    scene = store.db.scenes.find_one({'_id': current['scene_id']})
+    try:
+        return 'ok', role_tools.RoleTools(FakeCoordinator(store))._picture(current, scene, artifact_id)
+    except role_tools.Refused as exc:
+        return 'refused', str(exc), exc.codes[0]
+    except Denied as exc:
+        return 'refused', role_tools.words(exc), role_tools.code_of(exc)
 
 
 def run_turn(store, ep, *turns):
-    '''真 Coordinator 跑完这一回合（think → 工具 → 正文或 stay_silent → SPEAK 行）。'''
+    '''真 Coordinator 跑完这一回合（think → speak → SPEAK 行）。'''
     lane, publisher = FakeLane(store, list(turns)), FakePublisher(store)
     coordinator = Coordinator(store, lane, context=object(), publisher=publisher, task_service=object())
     return coordinator.advance(ep['_id']), lane, publisher
@@ -774,48 +767,40 @@ def meta_of(stored, media_type='image/png'):
 
 
 @case
-def attach_image_accepts_a_listed_artifact_and_yields_metadata():
+def a_picture_part_accepts_a_listed_artifact_and_yields_metadata():
     store, stored = world()
     ep = offered_ep(store)
-    assert 'attach_image' in role_tools.exposed(store, ep), role_tools.exposed(store, ep)
-    outcome, result, after = attach(store, ep, stored['artifact_id'])
-    assert outcome == 'ok' and result['attached'] == stored['artifact_id'], result
-    assert after['attachment']['size'] == len(PNG), after['attachment']
-    meta = outbound_media.attachment_for_speak(after)
-    assert meta == meta_of(stored), meta
+    exposed = role_tools.exposed(store, ep)
+    assert 'speak' in exposed and 'attach_image' not in exposed, exposed
+    outcome, meta = pick(store, ep, stored['artifact_id'])
+    assert outcome == 'ok' and meta == meta_of(stored), meta
     assert json.dumps(meta).count('base64') == 0
-    recorded = list(after['tool_calls'].values())
-    assert [row['tool'] for row in recorded] == ['attach_image'] and 'result' in recorded[0], recorded
-    return True, '接受清单里的图 → 回合上记下元数据 %s（无 base64）' % sorted(meta)
+    return True, '接受清单里的图 → 元数据 %s（无 base64）' % sorted(meta)
 
 
 @case
-def attach_image_refuses_artifact_not_offered_this_turn():
+def a_picture_part_refuses_artifact_not_offered_this_turn():
     store, _stored = world()
     elsewhere = BlobStore(store).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg')
     offered = outbound_media.offer(store, CONFIG, scene_row(), 'owner_private')
     offered['items'] = [item for item in offered['items'] if item['artifact_id'] != elsewhere['artifact_id']]
     ep = turn_ep(store, context={'image_artifacts_from_program': offered})
-    outcome, said, after = attach(store, ep, elsewhere['artifact_id'])
-    assert outcome == 'refused' and code(after) == 'ATTACH_ARTIFACT_NOT_IN_CONTEXT', said
+    outcome, said, why = pick(store, ep, elsewhere['artifact_id'])
+    assert outcome == 'refused' and why == 'ATTACH_ARTIFACT_NOT_IN_CONTEXT', said
     assert 'image_artifacts_from_program' in said, '退回的话没告诉她该从哪里抄 artifact_id'
-    assert 'attachment' not in after and outbound_media.attachment_for_speak(after) is None
-    assert [row.get('refused') for row in after['tool_calls'].values()] == [said]
     return True, '清单外的 artifact 退回给她：%s' % said
 
 
 @case
-def attach_image_in_a_group_sends_only_pictures_she_made():
+def a_picture_part_in_a_group_sends_only_pictures_she_made():
     """Owner, 2026-10-05: her pictures may go to any group she is in, she picks; never a picture someone sent her."""
     store, stored = world(kind='group')
-    # 群里存的别人的图不进清单；她还没做过图，这回合也就没有 attach_image
+    # 群里存的别人的图不进清单；她还没做过图，这回合也就没有能发的图
     assert outbound_media.offer(store, CONFIG, scene_row('group'), 'public') is None
-    group_ep = turn_ep(store, kind='group', session='public')
-    assert 'attach_image' not in role_tools.exposed(store, group_ep)
     forged = {'image_artifacts_from_program': {'items': [{'artifact_id': stored['artifact_id']}], 'note': ''}}
     group_ep2 = turn_ep(store, kind='group', session='public', context=forged, ep_id='ep-turn-2')
-    outcome, said, after = attach(store, group_ep2, stored['artifact_id'], tools=['think', 'attach_image'])
-    assert outcome == 'refused' and code(after) == 'ATTACHMENT_NOT_HER_OWN' and 'attachment' not in after, said
+    outcome, said, why = pick(store, group_ep2, stored['artifact_id'])
+    assert outcome == 'refused' and why == 'ATTACHMENT_NOT_HER_OWN', said
     # 她自己做出来的图（从她的生成端点导入、登记在她私聊那边）可以随话发到群里
     store.db.scenes.insert_one(scene_row('dm'))
     made = BlobStore(store).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg',
@@ -825,9 +810,8 @@ def attach_image_in_a_group_sends_only_pictures_she_made():
     assert '全年龄' in offered['note'] and 'from_linked_scene' not in offered['items'][0]
     group_ep3 = turn_ep(store, kind='group', session='public', context={'image_artifacts_from_program': offered},
                         ep_id='ep-turn-3')
-    assert 'attach_image' in role_tools.exposed(store, group_ep3)
-    outcome, said, after = attach(store, group_ep3, made['artifact_id'])
-    assert outcome == 'ok' and after['attachment']['artifact_id'] == made['artifact_id'], said
+    outcome, meta = pick(store, group_ep3, made['artifact_id'])
+    assert outcome == 'ok' and meta['artifact_id'] == made['artifact_id'], meta
     # 字节端点按行自己算：发往群的那条只给她做的图
     row = sending_row(store, made, _id='pub-group', scene_id=GROUP_SCENE, scope_key=GROUP_SCOPE)
     data, media_type = outbound_media.serve(store, BlobStore(store), row, row['attachment'])
@@ -841,12 +825,10 @@ def attach_image_in_a_group_sends_only_pictures_she_made():
 
     store2, stored2 = world()
     assert outbound_media.offer(store2, CONFIG, scene_row(), 'public') is None
-    public_ep = turn_ep(store2, session='public')
-    assert 'attach_image' not in role_tools.exposed(store2, public_ep)
     public_ep2 = turn_ep(store2, session='public', ep_id='ep-turn-2', context={
         'image_artifacts_from_program': {'items': [{'artifact_id': stored2['artifact_id']}], 'note': ''}})
-    outcome2, said2, after2 = attach(store2, public_ep2, stored2['artifact_id'], tools=['think', 'attach_image'])
-    assert outcome2 == 'refused' and code(after2) == 'ATTACHMENT_NOT_HER_OWN' and 'attachment' not in after2, said2
+    outcome2, said2, why2 = pick(store2, public_ep2, stored2['artifact_id'])
+    assert outcome2 == 'refused' and why2 == 'ATTACHMENT_NOT_HER_OWN', said2
     # 别人的私聊也能发她自己做的图（owner 2026-10-06），别人的图照样不发
     made2 = BlobStore(store2).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg',
                                   source_ids=['integration:image:/made2.jpg'])
@@ -857,14 +839,14 @@ def attach_image_in_a_group_sends_only_pictures_she_made():
 
 
 @case
-def attach_image_refuses_non_image_and_oversize_bytes():
+def a_picture_part_refuses_non_image_and_oversize_bytes():
     store, _stored = world()
     texty = BlobStore(store).put(NOT_IMAGE, DM_SCOPE, 'image')
     ep = offered_ep(store)
     assert texty['artifact_id'] in [item['artifact_id'] for item in
                                     ep['context']['image_artifacts_from_program']['items']], ep['context']
-    outcome, said, after = attach(store, ep, texty['artifact_id'])
-    assert outcome == 'refused' and code(after) == 'ATTACHMENT_NOT_AN_IMAGE' and 'attachment' not in after, said
+    outcome, said, why = pick(store, ep, texty['artifact_id'])
+    assert outcome == 'refused' and why == 'ATTACHMENT_NOT_AN_IMAGE', said
 
     big = {'_id': 'blob-big', 'scope_key': DM_SCOPE, 'state': 'DONE', 'kind': 'image',
            'storage': 'gridfs', 'gridfs_id': '0' * 24, 'sha256': '1' * 64,
@@ -879,27 +861,15 @@ def attach_image_refuses_non_image_and_oversize_bytes():
 
 
 @case
-def attach_image_arguments_are_checked_one_call_at_a_time():
+def a_picture_part_carries_only_the_listed_pictures_metadata():
     store, stored = world()
-    other = BlobStore(store).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg')
     ep = offered_ep(store)
-    missing = call_tool(store, ep, {'why': '没给 artifact_id'})
-    empty = call_tool(store, ep, {'artifact_id': '', 'why': '空的'})
-    no_why = call_tool(store, ep, {'artifact_id': stored['artifact_id']})
-    # A field not written is named by the schema (ADR-108 D4b); one written empty is the handler's, in its own words.
-    for (outcome, said, _after), words in ((missing, '缺 artifact_id'), (empty, '要写内容'), (no_why, '缺 why')):
-        assert outcome == 'refused' and words in said, said
-    # 自己加一个文件路径也带不进去：行上只认清单里那张的四项元数据
-    pathy = call_tool(store, ep, {'artifact_id': stored['artifact_id'], 'why': '给他看', 'file': '/tmp/a.png'})
-    assert pathy[0] == 'ok' and pathy[2]['attachment'] == meta_of(stored), pathy
-    assert '/tmp/a.png' not in json.dumps(pathy[2]['attachment'])
-    # 一回合至多一张：再调用就换成新的那张
-    swapped = call_tool(store, ep, {'artifact_id': other['artifact_id'], 'why': '换这张'})
-    assert swapped[0] == 'ok' and outbound_media.attachment_for_speak(swapped[2]) == \
-        meta_of(other, 'image/jpeg'), swapped[2].get('attachment')
-    recorded = sorted(swapped[2]['tool_calls'].values(), key=lambda row: row['seq'])
-    assert [('refused' in row) for row in recorded] == [True, True, True, False, False], recorded
-    return True, '缺 artifact_id／空值／缺 why 逐次退回（不整轮失败）；路径进不了元数据；第二张换掉第一张'
+    outcome, said, why = pick(store, ep, '')
+    assert outcome == 'refused' and why == 'ATTACH_ARTIFACT_NOT_IN_CONTEXT', said
+    # 行上只认清单里那张的四项元数据，不带路径也不带字节
+    outcome, meta = pick(store, ep, stored['artifact_id'])
+    assert outcome == 'ok' and meta == meta_of(stored), meta
+    return True, '空的 artifact_id 退回；接受的那张只有 artifact_id、media_type、sha256、size'
 
 
 @case
@@ -907,37 +877,24 @@ def a_speaking_turn_carries_the_picture_on_its_speak_row():
     store, stored = world()
     ep = offered_ep(store)
     done, lane, publisher = run_turn(store, ep, FakeTurn(
-        [THINK, ('attach_image', {'artifact_id': stored['artifact_id'], 'why': '他想看'})], '画好了，给你看'))
+        [THINK, ('speak', {'parts': [{'kind': 'text', 'text': '画好了，给你看'},
+                                     {'kind': 'picture', 'artifact_id': stored['artifact_id']}]})], ''))
     assert done['state'] == 'COMMITTED', (done['state'], done.get('failure'))
-    assert [call['phase'] for call in lane.calls] == ['TURN'] and 'attach_image' in lane.calls[0]['tools']
+    assert [call['phase'] for call in lane.calls] == ['TURN'] and 'attach_image' not in lane.calls[0]['tools']
     rows = speak_rows(store, ep)
-    assert [row['text'] for row in rows] == ['画好了，给你看'] and publisher.published == [rows[0]['_id']]
-    assert rows[0]['phase'] == 'SPEAK' and rows[0]['attachment'] == meta_of(stored), rows[0].get('attachment')
-    assert 'base64' not in json.dumps(rows[0], default=str)
+    assert [row['text'] for row in rows] == ['画好了，给你看', ''] and publisher.published == [row['_id'] for row in rows]
+    assert rows[1]['phase'] == 'SPEAK' and rows[1]['attachment'] == meta_of(stored), rows[1].get('attachment')
+    assert 'attachment' not in rows[0] and 'base64' not in json.dumps(rows, default=str)
 
-    # 退回的那一次不带图，话照样说出去
+    # 有一条不对，这次一条都不发
     store2, _stored2 = world()
     ep2 = offered_ep(store2)
     done2, lane2, _p2 = run_turn(store2, ep2, FakeTurn(
-        [THINK, ('attach_image', {'artifact_id': 'blob-not-offered', 'why': '他想看'})], '这张我找不到了'))
-    rows2 = speak_rows(store2, ep2)
-    assert done2['state'] == 'COMMITTED' and [row['text'] for row in rows2] == ['这张我找不到了'], done2['state']
-    assert 'attachment' not in rows2[0], rows2[0]
+        [THINK, ('speak', {'parts': [{'kind': 'text', 'text': '这张我找不到了'},
+                                     {'kind': 'picture', 'artifact_id': 'blob-not-offered'}]})], ''))
+    assert done2['state'] == 'COMMITTED' and speak_rows(store2, ep2) == [], done2['state']
     assert lane2.tool_results[1][5] is False and code(store2.db.episodes.find_one({'_id': ep2['_id']})) == 'ATTACH_ARTIFACT_NOT_IN_CONTEXT'
-    return True, 'think → attach_image → 正文：SPEAK 行带元数据；被退回时只发文字，行上没有 attachment'
-
-
-@case
-def a_silent_turn_sends_no_picture():
-    store, stored = world()
-    ep = offered_ep(store)
-    done, lane, publisher = run_turn(store, ep, FakeTurn(
-        [THINK, ('attach_image', {'artifact_id': stored['artifact_id'], 'why': '想给他看'}),
-         ('stay_silent', {'why': '他在忙，先不打扰'})], '不该发出去'))
-    assert done['state'] == 'COMMITTED' and done['silent_reason'] == '他在忙，先不打扰', done['state']
-    assert speak_rows(store, ep) == [] and publisher.published == [], '沉默的回合还是发出了东西'
-    assert [result[2] for result in lane.tool_results] == ['think', 'attach_image', 'stay_silent']
-    return True, 'stay_silent 结束的回合不写 SPEAK 行：接受过的图也不会跟着出去'
+    return True, 'think → speak（text、picture）：picture 那行带元数据；有一条被退回时一条都不发'
 
 
 # 4) 历史投影
@@ -1092,13 +1049,9 @@ def blobstore_get_predicate_not_loosened():
 
 @case
 def prompts_say_no_file_paths_and_only_listed_artifacts():
-    tool = role_tools.TOOLS['attach_image']['description']
-    assert 'artifact_id' in tool and 'image_artifacts_from_program' in tool, tool
-    assert '文件名' in tool and '路径' in tool and '见图' in tool, tool
-    assert '不是文件路径' in outbound_media.OFFER_NOTE and 'attach_image' in outbound_media.OFFER_NOTE
-    assert '私聊' in role_tools.WORDS['ATTACH_TARGET_NOT_ALLOWED'], role_tools.WORDS['ATTACH_TARGET_NOT_ALLOWED']
-    # Said once, in the tool's own text (ADR-060), not again in her turn instruction.
-    return True, 'attach_image 说明只能引用程序给出的 artifact、正文不写路径／见图；群里退回时说明只有私聊能带'
+    assert '不是文件路径' in outbound_media.SPEAK_OFFER_NOTE and 'speak 的 picture' in outbound_media.SPEAK_OFFER_NOTE
+    assert '没列出的图片不能发' in outbound_media.SPEAK_OFFER_NOTE, outbound_media.SPEAK_OFFER_NOTE
+    return True, '图片清单说 speak 的 picture 只能照抄列出的 artifact_id，它不是文件路径'
 
 
 # ── B7：导入时顺手登记 + 同一主人的两个 owner_private 入口 ─────────────────
@@ -1190,11 +1143,10 @@ def local_image_is_offered_and_attachable_in_the_qq_dm_turn():
     item = listed[art['artifact_id']]
     assert item['from_linked_scene'] is True and item['scene_id'] == LOCAL_SCENE, item
     assert '另一个' in offer['note'], offer['note']
-    # attach_image 接受它：可引用 scope 由程序算，回合上只记元数据
+    # speak 的 picture 接受它：可引用 scope 由程序算，行上只记元数据
     ep = turn_ep(store, context={'image_artifacts_from_program': offer})
-    outcome, result, after = attach(store, ep, art['artifact_id'])
-    assert outcome == 'ok', result
-    meta = outbound_media.attachment_for_speak(after)
+    outcome, meta = pick(store, ep, art['artifact_id'])
+    assert outcome == 'ok', meta
     assert meta == {'artifact_id': art['artifact_id'], 'media_type': 'image/png',
                     'sha256': art['sha256'], 'size': len(PNG)}, meta
     # 字节端点：QQ 那条 publication 能取到本机 scope 里的那份字节
@@ -1206,7 +1158,7 @@ def local_image_is_offered_and_attachable_in_the_qq_dm_turn():
     finally:
         server.close()
     assert code == 200 and ctype == 'image/png' and body == PNG, (code, ctype, body[:80])
-    return True, '本机导入 → QQ 私聊清单里标着 from_linked_scene → attach_image 接受 → 字节端点 200'
+    return True, '本机导入 → QQ 私聊清单里标着 from_linked_scene → speak 的 picture 接受 → 字节端点 200'
 
 
 @case
@@ -1237,14 +1189,14 @@ def only_the_same_persons_other_owner_private_scene_is_readable():
     # public 会话与群方向：连本场景之外都不多开
     assert scopes(two_scene_world(links=linked), cls='public') == [DM_SCOPE]
     assert scopes(two_scene_world(links=linked), scene=scene_row('group')) == [GROUP_SCOPE]
-    # 没联动时 QQ 清单里没有那张图；就算清单里冒出它，attach_image 也按 scope 退回
+    # 没联动时 QQ 清单里没有那张图；就算清单里冒出它，speak 的 picture 也按 scope 退回
     store = two_scene_world()
     art = import_bytes(store, LOCAL_SCOPE, PNG, register='foreign')[0]['artifact']
     assert qq_offer(store) is None, '没联动的场景之间也列出图了'
     ep = turn_ep(store, context={'image_artifacts_from_program': {
         'items': [{'artifact_id': art['artifact_id']}], 'note': ''}})
-    outcome, said, after = attach(store, ep, art['artifact_id'])
-    assert outcome == 'refused' and code(after) == 'ATTACHMENT_SCOPE_DENIED' and 'attachment' not in after, said
+    outcome, said, why = pick(store, ep, art['artifact_id'])
+    assert outcome == 'refused' and why == 'ATTACHMENT_SCOPE_DENIED', said
     return True, '只有同一 canonical person 的另一个 owner_private dm 场景可引用；群／别人／没联动都拒绝'
 
 

@@ -510,9 +510,8 @@ def probe(args, provider=None):
     schemas = dsh_schemas()
     thoughts = getattr(args, 'thoughts', 'tool') or 'tool'
     if thoughts == 'thinking':
-        # As session_specs gives them in thinking mode (ADR-099): no think, stay_silent without the line about it.
+        # As session_specs gives them in thinking mode (ADR-099): no think.
         schemas.pop('think', None)
-        schemas['stay_silent'] = {**schemas['stay_silent'], 'description': role_tools.STAY_SILENT_THINKING}
     name = re.search(r'^# (\S+)', (FIXTURES / 'persona.md').read_text(encoding='utf-8')).group(1)
     run = uuid.uuid4().hex[:12]
     store = open_world(probe_config(name, thoughts), run)

@@ -3,21 +3,19 @@
 An episode is one thing that happened to her: a message, an action result, an internal opportunity, a
 question from the action brain. Its turn is one native DSH turn in her role session:
 
-    ATTENDING ─(join)→ PREPARED → TURN → SPEAK_ACCEPTED → COMMITTED / WAITING_TASK
-                                     ↘ COMMITTED (stay_silent) / WAITING_TASK (delegated, silent)
+    ATTENDING ─(join)→ PREPARED → TURN → COMMITTED / WAITING_TASK (delegated)
                                      ↘ FAILED_PROTOCOL / SUPPRESSED / INTERRUPTED
 
 The worker prepares the turn's context (context.py); the plugin composes it into the turn's first
 message. She calls `think` first, then the tools exposed for this turn (role_tools.py); each call is
-run here, on this thread, while the native turn waits for its result. Every text she writes in the
-turn — beside a tool call too — is what she says, in order (on a platform, each its own message); it
-passes one check (answers.speech_problem) before the existing publication path sends it. A platform line
-belongs to the first turn that had it in view: when that turn ends, the line gets no turn of its own
-(_absorb). Everything the old DECIDE/WRITE/SELF/REFLECT stages did is now a tool call.
+run here, on this thread, while the native turn waits for its result. In every conversation she speaks
+only through `speak`, each part its own message, published while the turn runs (queue_reply); the text
+she writes in the body is hers and is never sent (ADR-129 D8). A platform line belongs to the first turn
+that had it in view: when that turn ends, the line gets no turn of its own (_absorb). Everything the old
+DECIDE/WRITE/SELF/REFLECT stages did is now a tool call.
 """
 from __future__ import annotations
 
-from dataclasses import replace
 import json
 import threading
 
@@ -273,7 +271,7 @@ class Coordinator:
         return ep_id+':TURN'+(':resume:'+str(generation) if generation else '')
 
     def _turn(self, ep):
-        """Run (or resume) the episode's native turn until she speaks, stays silent or answers."""
+        """Run (or resume) the episode's native turn until it ends or she answers."""
         try:
             try:
                 return self._run_turn(ep)
@@ -309,7 +307,7 @@ class Coordinator:
         operation=self._operation(ep['_id'],generation)
         instruction=self._notice(ep)
         from . import channel_kinds
-        replying=bool(channel_kinds.reply_parts(ep['scene_id'])) and kind not in role_tools.ABOUT_A_TASK
+        qq=bool(channel_kinds.reply_parts(ep['scene_id']))      # where QQ's rules apply (ADR-129 D9)
         handler=lambda call_id,name,args,thinking=None:self.tools.call(ep['_id'],call_id,name,args,thinking)
         note=''
         seen=[]
@@ -332,20 +330,24 @@ class Coordinator:
             if kind==role_tools.TASK_TIME:
                 # ADR-112 §12.2: she chose with her task tool, or let the stage end; nothing of it is said to anyone.
                 return self._update(ep,state='COMMITTED')
-            speech=self._speech(ep,value)
-            if replying:
-                # ADR-064 phase 2: here only reply speaks. Words in the body never leave: in a turn that spoke they
-                # are its ending (ADR-076 R10); written with no speak at all she is told once in this turn that they
-                # stayed (leaving them is fine), stay_silent or not, then her next turn here says they were not sent.
+            if kind!=role_tools.CONSULT:
+                # ADR-064 phase 2, ADR-129 D8: in every conversation only speak speaks. Words in the body never leave:
+                # in a turn that spoke they are its ending (ADR-076 R10); written with no speak at all she is told once
+                # in this turn that they stayed (leaving them is fine), then her next turn here says they were not
+                # sent. Not calling speak is silence. Where QQ's rules apply, a turn with no thought is handed back;
+                # in a local conversation, a turn with no speak and nothing written that was cut at its length limit
+                # is (a cut is not her silence), and keeps failing as before.
                 pieces=[text.strip() for text in (value.said if value.said is not None else [value.content or ''])
                         if isinstance(text,str) and text.strip()]
                 speech='' if ep.get('reply') else '\n\n'.join(pieces)
                 issue=None
-                if role_tools.asks_thought(ep) and not ep.get('turn_thought') and not ep.get('reply'):
+                if qq and role_tools.asks_thought(ep) and not ep.get('turn_thought') and not ep.get('reply'):
                     issue,note='no_thought',REPLY_THINK_NOTE
                 elif speech and not attempt:
                     issue,note='unsent',UNSENT_NOTE%speech          # whole, as written: she may reply it as is
-                if issue is None or attempt==answers.REPAIRS:
+                elif not qq and not ep.get('reply') and not speech and value.finish_reason=='length':
+                    issue,note='length',answers.CUT
+                if issue is None or (attempt==answers.REPAIRS and issue!='length'):
                     if speech:
                         scene_records.hold_unsent(self.store, ep['scene_id'], {
                             'text':excerpt(' '.join(speech.split()),UNSENT_CHARS),'episode_id':ep['_id']})
@@ -357,48 +359,17 @@ class Coordinator:
                     self._absorb(ep,seen)
                     said=(ep.get('reply') or {}).get('parts')
                     return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
-                        **({} if said else {'silent_reason':(ep.get('silent') or {}).get('reason') or '这回合没有 speak'}))
+                        **({} if said else {'silent_reason':'这回合没有 speak'}))
                 self.store.audit(ep['_id'],'turn.rejected',{'operation':operation,'attempt':attempt,'problem':issue,
                     'request_refs':value.request_refs},ep['scope_key'])
                 continue
-            if role_tools.local_chat(self.store.config,ep['scene_id']) and kind!=role_tools.CONSULT:
-                # ADR-129 D2, D3: her local chat. A turn that queued speak parts has said what it said: its body is
-                # hers, kept as a count, none of its checks run, whatever its finish. One with no speak and no body
-                # ends silent, no call needed, unless the model was cut at its length limit: a cut is not her silence,
-                # and is handed back as before. One with a body and no speak goes on as before: its body is her speech.
-                said=int((ep.get('reply') or {}).get('parts') or 0)
-                if said or (not speech and value.finish_reason!='length'):
-                    if said and speech:
-                        self.store.audit(ep['_id'],'turn.ending_body',{'chars':len(speech),'parts':said},ep['scope_key'])
-                    self._absorb(ep,seen)
-                    return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED')
-            # stay_silent ends the turn with nothing more to say: words she already wrote in it still leave.
-            if ep.get('silent') and kind!='consult' and not speech:
-                self._absorb(ep,seen)
-                return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
-                                    silent_reason=ep['silent']['reason'])
-            issue=answers.speech_problem(replace(value,content=speech),
-                                         thought=bool(ep.get('turn_thought')) or not role_tools.asks_thought(ep),
-                                         consult=kind=='consult')
-            if issue is None and kind!='consult':
-                from . import stickers
-                issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: a sticker or face she does not have
-            if issue is None:
-                self._absorb(ep,seen)
-                from . import local_roots
-                speech=local_roots.speech(self.store,ep,speech)     # ADR-098 D5: no raw root leaves, each counted
-                return self._publish(self._update(ep,state='SPEAK_ACCEPTED',speech=speech))
+            # A consult turn is not speech in a conversation: its answer goes to the action brain (task answer).
+            issue=answers.consult_problem(value)
             self.store.audit(ep['_id'],'turn.rejected',{'operation':operation,'attempt':attempt,'problem':issue,
                 'request_refs':value.request_refs},ep['scope_key'])
             note=answers.turn_note(issue)
         raise ProtocolFailure('INVALID_TURN_OUTPUT: '+json.dumps({'problem':issue,'finish_reason':value.finish_reason,
             'request_refs':value.request_refs},ensure_ascii=False))
-
-    def _speech(self, ep, value):
-        """Every text she wrote this turn, in order, as paragraphs of one message."""
-        pieces=[text.strip() for text in (value.said if value.said is not None else [value.content or ''])
-                if isinstance(text,str) and text.strip()]
-        return '\n\n'.join(pieces)
 
     def _absorb(self, ep, seen):
         """Platform lines that came into her view for the first time during this turn are hers now: she answered
@@ -465,8 +436,9 @@ class Coordinator:
                    for task_id in ep.get('task_ids') or ())
 
     def queue_reply(self, ep, planned):
-        """ADR-064 phase 2: her reply's parts as outbound rows in order, at typing pace after what this turn already
-        queued, each published at once; a part that fails cancels the ones after it. Returns each with its state."""
+        """ADR-064 phase 2: her reply's parts as outbound rows in order, each published at once; where QQ's rules apply
+        (ADR-129 D9), at typing pace after what this turn already queued. A part that fails cancels the ones after it.
+        Returns each with its state."""
         from .persona_model import effective
         from .render import model_and_policy
         from .rhythm import pacing
@@ -480,7 +452,8 @@ class Coordinator:
         times=pacing(texts,start,effective(model,'speak.chars_per_second',policy) or 12,
                      effective(model,'speak.min_gap_s',policy) or 1,effective(model,'speak.max_gap_s',policy) or 5)[-len(planned):]
         first=len(earlier)
-        scene=scene_records.get(self.store, ep['scene_id'], fields=['channel_id'])
+        from . import channel_kinds
+        paced=bool(channel_kinds.reply_parts(ep['scene_id']))     # a local conversation has no typing pace (D4)
         queued=[]
         for offset,part in enumerate(planned):
             index=first+offset
@@ -491,7 +464,7 @@ class Coordinator:
                  'author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,
                  'monologue_refs':ep.get('monologue_refs') or [],'delivery_state':'READY','segment_index':index,'reply_part':True,
                  **({'errand':True} if ep.get('errand') else {}),**(part.get('fields') or {})}
-            if (scene or {}).get('channel_id') and (index or offset):
+            if paced and (index or offset):
                 row['not_before']=times[offset].isoformat()
             message_records.save(self.store, row,stream=ep_id)
             if part['kind']=='sticker':
@@ -510,8 +483,9 @@ class Coordinator:
         return queued
 
     def _publish(self, ep):
-        """Her words where they are speech (a conversation without reply): one message, carrying her attach_image
-        picture when she gave one."""
+        """Body text an older version accepted as her speech (SPEAK_ACCEPTED, from before ADR-129 D8): one message,
+        carrying her attach_image picture when she gave one. No turn accepts body text now; this only finishes such a
+        turn that was in flight when the version changed."""
         ep_id=ep['_id']
         key=ep_id+':speak:0'
         if not message_records.get(self.store, key):

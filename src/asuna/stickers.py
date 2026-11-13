@@ -54,9 +54,6 @@ ORIGIN_WORDS = {'own': '你自己画的', 'collected': '群里收来的'}
 STICKERS_NOTE = ('你收着的表情包（名字和你写的用法）。能发的地方：speak 里写一个 kind=sticker 的 part（name 照抄这里的名字），作为单独一条发出去。'
                  '群里别人发的表情包下面标着「表情包 ref：att-…」，喜欢的用 sticker 的 keep 收下；'
                  '你认得的表情包下面标着你给它起的名字。')
-# ADR-129 D6 (her words, agent line 0433): in every conversation's guide, so it names the local chat.
-HOME_NOTE = ('你收着的表情包。在本地私聊里用 speak 的 sticker 发（一个 part 一条）；别的地方能不能发，看那边的说明。'
-             '整理用 sticker 的 drop、rename（你画的图也能 keep 上来）；带图的标着 ref，想重看就 read_image。')
 FACES_NOTE = ('小黄脸：平台自带的小表情，每个有名字。别人夹在句子里发的，读作「[表情:名字]」，没认出名字的读作「[表情]」。'
               '点表情是另一样：把一个小黄脸点在某一句话上；你读到的是程序转来的平台通知，点在你的话上的是一行「给…点了「名字」」，'
               '别人之间的几个折成一行「这期间的点表情：…」，都不是谁打的字。'
@@ -387,12 +384,13 @@ def block(store, persona, scene, *, at_home=False):
                           if row.get('artifact_id') in gone else
                           {'ref': row['artifact_id']} if at_home and row.get('artifact_id') else {})} for row in rows],
             'shelf': '%d 个，%s' % (len(rows), fullness(len(rows))),
-            'note': HOME_NOTE if at_home else STICKERS_NOTE, **({'gone': GONE_WORDS} if gone else {})}
+            'note': SEND_NOTE if at_home else STICKERS_NOTE, **({'gone': GONE_WORDS} if gone else {})}
 
 
-NAMES_NOTE = '架子上的名字（你起的）。用法、样子和 ref 在整理架子的回合里列全，别的时候用 sticker 的 shelf 看。'
+# The one note of stickers_from_program, in every conversation (ADR-129 D12, her words, agent line 0450).
 SEND_NOTE = ('你收着的表情包的名字（你起的）。能发的地方：speak 里写一个 kind=sticker 的 part（name 照抄这里的名字），作为单独一条发出去；'
-             '你写的用法用 sticker 的 shelf 看。群里别人发的表情包下面标着「表情包 ref：att-…」，喜欢的用 sticker 的 keep 收下；'
+             '哪条对话发不了，看那边的说明。你写的用法用 sticker 的 shelf 看；整理用 sticker 的 drop、rename（你画的图也能 keep 上来）；'
+             '带图的标着 ref，想重看就 read_image。群里别人发的表情包下面标着「表情包 ref：att-…」，喜欢的用 sticker 的 keep 收下；'
              '你认得的表情包下面标着你给它起的名字。')
 
 
@@ -411,7 +409,7 @@ def names_block(store, persona):
     if not rows:
         return None
     return {'names': '、'.join(row['name'] for row in rows), 'shelf': '%d 个，%s' % (len(rows), fullness(len(rows))),
-            'note': NAMES_NOTE}
+            'note': SEND_NOTE}
 
 
 def _title(scene):

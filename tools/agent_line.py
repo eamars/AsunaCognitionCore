@@ -5,21 +5,27 @@
   python tools/agent_line.py status <route>
 
 The route's key is read from <data>/private/route-keys/agent-<route>.json (ASUNA_DATA_ROOT, else .runtime), written
-by the Host at start. The key opens only this line: posting as this route, and claiming and confirming her words on it.
-A poll confirms each answer it prints; an answer nobody polls stays queued, shown in her history as not yet delivered.
-A poll also prints, once each, what the owner wrote on this line from the Web, marked as the owner's.
+by the Host at start. The key opens only this line: posting as this route, and claiming, fetching and confirming her
+words on it. A poll confirms each answer it prints; an answer nobody polls stays queued, shown in her history as not
+yet delivered. Her sticker or picture is fetched, checked against its sha256 and written to a file of the agent's own
+(<system temp>/asuna-agent-line/<route>/<sha256>.<ext>, removed by a later poll 7 days after it was written); poll prints
+the file's path where the part is, and its receipt carries the picture's evidence. A poll also prints, once each, what
+the owner wrote on this line from the Web, marked as the owner's.
 `--answers q-…` marks the message as the answer to one of her questions (her `ask`, questions_from_program); without
 it, the first message on the line after her question there is its answer.
 """
 import argparse
+import hashlib
 import http.client
 import re
 import json
 import os
 import socket
 import sys
+import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from datetime import datetime, timezone
@@ -27,6 +33,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CLAIM_WAIT = 25            # the host holds one outbox request at most this long
+SUPPORTS = 'image,sticker'      # what a poll carries: her pictures and stickers come as files
+MEDIA_DIR = Path(tempfile.gettempdir()) / 'asuna-agent-line'     # a copy for the agent to look at; hers is the artifact
+KEEP_SECONDS = 7 * 24 * 3600
+MAX_BYTES = 8 * 1024 * 1024       # the Host serves no larger picture
+EXTENSIONS = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif'}
+SHA256 = re.compile(r'[0-9a-f]{64}')
 
 
 def key_file(route, channel='agent'):
@@ -70,14 +82,86 @@ def send(line, text, answers=None):
     return call(line, 'POST', '/events', body)
 
 
+def fetch(line, item, attachment):
+    """The bytes of an item's picture, from the outbox's attachment endpoint for this publication and attempt, checked
+    against the sha256 the claim declared: (bytes, None), or (None, why not)."""
+    digest = str(attachment.get('sha256') or '').lower()
+    if not SHA256.fullmatch(digest) or attachment.get('media_type') not in EXTENSIONS:
+        return None, 'attachment_descriptor_invalid'
+    query = urllib.parse.urlencode({'attempt_id': item['attempt_id'], 'artifact_id': attachment.get('artifact_id') or ''})
+    request = urllib.request.Request('%s/outbox/%s/attachment?%s' % (
+        line['url'], urllib.parse.quote(str(item['publication_id']), safe=''), query),
+        headers={'Authorization': 'Bearer ' + line['key']})
+    try:
+        with urllib.request.urlopen(request, timeout=CLAIM_WAIT + 10) as response:
+            data = response.read(MAX_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        return None, 'attachment_fetch_http_%d' % exc.code
+    except (urllib.error.URLError, socket.timeout, http.client.HTTPException, ConnectionError):
+        return None, 'attachment_fetch_unavailable'
+    if not data or len(data) > MAX_BYTES:
+        return None, 'attachment_fetch_size'
+    if hashlib.sha256(data).hexdigest() != digest:
+        return None, 'attachment_sha256_mismatch'
+    return data, None
+
+
+def keep(route, attachment, data):
+    """The picture as a file of the agent's own, named by its sha256."""
+    folder = MEDIA_DIR / route
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / ('%s.%s' % (attachment['sha256'].lower(), EXTENSIONS[attachment['media_type']]))
+    part = path.with_name(path.name + '.part')
+    part.write_bytes(data)
+    os.replace(part, path)
+    return path
+
+
+def prune(route, now=None):
+    """Remove this line's picture files written more than KEEP_SECONDS ago."""
+    folder = MEDIA_DIR / route
+    if not folder.is_dir():
+        return
+    oldest = (time.time() if now is None else now) - KEEP_SECONDS
+    for path in folder.iterdir():
+        try:
+            if path.is_file() and path.stat().st_mtime < oldest:
+                path.unlink()
+        except OSError:
+            pass                              # removed meanwhile, or held open: a later poll tries again
+
+
+def deliver(line, route, item):
+    """One claimed part as the agent gets it: (what to print, the receipt's status, its response). A sticker or picture
+    is fetched and written to a file whose path is printed; the receipt carries what was checked, as a platform
+    adapter's does. One that cannot be fetched or does not match its sha256 is not received: the receipt says failed."""
+    text = item.get('text') or ''
+    kind = 'sticker' if item.get('sticker') else 'picture'
+    attachment = item.get('attachment') if isinstance(item.get('attachment'), dict) else None
+    response = {'by': 'agent_line'}
+    if attachment is None:
+        return text or ('[sticker]' if item.get('sticker') else ''), 'platform_accepted', response
+    evidence = {key: attachment.get(key) for key in ('artifact_id', 'media_type', 'sha256')}
+    data, why = fetch(line, item, attachment)
+    if why:
+        return ((text + '\n') if text else '') + '[%s not received: %s]' % (kind, why), 'failed', {
+            **response, 'reason': why, 'attachment': evidence}
+    path = keep(route, attachment, data)
+    return ((text + '\n') if text else '') + '[%s] %s' % (kind, path), 'platform_accepted', {
+        **response, 'attachment': {**evidence, 'bytes': len(data), 'sha256_verified': True}}
+
+
 def poll(line, wait):
     """Claim her words on this line until none is left, waiting up to `wait` seconds for the first. Returns her
     answers, the line's state, and the owner's lines shown on the way."""
     got, owner, deadline = [], [], time.monotonic() + max(0, wait)
+    route = str(line.get('route_id') or 'line')
+    prune(route)
     while True:
         left = deadline - time.monotonic()
         try:
-            answer = call(line, 'GET', '/outbox?wait_seconds=%d' % (max(0, min(CLAIM_WAIT, int(left))) if not got else 0))
+            answer = call(line, 'GET', '/outbox?supports=%s&wait_seconds=%d' % (
+                SUPPORTS, max(0, min(CLAIM_WAIT, int(left))) if not got else 0))
         except SystemExit:
             if got:                        # what is already confirmed is hers to read: never lose it to a later error
                 return got, 'open', owner
@@ -88,10 +172,11 @@ def poll(line, wait):
             return got, 'closed', owner
         items = answer.get('items') or []
         for item in items:
+            shown, status, response = deliver(line, route, item)
             call(line, 'POST', '/outbox/%s/receipt' % item['publication_id'],
-                 {'attempt_id': item['attempt_id'], 'status': 'platform_accepted',
-                  'platform_message_id': 'agent-' + uuid.uuid4().hex, 'response': {'by': 'agent_line'}})
-            got.append(item.get('text') or '')
+                 {'attempt_id': item['attempt_id'], 'status': status, 'response': response,
+                  **({'platform_message_id': 'agent-' + uuid.uuid4().hex} if status == 'platform_accepted' else {})})
+            got.append(shown)
         if not items and (got or time.monotonic() >= deadline):
             return got, 'open', owner
 

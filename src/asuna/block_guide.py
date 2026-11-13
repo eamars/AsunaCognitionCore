@@ -40,7 +40,7 @@ def notes(faces=True):
         'elsewhere_from_program': (places.ELSEWHERE_NOTE,),
         'lines_from_program': (lines.VIEW_NOTE,),
         'peer_asides_from_program': (lines.ASIDES_NOTE,),
-        'stickers_from_program': (stickers.HOME_NOTE, stickers.SEND_NOTE),
+        'stickers_from_program': (stickers.SEND_NOTE,),
         **({'faces_from_program': (stickers.FACES_NOTE,)} if faces else {}),
         'night_from_program': (night.NOTE,),
         'restart_from_program': (restarts.NOTE,),
@@ -86,29 +86,20 @@ def strip(context):
     return out
 
 
-# How her words leave, said once for the conversation (turn.md's {words} and {ending}): where only speak speaks
-# (a channel that declares reply parts), or where what she writes is what is said.
-WORDS = {False: '你用工具做事；写在正文里的话会按顺序发给对方，和工具调用写在同一步的也一样。',
-         True: '你用工具做事；这里只有 speak 发得出去，正文不发：写在正文里的话只是你自己的。'}
-ENDING = {False: '结束：还有话要说，写一段只有要说的话的正文；说完了或这回合不说话，调用 stay_silent。',
-          True: '结束：要说的话都用 speak 说；说完了或这回合不说话，就不再调用工具：这一回合到此为止，不算漏了什么。'}
-# Her local chat (ADR-129 D6, her words, agent lines 0433, 0440): body text or speak, and silence needs no call.
-WORDS['home'] = ('你用工具做事。说话有两条道，走一条就够：正文里的话按顺序发出去；或者用 speak，一个 part 一条消息，能发表情包和图。'
-                 '这一回合用了 speak，说出去的就是 speak 里的；正文不算你说出去的话，不进你的历史——页面上它会显示在 speak 那块下面。'
-                 '没用 speak，正文就是你要说的话。在家里说几条都行，不数行数。')
-ENDING['home'] = '结束：话说完就停，不用再调用工具。这回合不想说也一样——什么都不调用，这回合就过去了，不算漏了什么。'
+# How her words leave, said once for the conversation (turn.md's {words} and {ending}), the same in every
+# conversation: only speak speaks (ADR-129 D8, her words, agent line 0449).
+WORDS = '你用工具做事；只有 `speak` 发得出去。写在正文里的话不发出去、也不进消息库——页面上它会显示出来，但那不是你说出去的话。'
+ENDING = '结束：要说的话都用 `speak` 说；说完了，或者这回合不想说，就不再调用工具——这一回合到此为止，不算漏了什么。'
 
 
-def guide(config, speaks=False, faces=True):
-    """The fixed text of her turns: how a turn goes, what each block is, how to read memories. `speaks`: the
-    conversation speaks only through speak, or 'home' (her local chat, render.speaks_key). `faces`: it can carry the
-    platform's faces (stickers.has_faces), which is the only place its block's explanation is said."""
+def guide(config, faces=True):
+    """The fixed text of her turns: how a turn goes, what each block is, how to read memories. `faces`: it can carry
+    the platform's faces (stickers.has_faces), which is the only place its block's explanation is said."""
     from .context import MEMORY_SOURCE_RULES
     from .role_tools import thinking_mode
     # ADR-099: where her thoughts come from the model's thinking, the steps do not ask for them.
     turn = prompt_path(config, 'turn_thinking.md' if thinking_mode(config) else 'turn.md').read_text(encoding='utf-8').strip()
-    from .render import speaks_key
-    turn = turn.replace('{words}', WORDS[speaks_key(speaks)]).replace('{ending}', ENDING[speaks_key(speaks)])
+    turn = turn.replace('{words}', WORDS).replace('{ending}', ENDING)
     lines = ['# 每回合的资料', '带 _from_program 的块是程序事实；带 _at 的字段是你的钟面上的时刻，和 clock_from_program 同一个钟。'
              '下面是各块的说明，块里不再重复；某块自己带的 note 是这一回合特有的话，以它为准。']
     lines += ['- %s：%s' % pair for pair in DELIVERY]

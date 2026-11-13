@@ -10,7 +10,7 @@ def test_the_reads_that_may_come_before_a_thought_are_a_closed_list_of_calls_wit
         assert reasons.before_thought(tool, args) and not reasons.consequential(tool, args), tool
     for tool, args in [('feel', {'kind': '开心'}), ('task', {'op': 'answer'}), ('task', {'op': 'message'}),
                        ('restart', {'op': 'request'}), ('group_focus', {'op': 'active'}),
-                       ('private_words', {'op': 'add'}), ('plan', {'op': 'create'}), ('speak', {}), ('stay_silent', {}),
+                       ('private_words', {'op': 'add'}), ('plan', {'op': 'create'}), ('speak', {}),
                        ('ideas', {'op': 'note'}), ('ask', {'op': 'ask'}), ('note', {}), ('sticker', {'op': 'shelf'})]:
         assert not reasons.before_thought(tool, args), tool
 

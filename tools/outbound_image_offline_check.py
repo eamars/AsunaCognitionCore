@@ -3,8 +3,8 @@
 
 用法：python3 tools/outbound_image_offline_check.py
 跑的是 tests/outbound_image_cases.py 同一套用例：通道字节端点的围栏（真在 127.0.0.1 起服务、
-真发 HTTP 请求）、claim 的 supports 与附件元数据、她的 attach_image 工具逐次判定（含群方向确定性拒绝）、
-整回合（think → attach_image → 正文或 stay_silent）写出的 SPEAK 行上的元数据、历史投影的附件位、
+真发 HTTP 请求）、claim 的 supports 与附件元数据、她的 speak 的 picture 逐条判定（含群方向确定性拒绝）、
+整回合（think → speak 的 text、picture）写出的 SPEAK 行上的元数据、历史投影的附件位、
 BlobStore 的 sha 复核与 scope 判定。
 真 MongoDB 上的存储承诺由 integration/ 复测，NapCat 那一侧由适配器 selftest 复测。
 """

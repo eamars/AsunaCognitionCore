@@ -516,7 +516,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         sourceSeq: prior?.turn === event.data.turn ? prior.seq : undefined };
     };
     // Words a reader sees, not only thinking or tool calls: a Turn that ends in a tool (her answer to the
-    // action brain, stay_silent) shows only its folded process, so the brain label waits for text.
+    // action brain, a speak call) shows only its folded process, so the brain label waits for text.
     const hasText = event => event.type === 'assistant/message'
       ? (event.data.message?.content ?? []).some(block => block.type === 'text' && block.text?.trim())
       : event.type === 'assistant/live-chunk' && event.data.chunk?.type === 'text-delta' && !!event.data.chunk.text?.trim();
@@ -695,6 +695,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
   }
 
   // ── her tool rows (ADR-011 §7.2) ────────────────────────────────────
+  // A retired tool keeps its row (update_self, reply, stay_silent): its calls stay in her history.
   const TOOL_ICONS = { think: 'IconThinkOutlineRegular', recall: 'IconSearchOutlineRegular', delegate: 'IconSendOutlineRegular',
     message_action: 'IconPaperPlaneOutlineRegular', stop_action: 'IconPauseOutlineRegular', answer_action: 'IconQuestionOutlineRegular',
     stay_silent: 'IconMicrophoneOutlineRegular', attach_image: 'IconPaperclipOutlineRegular', write_document: 'IconEditOutlineRegular',

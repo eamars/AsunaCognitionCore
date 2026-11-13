@@ -378,7 +378,6 @@ def run_once(args, persona, condition, moment, repeat, provider, pulls, schema_c
         schemas = dict(schema_cache[moment['id']])
         if args.thoughts == 'thinking':
             schemas.pop('think', None)
-            schemas['stay_silent'] = {**schemas['stay_silent'], 'description': rp.role_tools.STAY_SILENT_THINKING}
         spoken = []
         turn = Lane(Checked(provider, 'turn', run), schemas, keep_text, spoken)
         gate = Lane(Checked(provider, 'gate', run), schemas, keep_text, spoken)

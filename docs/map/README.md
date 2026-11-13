@@ -48,8 +48,8 @@ Every turn has a **class**, decided by the program from the conversation and the
     (`role_tools.RoleTools.tool_promote_memory`).
   - Pictures: in groups and other people's chats she can send only pictures she made (`outbound_media.own_only`).
   - Files go to groups only, and only those her tasks registered (`outbound_files.offer`).
-- **Her words outside** are checked for program talk (`answers.speech_problem`). At home, tool names are a normal
-  topic.
+- **Her words** leave only through `speak`, every part checked before any of the call leaves
+  (`role_tools.RoleTools.tool_speak`). At home, tool names are a normal topic.
 
 Decided in ADR-009 §2, ADR-017 (the home and public boundary), ADR-018 (notes), ADR-032 (places), ADR-038 (tools by
 place).
@@ -104,10 +104,11 @@ no platform. Decided in ADR-005, ADR-016 and ADR-093 (voices); the adapter's own
    as words. `render.render_system` renders the system prompt (core prompts plus her persona's carried sections,
    `carried.carried`).
 3. **The turn.** It is a native DSH turn in the conversation's role session. She calls `think` first, then any tools
-   (`role_tools`), and each text she writes is what she says.
-4. **Checks.** Her words pass the end-of-turn checks (`answers.speech_problem`, stickers, labels); a failed check is
-   told to her in the same turn.
-5. **Publish.** `publish` sends what passes.
+   (`role_tools`). She speaks only through `speak`, each part its own message; the text she writes in the body is
+   hers and is never sent.
+4. **Checks.** Each `speak` call's parts pass their checks before any of them leaves
+   (`role_tools.RoleTools.tool_speak`); a refused call is told to her in the same turn.
+5. **Publish.** `coordinator.Coordinator.queue_reply` writes the parts as rows and `publish` sends them.
 
 Context that has not changed since she last saw it is not sent again (`context-delivery.js`), nor is one of her own
 thoughts she can still read where she wrote it. A past thought she does get back says when she had it and what she
@@ -360,7 +361,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures and files
 - [`vision`](../../src/asuna/vision.py) — 入站图片元数据与行动脑 DSH ``read_image`` 接线。
 - [`media_keys`](../../src/asuna/media_keys.py) — Current signatures for a platform's media links (ADR-035).
 - [`media_life`](../../src/asuna/media_life.py) — How long stored media bytes live: every kind of stored picture has an owner or an expiry.
-- [`outbound_media`](../../src/asuna/outbound_media.py) — 出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
+- [`outbound_media`](../../src/asuna/outbound_media.py) — 出站图片附件：她的 speak 的 picture（一条 picture 一条消息）→ SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
 - [`outbound_files`](../../src/asuna/outbound_files.py) — Files she sends to a group through the outbox (ADR-092): registered from a task's folder, offered to her turn, sent as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days after they were last sent.
 - [`received_files`](../../src/asuna/received_files.py) — Files people send her (ADR-102): offered by ref, read when she asks, stored, kept or let go.
 - [`animated`](../../src/asuna/animated.py) — Animated pictures as something a still-image model can see: one labelled contact sheet plus words.

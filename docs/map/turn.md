@@ -41,7 +41,7 @@ One character turn per episode (ADR-011 §3).
   - `ingest`
   - `consult` — One internal turn in her role session: she answers the action brain with task op answer.
   - `time_up` — Her task_time turn, on a thread of its own while the stage goes on: the program tells her the stage reached its limit, and she chooses with her task tool (more, message, stop) or lets it end (time_up.py).
-  - `queue_reply` — ADR-064 phase 2: her reply's parts as outbound rows in order, at typing pace after what this turn already queued, each published at once; a part that fails cancels the ones after it.
+  - `queue_reply` — ADR-064 phase 2: her reply's parts as outbound rows in order, each published at once; where QQ's rules apply (ADR-129 D9), at typing pace after what this turn already queued.
   - `advance`
   - `recover`
   - `publish_queued` — Her reply's parts written but not yet handed on (ADR-064 phase 2), in order; a FAILED one cancels the rest (UNKNOWN does not).
@@ -106,14 +106,13 @@ Role system prompt rendering (ADR-009 §8.1).
 - def `common_text`
 - def `readable_sections` — Sections of a document visible to a session class, public before owner-private.
 - def `compose`
-- def `speaks_key` — How a conversation's words leave, as its guide and its system ref name it: True where only speak speaks, 'home' in her local chat (speak beside body text, ADR-129 D6), False where body text is speech.
 - def `role_text` — Her role system prompt: the persona render, then how a turn goes and what its blocks are (block_guide.py, ADR-056).
 - def `largest` — (estimated tokens, text) of the largest render over the places of raw documents, as written: what seed_estimate measures of a package's own seeds.
 - def `model_and_policy`
 - def `estimate_tokens` — Tokenizer-free upper estimate: one token per CJK character, DSH's characters/4 for everything else.
 - def `seed_estimate` — Estimated tokens of the owner-private render the installed package's own persona and voice seeds make, or None when the package declares neither.
 - def `budget_limit` — Each (place, class) pair's identity ceiling (carried.limit): render.identity_tokens, plus room for a package's own seeds, never above the character context window × render.max_window_share; None when nothing bounds it.
-- def `render_system` — Render the current role system prompt for a session class and place, and whether its conversation speaks only through speak; returns (text, system_ref).
+- def `render_system` — Render the current role system prompt for a session class and place; returns (text, system_ref).
 - def `render_status` — Each pair's identity layer against its limit, for the settings card and memory tab: the largest one's estimate, whether any pair is over, and every pair's size.
 - def `report_budget` — Audit, once for each state of it, a pair whose identity layer is over its limit.
 - def `budget_gate` — For DocumentStore.apply, adopt_seed and promote_memory: growth of a note already far over its own limit is refused; growth of her identity layer in a pair over its limit is planned for her writes (`refuse` False) and refused for a persona j
@@ -173,8 +172,8 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `thinking_mode` — ADR-099: her 心里话 come from the model's own thinking (`thoughts: thinking`), not from her think call; nothing then asks her to write her thoughts out.
 - def `asks_thought` — Whether this turn asks for her thought before anything else (ADR-099): `think` is in the turn's tools.
 - class `Refused` — A call she can correct herself: the message says, in words for her, what to do instead.
-- def `local_chat` — Whether this is her local Web chat (`config.chat.scene_id`).
-- def `speak_parts` — The parts speak takes in this conversation (ADR-129 D1): its channel kind's REPLY_PARTS, or HOME_PARTS in her local chat; empty where speak is not offered.
+- def `local` — Whether a conversation is local (ADR-129 D9): its channel kind declares no REPLY_PARTS, so none of QQ's rules on how she speaks applies there.
+- def `speak_parts` — The parts speak takes in this conversation: its channel kind's REPLY_PARTS, else LOCAL_PARTS (ADR-129 D9).
 - def `tools` — The tool specs her brain is shown (tiered memory's, ADR-062); `delegate` takes a tier when the owner configured the action brain's 高 (ADR-075).
 - def `tiered_delegate`
 - def `developer_ask` — message_developer's arguments as ask's: a question to the developer's line, a wake as an hour's patience and a note as until it is answered (ADR-061).
@@ -194,7 +193,6 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `conversation_class` — The class of a conversation's turns: the local chat's is its person's, a private chat's the person it is with, a group's its own.
 - def `placed_spec` — One tool's spec as a conversation of this class and kind shows it, `listed` being what it lists (abilities).
 - def `aliases` — Old name -> the tool it runs as (the plugin lets one through where that tool is listed).
-- def `session_aliases` — aliases() as one conversation applies them (ADR-129 D3): stay_silent runs as speak only where speak alone speaks (channel_kinds.reply_parts); elsewhere, her local chat included, it is a tool the conversation does not list.
 - def `turn_kind`
 - def `exposed` — What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the conversation's list (abilities).
 - def `writes_at_home` — Whether a turn writes her own documents at home, as _turn_rules and exposed give write_document: a home turn, not the program's consult or time-up, not opened by a note from outside (`first`, the note that opened it), with write_document no
@@ -222,7 +220,6 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `thought_not_carried` — ADR-101: a turn that does not ask for her thought leaves one row.
   - `tool_think`
   - `tool_recall`
-  - `tool_stay_silent`
   - `tool_credential`
   - `tool_watch`
   - `tool_await_answer`
@@ -321,8 +318,8 @@ Deterministic checks on a model's answer wherever the program needs one to conti
 - def `ask` — Run `generate(attempt, note)` until its answer passes; returns (value, shaped).
 - def `json_object` — Parse one JSON object, with the parser's own position when it is not one.
 - def `json_list`
-- def `speech_problem` — What makes the end of a turn impossible to send, in words for her; None when it can be said.
-- def `turn_note` — The program's words back to her, in the same turn.
+- def `consult_problem` — What keeps the end of a consult turn from answering the action brain, in words for her.
+- def `turn_note` — The program's words back to her after a consult turn's end failed its check, in the same turn.
 
 ## `publish`
 
@@ -393,7 +390,7 @@ The reasons behind her actions: what she did after each thought, and the thought
 
 - def `shown` — A thought as it comes back: hers within `chars`; one taken from the model's thinking (ADR-099) marked as another model's summary and cut at THINKING_CHARS, or within `chars` when she recalls it.
 - def `then` — What she did after this thought, in her words, one line each; [] when it was not followed by anything.
-- def `said` — What a turn said, for its readers (ADR-129 D7): its published body text, or, when that is empty and the turn queued speak parts, the texts of its text and sticker parts as they left (a sticker as its row's own [表情包:name]; a picture adds not
+- def `said` — What a turn said, for its readers (ADR-129 D7, D8): the texts of its lines that left, in order -- her speak parts' texts and stickers (a sticker as its row's own [表情包:name]); a picture adds nothing; a poke, a reaction, a recall or a file is
 - def `consequential` — Whether a call has consequences (the one table: _action).
 - def `before_thought` — Whether a call may run before her first thought in the turn: a read on the closed list READS.
 - def `newest` — The id of her newest thought in this turn (before the call at seq `before`), or None; a refused thought left no memory.

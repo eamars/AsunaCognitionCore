@@ -461,15 +461,6 @@ def contract_text(text):
     return table.contract_text(text) if table else (text, 0)
 
 
-def speech(store, ep, text):
-    """Her words about to leave, with a raw root written as its placeholder (D5). A replacement is a fault to look at
-    (the rewrite at the model failed, or a model invented a root): each is counted, never its text."""
-    out, count = contract_text(text)
-    if count:
-        store.audit(ep['_id'], SPEECH_EVENT, {'count': count, 'scene_id': ep.get('scene_id')}, ep['scope_key'])
-    return out
-
-
 def outbound(text, home):
     """`Table.outbound` with this worker's table; without one, any placeholder is refused."""
     if current() is None:

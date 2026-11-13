@@ -48,7 +48,6 @@ def test_a_failure_that_is_not_the_models_is_not_repaired():
 
 
 def test_only_what_cannot_be_right_is_handed_back():
-    assert answers.speech_problem(LaneResult(''), thought=True).startswith('这回合没有写要说的话')
-    assert answers.speech_problem(LaneResult('好'), thought=False).startswith('这回合还没写心里话')
-    assert answers.speech_problem(LaneResult('好', finish_reason='length'), thought=True).startswith('上一段到了长度上限')
+    assert answers.consult_problem(LaneResult('好', finish_reason='length')) == answers.CUT
+    assert answers.consult_problem(LaneResult('好')).startswith('你还没回答行动脑')
     assert '整段重新写一遍' in answers.turn_note('x。')

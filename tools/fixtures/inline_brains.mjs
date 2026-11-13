@@ -18,7 +18,6 @@ const ROLE_SPECS = [
   { name: 'recall', description: 'Recall.', parameters: { query: { type: 'string', required: true } } },
   { name: 'delegate', description: 'Hand a task to the action brain.',
     parameters: { title: { type: 'string', required: true }, brief: { type: 'string', required: true } } },
-  { name: 'stay_silent', description: 'End the turn without speaking.', parameters: { reason: { type: 'string', required: true } } },
   { name: 'task', description: 'A task handed to the action brain; op answer answers its question.', parameters: { op: { type: 'string', required: true }, answer: { type: 'string' } } },
 ];
 const ACTION_SPECS = [
@@ -94,7 +93,7 @@ export function apply(ctx, config) {
     title: task.title, entry: { at: now(), ...entry } });
   const roleTurn = async (trigger, text) => {
     const event = stage(roleId, 'TURN', text, { tools: trigger === 'question' ? ['think', 'recall', 'task']
-      : ['think', 'recall', 'delegate', 'stay_silent'], trigger });
+      : ['think', 'recall', 'delegate'], trigger });
     turns.set(event.token, { trigger });
     await core.onEvent(event);
     return event;
@@ -119,7 +118,7 @@ export function apply(ctx, config) {
     }
     if (method === 'action_message.delivered') return { recorded: true };
     if (method === 'input') {
-      const event = stage(args.session_id, 'TURN', args.text, { tools: ['think', 'recall', 'delegate', 'stay_silent'] });
+      const event = stage(args.session_id, 'TURN', args.text, { tools: ['think', 'recall', 'delegate'] });
       turns.set(event.token, { input: args.text });
       await core.onEvent(event);
     } else if (method === 'role_tool') {
@@ -131,7 +130,6 @@ export function apply(ctx, config) {
         return { value: { task: task.id, state: '已交给行动脑，正在排队' } };
       }
       if (args.tool === 'task' && args.args.op === 'answer') { turn.answer = args.args.answer; return { value: { answered: true }, conclude: true } }
-      if (args.tool === 'stay_silent') return { value: { silent: true }, conclude: true };
       return { value: { saved: true } };
     } else if (method === 'result') {
       const event = operations.get(args.token);

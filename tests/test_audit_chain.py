@@ -107,8 +107,9 @@ def test_E23_state_replay_and_tamper(world, tmp_path):
     from asuna.lanes import FakeLane, FakeTurn
     from conftest import memory_store
     store = world
-    Coordinator(store, FakeLane(store, [FakeTurn([('think', {'thought': 'PRIVATE_INTERNAL_THOUGHT_TEST_ONLY'})],
-                                                 '回来了。')])).ingest(
+    Coordinator(store, FakeLane(store, [FakeTurn([('think', {'thought': 'PRIVATE_INTERNAL_THOUGHT_TEST_ONLY'}),
+                                                  ('speak', {'parts': [{'kind': 'text', 'text': '回来了。'}]})],
+                                                 '')])).ingest(
         {'event_id': 'e', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '我回来了。'})
     events = audit.events(store, by=None).rows()
     audit.verify(events)

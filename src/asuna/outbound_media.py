@@ -1,4 +1,4 @@
-"""出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
+"""出站图片附件：她的 speak 的 picture（一条 picture 一条消息）→ SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
 
 字节只在 BlobStore（GridFS）里。messages 行只带 ``{artifact_id, media_type, sha256, size}``，
 不带 base64：普通 BSON 行 1 MiB 上限，而一张 QQ 照片常有 4–6 MiB。领取方（napcat-qq 0.5.0）
@@ -439,12 +439,6 @@ def image_artifacts(store, scope_keys, *, limit=MAX_ITEMS_OFFERED, own_scope=Non
     return out
 
 
-def _offer_note(scene, config=None):
-    """speak's picture where speak takes parts (ADR-129 D1: her local chat too), else attach_image."""
-    from .role_tools import speak_parts
-    return SPEAK_OFFER_NOTE if speak_parts(config or {}, (scene or {}).get('_id')) else OFFER_NOTE
-
-
 def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEMS_OFFERED, picked=None):
     """上下文里那块 ``image_artifacts_from_program``；方向不允许或没图可引用就不出现。
     picked：出门或差事带来的那张她自己做的图，不在最新几张里也列上。"""
@@ -461,7 +455,7 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
             item.pop('from_linked_scene', None); item.pop('scene_id', None)
         items = edits + [item for item in items if item['artifact_id'] not in {e['artifact_id'] for e in edits}]
         note = GROUP_NOTE if group_scene(config, scene) else DM_NOTE
-        return ({'items': items, 'note': _offer_note(scene, config) + note + (EDITS_NOTE if edits else '')}
+        return ({'items': items, 'note': SPEAK_OFFER_NOTE + note + (EDITS_NOTE if edits else '')}
                 if items else None)
     own_scope = (scene or {}).get('scope_key')
     items = image_artifacts(store, image_scopes(store, config, scene, session_class, person_id),
@@ -476,7 +470,7 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
             items.append(item); listed.add(item['artifact_id'])
     if not items:
         return None
-    note = (_offer_note(scene, config) + (PEER_NOTE if any(item.get('from_linked_scene') for item in items) else '')
+    note = (SPEAK_OFFER_NOTE + (PEER_NOTE if any(item.get('from_linked_scene') for item in items) else '')
             + (EDITS_NOTE if edits else ''))
     return {'items': items, 'note': note}
 

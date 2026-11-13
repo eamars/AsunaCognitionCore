@@ -5,8 +5,10 @@ a trusted home conversation, like the DSH peer line, that she can close herself.
 (`agent:<route>`), never the owner. The owner is a member of every line too (`OWNER_JOINS`): he writes there in the
 Web composer, as himself, with his own grants. Closing a line shuts out its agent, not the owner.
 
-The package only registers the kind (`agent`, `HOME`, `TEXT_ONLY`, `PEER_LINE`, `ROUTE_KEYS`, `OWNER_JOINS`, `MARKS_ANSWERS` with `answerer`). Nothing runs in the
-Host for it: the agent posts and polls through the channel API with `tools/agent_line.py`.
+The package only registers the kind (`agent`, `HOME`, `PEER_LINE`, `ROUTE_KEYS`, `OWNER_JOINS`, `MARKS_ANSWERS` with
+`answerer`). Nothing runs in the Host for it: the agent posts and polls through the channel API with
+`tools/agent_line.py`. A line is a local conversation: she speaks there through `speak` in text, sticker and picture
+parts, with none of QQ's rules on it.
 
 ## Configuration (owner-local)
 
@@ -38,10 +40,17 @@ python tools/agent_line.py status claude-code
 ```
 
 `poll` prints what the owner wrote on that line since the last poll (marked as the owner's), then her answers on
-it, and confirms each answer; an answer nobody polls stays queued. The key opens only
-its own line: posting as that route, claiming and confirming her words there. Anything on the machine can read the
-key file, so the line's boundary is the machine; what it opens is one agent's voice in her home, never the owner's
-voice or chat.
+it, one part each, and confirms each answer; an answer nobody polls stays queued. It claims with `supports=image,sticker`:
+a sticker or a picture of hers is fetched from the outbox's attachment endpoint, checked against its `sha256` and
+written to `<system temp>/asuna-agent-line/<route>/<sha256>.<ext>`, and the part prints as `[sticker] <path>` or
+`[picture] <path>`; its receipt carries `response.attachment` (`artifact_id`, `media_type`, `sha256`, `bytes`,
+`sha256_verified: true`), as a platform adapter's does. One that cannot be fetched or does not match its `sha256` prints
+as `[picture not received: <reason>]` (or `sticker`) and its receipt says `failed`. Each poll removes that route's
+files written more than 7 days before; her record of what she sent is the stored picture, not the file.
+
+The key opens only its own line: posting as that route, claiming her words there, fetching their pictures and
+confirming them. Anything on the machine can read the key file, so the line's boundary is the machine; what it opens is
+one agent's voice in her home, never the owner's voice or chat.
 
 When she asks on a line with `ask` (`questions_from_program` shows the question's id), a message answers it only with
 `send --answers <id>`; an agent's message without it answers nothing. A line the owner writes there from the Web

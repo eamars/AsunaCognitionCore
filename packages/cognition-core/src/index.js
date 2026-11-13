@@ -199,9 +199,6 @@ export function stageView(events, token, turn) {
   return { said, seen_inputs: [...new Set(seen)] };
 }
 
-/** What a turn that ends in silence has written, in words for her: the texts so far in this operation's stages,
- * the message holding the stay_silent call included (DSH records it before running its tools). They leave when
- * the turn ends. */
 /** ADR-099: the model's own thinking in one response: its reasoning blocks that are neither redacted nor empty, joined,
  * and whether any was redacted. */
 export function thinkingOf(message) {
@@ -225,32 +222,6 @@ export function firstThinking(session, state, operation, callId) {
   const holder = session.snapshotEvents().findLast(event => event.type === 'assistant/message'
     && event.data.message.content.some(block => block.type === 'tool-call' && block.id === callId));
   return thinkingOf(holder?.data.message);
-}
-
-// ADR-119 F11 (her wording, agent line 0234): a body the turn-end check sent back is not "nothing written".
-export const REFUSED_SILENCE = '这一步正文里没写字。这一回合前面那段被打回了、还没发出去：就这样结束，它不会发出去。'
-  + '现在在正文里重写一遍才发得出去（写进 think 的不会发）。';
-export const ECHO_CHARS = 40;
-
-export function writtenSoFar(session, operation) {
-  const events = session.snapshotEvents();
-  const turn = events.findLast(event => event.type === 'assistant/message')?.data.turn;
-  const pieces = stageView(events, operation, turn).said.length;
-  if (pieces) return '这一回合正文里写了 ' + pieces + ' 段话，回合结束时照常发出。';
-  // A repair stage (`<operation>:fix-N`) follows a body the check sent back: what the turn wrote before it, unsent.
-  const base = operation?.replace(/:fix-\d+$/, '');
-  if (base && base !== operation) {
-    const mark = op => events.find(event => event.type === 'asuna/stage' && event.data.operation === op)?.seq ?? -1;
-    const from = mark(base), to = mark(operation);
-    const refused = events.filter(event => event.type === 'assistant/message' && event.data.turn === turn
-      && event.seq > from && event.seq < to && !event.data.interrupted).map(event => textOf(event.data.message))
-      .filter(text => text.trim());
-    if (refused.length) {
-      const last = refused.at(-1).trim().replace(/\s+/g, ' ');
-      return REFUSED_SILENCE + '被打回的那段开头是：「' + last.slice(0, ECHO_CHARS) + (last.length > ECHO_CHARS ? '…' : '') + '」';
-    }
-  }
-  return '这一回合正文里一个字都没写，什么都不会发出去。';
 }
 
 export class CognitionCore {
@@ -1406,10 +1377,8 @@ export class CognitionCore {
         const spec = lane === 'character' ? this.state(exec.agent.session.id).specs?.[exec.name] : undefined;
         return spec ? argsRefusal(exec.name, spec, exec.arguments) : undefined;
       }
-      // An old name of hers runs where the tool it was merged into is listed (role_tools.RENAMED), by her
-      // conversation's own set (ADR-129 D3: stay_silent runs as speak only where speak alone speaks).
-      const aliases = lane === 'character' ? this.state(exec.agent.session.id).aliases ?? this.roleAliases : undefined;
-      if (lane === 'character' && exposed.has(aliases?.[exec.name])) return undefined;
+      // An old name of hers runs where the tool it was merged into is listed (role_tools.RENAMED).
+      if (lane === 'character' && exposed.has(this.roleAliases?.[exec.name])) return undefined;
       const usable = [...exposed].join('、') || '（没有）';
       // The action brain: the broker's own sentence for this tool (ADR-053), so both layers say the same.
       return lane === 'character' ? `这个对话里没有 ${exec.name} 这个工具；有的是：${usable}。用其中一个，或者不用工具接着说。`
@@ -1671,10 +1640,6 @@ export class CognitionCore {
     const specs = await this.worker.call('role_tool_specs', { session_id: agent.session.id });
     // Kept for the guard: a call's arguments are checked against this session's own definitions (tool-args.js).
     this.state(agent.session.id).specs = Object.fromEntries((specs ?? []).map(spec => [spec.name, spec]));
-    // Her old names as this conversation applies them (ADR-129 D3); a worker that answers without the session gives
-    // the global map, as before.
-    const aliases = await this.worker.call('role_tool_aliases', { session_id: agent.session.id }).catch(() => null);
-    if (aliases && typeof aliases === 'object') this.state(agent.session.id).aliases = aliases;
     for (const spec of specs ?? []) {
       // Offered in a step only when that step's stage lists it (exposed()); the stage is admitted first (admit).
       const when = async ({ agent: subject, signal }) => {
@@ -1693,10 +1658,6 @@ export class CognitionCore {
           // A refusal is hers to correct in this turn: the tool error says what to do instead.
           if (reply.refused) throw new Error(reply.refused);
           if (reply.conclude) exec.concludeTurn();
-          // Silence says what this turn has written so far: deciding to say something is not saying it.
-          // Where only speak speaks, the worker says what speak queued instead (`sent`).
-          if (spec.name === 'stay_silent' && !('sent' in (reply.value ?? {})))
-            return { ...reply.value, written: writtenSoFar(agent.session, operation) };
           // An answer she reads that the conversation still shows is named, not sent again (ADR-061).
           if (spec.name === 'ask') return withoutVisibleAnswers(reply.value, visibleCarried(agent.session));
           // read_image is the action brain's tool, shared: its bytes become an attachment she sees this turn.

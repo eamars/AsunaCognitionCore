@@ -14,6 +14,10 @@ A coding agent's line to her (ADR-033): post a message, poll her answers.
 - def `load_key`
 - def `call`
 - def `send`
+- def `fetch` — The bytes of an item's picture, from the outbox's attachment endpoint for this publication and attempt, checked against the sha256 the claim declared: (bytes, None), or (None, why not).
+- def `keep` — The picture as a file of the agent's own, named by its sha256.
+- def `prune` — Remove this line's picture files written more than KEEP_SECONDS ago.
+- def `deliver` — One claimed part as the agent gets it: (what to print, the receipt's status, its response).
 - def `poll` — Claim her words on this line until none is left, waiting up to `wait` seconds for the first.
 - def `main`
 

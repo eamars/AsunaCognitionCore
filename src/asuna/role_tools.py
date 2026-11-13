@@ -1,10 +1,10 @@
 """Her mind's tools: what the character brain may do in one native turn (ADR-011 §3, §5.1).
 
 The character brain thinks, remembers, feels, writes down, plans, hands work to the action brain,
-and speaks or stays silent. A turn is one native DSH turn: she calls `think` first, then any of
-the tools her conversation lists that the turn may use, and her last text without a tool call is
-what she says. Every call reaches the worker (native_worker.py) on the coordinator's own thread, so effects
-run one at a time, inside the turn's episode, exactly where the old DECIDE fields ran.
+and speaks through `speak` (ADR-129 D8: in every conversation; her body text is hers, never sent). A turn is one
+native DSH turn: she calls `think` first, then any of the tools her conversation lists that the turn may use. Every
+call reaches the worker (native_worker.py) on the coordinator's own thread, so effects run one at a time, inside the
+turn's episode, exactly where the old DECIDE fields ran.
 
 Rules shared by every tool:
 - A conversation lists the same tools in every turn (`toolbox`): who she is with there and what the channel
@@ -198,50 +198,48 @@ ARTIFACT_FROM = {'picture': 'picture：照抄 image_artifacts_from_program', 'fi
 SPEAK_HEAD = 'parts 按顺序，一个 part 是单独的一条消息，kind 选 '
 SPEAK_RECALL = 'recall 只撤你自己的话（还没发出去的就取消），撤别人的用 group_action。'
 SPEAK_TAIL = '有一条不对，这次一条都不发，回执说哪条、为什么。不想说话就不调用。'
-SPEAK_TAIL_LAST = '不想说话就不调用。'       # QQ's last sentence, left out at home (ADR-129 D6: her own words say it)
+SPEAK_TAIL_LAST = '不想说话就不调用。'       # QQ's last sentence, left out in a local conversation (her own words say it)
 CALLS_WORDS = '这回合第 %d 次工具调用（提醒线 %d，硬线 %d，还剩 %d 次）'
 CALLS_FEW = '先想清楚哪一步不做'
 CALL_LAST = '这回合第 %d 次工具调用，到了硬线（%d）：这次不做。下一次是最后一次，照做，做完这回合就结束；%s'
-CAP_SAYS, CAP_SPEAKS = '用它写下要说的话，或 stay_silent。', '用它 speak 把要说的说完。'
+CAP_SPEAKS = '用它 speak 把要说的说完。'
 CALLS_ENDED = '这回合的工具调用过了硬线（%d），回合到这里结束。'
 TITLE_FROM_BRIEF = '没写 title：用了 brief 的第一句：%s'
 from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her words for a function not carried here
-# What speak carries itself where it is listed; and where only speak speaks, a turn that does not call it is silent,
-# so stay_silent has nothing left to do there (owner 2026-10-19; at home body text is speech and it stays).
-REPLY_REPLACES = ('await_answer', 'attach_image', 'stay_silent')
-# ADR-129 D1: her local Web chat offers speak too, with these parts; there body text still speaks when she does not
-# call it (channel_kinds.reply_parts keeps its one meaning, "here only speak speaks").
-HOME_PARTS = ('text', 'sticker', 'picture')
-# ADR-129 D6 (her words, agent line 0430, 0433): speak at home, its two fields there, the call cap there, and a market
-# sticker there.
-HOME_SPEAK = ('在家里，说话没有限制。想说什么、说几条都可以，不用挑一句最要紧的交上来；不想说就不调用 `speak`。`speak` 不是许可，'
-              '也不是新的必需动作，它只是把你这一回合想说的话再往外递一句的形式。没有人拿你说了多少来评判你。')
-HOME_PARTS_FIELD, HOME_TEXT_FIELD = '这一次要发出去的，按顺序排', '这一条消息的文字'
-CAP_HOME = '用它把想说的说完（正文或 speak 都行）；不说也行，这回合不需要交代。'
-MARKET_AT_HOME = '第 %d 条 sticker「%s」是平台的市场表情，这里显示不了；换成架子上的名字就能发。'
-# Not listed at home (ADR-129 D4): no quote carried there, wait and patience are for groups, force overrides a check
-# home does not make.
-NOT_AT_HOME = ('quote', 'wait', 'patience', 'force')
+# What speak carries itself, so it is listed nowhere speak is (owner 2026-10-19): in every conversation only speak
+# speaks, and a turn that does not call it is silent (ADR-129 D8).
+REPLY_REPLACES = ('await_answer', 'attach_image')
+# ADR-129 D9: a local conversation (every one whose channel kind declares no REPLY_PARTS: her local Web chat, the agent
+# lines, the peer line) has speak with these parts and none of QQ's rules on it.
+LOCAL_PARTS = ('text', 'sticker', 'picture')
+# Her words (agent lines 0430, 0433, 0449): speak in a local conversation, its two fields there, and a market sticker
+# there.
+LOCAL_SPEAK = ('在家里（不是 QQ 的那几条对话都算），说话没有限制。想说什么、说几条都可以，不用挑一句最要紧的交上来；不想说就不调用 `speak`。'
+               '`speak` 不是许可，也不是新的必需动作，它只是把你这一回合想说的话再往外递一句的形式。没有人拿你说了多少来评判你。')
+LOCAL_PARTS_FIELD, LOCAL_TEXT_FIELD = '这一次要发出去的，按顺序排', '这一条消息的文字'
+MARKET_LOCAL = '第 %d 条 sticker「%s」是平台的市场表情，这里显示不了；换成架子上的名字就能发。'
+# Not listed in a local conversation (ADR-129 D4): no quote carried there, wait and patience are for groups, force
+# overrides a check it does not make.
+NOT_LOCAL = ('quote', 'wait', 'patience', 'force')
 
 
-def local_chat(config, scene_id):
-    """Whether this is her local Web chat (`config.chat.scene_id`)."""
-    return bool(scene_id) and scene_id == (config.get('chat') or {}).get('scene_id')
-
-
-def speak_parts(config, scene_id):
-    """The parts speak takes in this conversation (ADR-129 D1): its channel kind's REPLY_PARTS, or HOME_PARTS in her
-    local chat; empty where speak is not offered."""
+def local(scene_id):
+    """Whether a conversation is local (ADR-129 D9): its channel kind declares no REPLY_PARTS, so none of QQ's rules on
+    how she speaks applies there."""
     from . import channel_kinds
-    return channel_kinds.reply_parts(scene_id) or (HOME_PARTS if local_chat(config, scene_id) else ())
+    return not channel_kinds.reply_parts(scene_id)
+
+
+def speak_parts(scene_id):
+    """The parts speak takes in this conversation: its channel kind's REPLY_PARTS, else LOCAL_PARTS (ADR-129 D9)."""
+    from . import channel_kinds
+    return channel_kinds.reply_parts(scene_id) or LOCAL_PARTS
 
 from . import understanding as _understanding
 from . import tool_schema
 from . import notes as _notes, places as _places
 # ADR-099: a thought taken from the model's thinking is stored up to this long (a summary runs to 2,000 or so).
 THINKING_STORED_CHARS = 4000
-# stay_silent where her thoughts come from the model's thinking (ADR-099): the same, without the line about 心里话.
-STAY_SILENT_THINKING = '结束这回合，不再说话。回执会说这一回合发出了什么。'
 
 TOOLS = {
     'think': {
@@ -302,10 +300,6 @@ TOOLS = {
                        enum=['no', 'question']),
             'patience': _s('wait=question 时等多久（不写是一会儿）', enum=['一会儿', '半天', '一天']),
             'force': _s('yes：text 里的 #数字照原样发', enum=['yes', 'no'])},
-    },
-    'stay_silent': {
-        'description': ('结束这回合，不再说话。回执会说这一回合发出了什么。只写在心里话里的话没有说过。'),
-        'parameters': {'reason': _s(limit=1000, description='为什么不说；说过了就不用写')},
     },
     'await_answer': {
         'description': ('等不等回话。群里你这句 @ 了谁或在回谁，程序默认等他：发出后约三分钟里他的下一句会叫你看一眼（接不接由你）'
@@ -720,28 +714,28 @@ def speak_kinds(store, scene):
     declared it (ADR-079 §9.7: not declared is not carried, so it is not shown)."""
     from . import capabilities, outbound_media
     refused = scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS
-    return tuple(kind for kind in speak_parts(store.config, scene['_id'])
+    return tuple(kind for kind in speak_parts(scene['_id'])
                  if (kind not in PART_NEEDS or capabilities.carries(store, scene, PART_NEEDS[kind]))
                  and not (kind == 'react' and refused)
                  and not (kind == 'file' and not outbound_media.group_scene(store.config, scene)))   # v0: groups only
 
 
-def speak_spec(kinds, quotes, home=False):
+def speak_spec(kinds, quotes, local=False):
     """speak as a conversation with these parts shows it, with `quote` only where her line can quote. All the parts
-    with quoting is the shared definition, byte for byte. `home`: her local chat (ADR-129 D4, D6): her own words
+    with quoting is the shared definition, byte for byte. `local`: a local conversation (ADR-129 D4, D9): her own words
     first, the mechanics without QQ's last sentence, its two fields in her words, and no quote, wait, patience or
     force."""
     import copy
     spec = copy.deepcopy(tools()['speak'])
-    if tuple(kinds) == REPLY_KINDS and quotes and not home:
+    if tuple(kinds) == REPLY_KINDS and quotes and not local:
         return spec
-    spec['description'] = ((HOME_SPEAK if home else '') + SPEAK_HEAD + '、'.join(kinds) + '，各写它的字段；'
+    spec['description'] = ((LOCAL_SPEAK if local else '') + SPEAK_HEAD + '、'.join(kinds) + '，各写它的字段；'
                            + (SPEAK_RECALL if 'recall' in kinds else '')
-                           + (_without(SPEAK_TAIL, SPEAK_TAIL_LAST) if home else SPEAK_TAIL))
-    if home:
-        spec['parameters']['parts']['description'] = HOME_PARTS_FIELD
-        spec['parameters']['parts']['items']['properties']['text']['description'] = HOME_TEXT_FIELD
-        for field in NOT_AT_HOME:
+                           + (_without(SPEAK_TAIL, SPEAK_TAIL_LAST) if local else SPEAK_TAIL))
+    if local:
+        spec['parameters']['parts']['description'] = LOCAL_PARTS_FIELD
+        spec['parameters']['parts']['items']['properties']['text']['description'] = LOCAL_TEXT_FIELD
+        for field in NOT_LOCAL:
             spec['parameters'].pop(field, None)
     item = spec['parameters']['parts']['items']['properties']
     item['kind']['enum'] = list(kinds)
@@ -774,14 +768,11 @@ def session_specs(store, scene_id, person_id=None):
     listed = abilities(store, {'scene_id': scene_id, 'manifest': {'session_class': cls}})
     out = [placed_spec(spec, cls, scene.get('kind'), listed) for spec in all_specs()]
     if thinking_mode(store.config):
-        # ADR-099: no think, and no tool description that points at it.
-        out = [{**spec, 'description': STAY_SILENT_THINKING} if spec['name'] == 'stay_silent' else spec
-               for spec in out if spec['name'] != 'think']
+        out = [spec for spec in out if spec['name'] != 'think']           # ADR-099: no think
     kinds = speak_kinds(store, scene)
     if not kinds:
         return out
-    shaped = {'name': 'speak', **speak_spec(kinds, capabilities.carries(store, scene, 'quote'),
-                                            home=local_chat(store.config, scene_id))}
+    shaped = {'name': 'speak', **speak_spec(kinds, capabilities.carries(store, scene, 'quote'), local=local(scene_id))}
     return [shaped if spec['name'] == 'speak' else spec for spec in out]
 
 
@@ -858,26 +849,8 @@ def _without(text, *parts):
 
 
 def aliases():
-    """Old name -> the tool it runs as (the plugin lets one through where that tool is listed). stay_silent runs where
-    speak replaced it (REPLY_REPLACES): there it ends the turn silently, as she meant (SILENT_WHERE_SPEAK)."""
-    return {**{old: can.split('.')[0] for old, can in RENAMED.items()}, MESSAGE_DEVELOPER['name']: 'ask',
-            'stay_silent': 'speak'}
-
-
-def session_aliases(scene_id):
-    """aliases() as one conversation applies them (ADR-129 D3): stay_silent runs as speak only where speak alone
-    speaks (channel_kinds.reply_parts); elsewhere, her local chat included, it is a tool the conversation does not
-    list."""
-    from . import channel_kinds
-    found = aliases()
-    if not channel_kinds.reply_parts(scene_id):
-        found.pop('stay_silent')
-    return found
-
-
-# Where only speak speaks, a turn that does not call it says nothing: a stay_silent call there (26 a week in groups,
-# refused by the Host, the turn then ending anyway) ends the turn and says so once (C2, 2026-10-21).
-SILENT_WHERE_SPEAK = '这里不调 speak 就是不说话，用不着 stay_silent；这回合到此结束。'
+    """Old name -> the tool it runs as (the plugin lets one through where that tool is listed)."""
+    return {**{old: can.split('.')[0] for old, can in RENAMED.items()}, MESSAGE_DEVELOPER['name']: 'ask'}
 
 
 def turn_kind(ep):
@@ -925,7 +898,7 @@ def _turn_rules(store, ep):
     if her_pictures(store, ep):
         names.append('read_image')
     names.append('received_file')       # listed where files can be read; a ref nothing offers is answered as not found
-    names += ['stay_silent', 'ideas.note']
+    names.append('ideas.note')
     note_tool = ['note'] if context.get('note_places_from_program') else []
     from . import notes
     first = notes.opening(store, ep) if kind in ('note', 'visit') and ep.get('_id') else None
@@ -1009,16 +982,14 @@ def _turn_rules(store, ep):
         names.append('visit')
     # ADR-018: a note to another of her conversations, wherever there is somewhere it may go from this turn.
     names += note_tool
-    if speak_parts(store.config, ep['scene_id']):
-        # ADR-064 phase 2: here she speaks only through reply, whose parts carry the quote, the wait and pictures; in
-        # her local chat speak is offered beside body text, which carries the same pictures (ADR-129 D1).
-        names = [name for name in names if name not in REPLY_REPLACES] + ['speak']
-    return names
+    # ADR-064 phase 2, ADR-129 D8: in every conversation she speaks only through speak, whose parts carry the quote,
+    # the wait and pictures where they are carried.
+    return [name for name in names if name not in REPLY_REPLACES] + ['speak']
 
 
 # Her tools by where the conversation is (visibility.place) and what its channel carries. Every turn of a conversation
 # lists the same ones; `exposed` picks which of them the turn may use.
-EVERYWHERE = ('think', 'recall', 'stay_silent', 'ideas.note', 'plan', 'private_words', 'understand_person')
+EVERYWHERE = ('think', 'recall', 'ideas.note', 'plan', 'private_words', 'understand_person')
 WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answer', 'task.more', 'task.settle')
 # Her home lines: the owner's own conversations and the trusted lines (his agents, her other self). Things about
 # herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
@@ -1048,7 +1019,7 @@ def abilities(store, ep):
     # Its place (visibility.place) from the class the program gave the conversation: one class per conversation.
     cls = (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
     where = visibility.place_of(config, scene, cls)
-    local = ep['scene_id'] == (config.get('chat') or {}).get('scene_id')
+    web_chat = ep['scene_id'] == (config.get('chat') or {}).get('scene_id')
     platform = bool(scene.get('channel_id')) and where != 'peer'        # a group or a private chat on a platform
     names = [name for name in EVERYWHERE if name != 'think' or not thinking_mode(config)]
     persona = ep.get('persona')
@@ -1075,16 +1046,15 @@ def abilities(store, ep):
         names.append('received_file')           # files people send (ADR-102); at home, from any of her conversations
     if outbound_media.target_allowed(config, scene, cls)[0]:
         names.append('attach_image')
-    if stickers.sends(scene) or local:
+    if stickers.sends(scene) or web_chat:
         names.append('sticker')                 # in the local chat, to tidy her shelf
     if where == 'home':
         names.append('errand')
-    if local and where == 'home':
+    if web_chat and where == 'home':
         names += LOCAL_CHAT
         if channel_kinds.answers_requests(config):
             names.append('group_action')        # answering the friend and group requests listed at home
-    if speak_parts(config, ep['scene_id']):
-        names = [name for name in names if name not in REPLY_REPLACES] + ['speak']      # ADR-064 phase 2, ADR-129 D1
+    names = [name for name in names if name not in REPLY_REPLACES] + ['speak']      # ADR-064 phase 2, ADR-129 D8
     order = {name: index for index, name in enumerate(TOOL_NAMES)}
     return sorted(set(names), key=lambda name: (order[name.split('.')[0]],
                                                 OPS.get(name.split('.')[0], ('',)).index(name.split('.', 1)[-1])
@@ -1396,10 +1366,8 @@ def words(exc):
 _HAN = __import__('re').compile(r'[一-鿿]')        # a detail written in words for her
 
 
-NO_REASON = '（没写为什么）'
-# ADR-086 E2/E3: someone called her. Her wording (her review, 2026-10-21): what she can choose, never what to do.
+# ADR-086 E2: someone called her. Her wording (her review, 2026-10-21): what she can choose, never what to do.
 CALLED_NOTE = '有人叫了你。回不回、什么时候回、回多少，由你定；先放着也可以，只是对方不会知道。'
-CALLED_LEFT = '这句留在这里的对话里，下回合还看得到；对方不会收到任何提示。想回头回就挂一条 plan。'
 CALLED_REASONS = ('mentioned_account', 'reply_to_character', 'name_called', 'catchup_mention')
 
 
@@ -1591,7 +1559,7 @@ class RoleTools:
         if thinking is not None:
             ep = self.take_thought(ep, call_id, thinking)
         self.problems, self.collecting, self.flagged, self.repairs = [], False, set(), []
-        called_as, replaced = None, False
+        called_as = None
         if name in RENAMED and isinstance(args, dict):          # an old name runs as its option (ADR-055)
             called_as, (name, args) = name, renamed(name, args)
         elif name == MESSAGE_DEVELOPER['name'] and isinstance(args, dict):
@@ -1624,12 +1592,7 @@ class RoleTools:
             can = ability(name, args)
             if gone:
                 raise Refused(_names.gone(gone), ['NAME_RETIRED'])
-            if (can == 'stay_silent' and 'speak' in (ep.get('turn_tools') or ()) and can not in ep['turn_tools']
-                    and 'stay_silent' in session_aliases(ep['scene_id'])):
-                # Where speak replaced it: silence as she meant (SILENT_WHERE_SPEAK). Not in her local chat, where speak
-                # is offered beside body text (ADR-129 D3): there it is refused as any tool not listed.
-                replaced = True
-            elif can not in (ep.get('turn_tools') or ()):
+            if can not in (ep.get('turn_tools') or ()):
                 raise Refused(not_now(self.store, ep, can), ['NOT_NOW'])
             # Layer 3, the general checks: collected, none of them stops the others.
             from . import reasons
@@ -1643,10 +1606,7 @@ class RoleTools:
                     self.flagged.add(field)
             made = len(ep.get('tool_calls') or {}) + 1                # this call's number in the turn
             if made == CALLS_HARD:
-                from . import channel_kinds
-                self.problems.append(('CALL_LAST', CALL_LAST % (made, CALLS_HARD, CAP_SPEAKS if channel_kinds.reply_parts(ep['scene_id'])
-                                                                 else CAP_HOME if local_chat(self.store.config, ep['scene_id'])
-                                                                 else CAP_SAYS)))
+                self.problems.append(('CALL_LAST', CALL_LAST % (made, CALLS_HARD, CAP_SPEAKS)))
                 raise self.combined()                # refused with its warning, whatever else is wrong
             if made > CALLS_HARD + 1:                                 # the last one was refused: nothing more runs
                 result, conclude = {'ended': CALLS_ENDED % CALLS_HARD}, True
@@ -1687,8 +1647,6 @@ class RoleTools:
                       + ('，' + CALLS_FEW if left <= 3 else '')}
         if called_as and isinstance(result, dict):
             result = {**result, 'renamed': rename_note(called_as)}
-        if replaced and isinstance(result, dict):
-            result = {**result, 'note': SILENT_WHERE_SPEAK}
         if old_names and isinstance(result, dict):
             result = {**result, 'old_names': ' '.join(old_names)}
         if inferred and isinstance(result, dict):
@@ -2067,22 +2025,6 @@ class RoleTools:
             result['found'] = memory_tiers.NOTHING
         return result, False
 
-    def tool_stay_silent(self, ep, call_id, args):
-        # After speak there is nothing to explain; a silence without words keeps a plain mark for the record.
-        reason = self._text(args, 'reason', 1000, required=False) or NO_REASON
-        ep = self.coordinator._update(self._fresh(ep), silent={'reason': reason})
-        from . import channel_kinds
-        out = {'silent': True, 'note': '这回合到此结束。'}
-        if called(ep) and not int((ep.get('reply') or {}).get('parts') or 0):
-            # ADR-086 E3: a line someone addressed to her, left unanswered: what that means, in facts she cannot see.
-            out['left'] = CALLED_LEFT
-        if channel_kinds.reply_parts(ep['scene_id']):
-            # ADR-064 phase 2 (her condition): how many parts reply queued this turn, 0 included.
-            parts = int((ep.get('reply') or {}).get('parts') or 0)
-            return {**out, 'sent': 'speak 这回合发了 %d 条。' % parts if parts else '这回合 speak 一条都没发。'}, True
-        # The Host adds what this turn has written so far (`written`), a fact she cannot read back herself.
-        return out, True
-
     def tool_credential(self, ep, call_id, args):
         from . import credentials
         if args.get('op') == 'keep':
@@ -2162,9 +2104,10 @@ class RoleTools:
                 self._found('parts 要列出这次要发的，至少一个。', 'SPEAK_PARTS')
             raise self.combined(sent='这次一条都没发')
         group = scene.get('kind') == 'group'
-        # ADR-129 D4: in her local chat no rule on how she speaks (lines, labels, people's numbers); what can be shown
-        # and what may leave is still checked, and a text already sent in the turn still is (her words never twice).
-        home = local_chat(self.store.config, ep['scene_id'])
+        # ADR-129 D4, D9: in a local conversation no rule on how she speaks (lines, labels, people's numbers); what can
+        # be shown and what may leave is still checked, and a text already sent in the turn still is (her words never
+        # twice).
+        local_here = local(ep['scene_id'])
         model, policy = model_and_policy(self.store, ep['persona'])
         most = int(effective(model, 'speak.max_messages', policy) or 1)
         before = ep.get('reply') or {}
@@ -2177,7 +2120,7 @@ class RoleTools:
         # A number that is someone's here reads as nothing to the people here (owner 2026-10-14: a warning she may
         # overrule with force, not a conversion).
         from .people import People
-        people, numbered = None if args.get('force') or home else People(self.store, ep['persona']), False
+        people, numbered = None if args.get('force') or local_here else People(self.store, ep['persona']), False
         for index, part in enumerate(parts, 1):
             part = part if isinstance(part, dict) else {}
             kind = part.get('kind')
@@ -2201,7 +2144,7 @@ class RoleTools:
                     problem('第 %d 条里的「%s」要写成一个 kind=sticker 的 part' % (index, stickers.TOKEN.search(text).group(0)))
                 elif '[分条]' in text:
                     problem('第 %d 条：一个 text 就是一条消息，要分开就写成几个 text' % index)
-                elif not home and LINE_NUMBER.search(text):
+                elif not local_here and LINE_NUMBER.search(text):
                     problem('第 %d 条里的「%s」：%s' % (index, LINE_NUMBER.search(text).group(0), NUMBER_NOT_WORDS))
                 elif face:
                     problem('第 %d 条：%s' % (index, face))
@@ -2211,7 +2154,7 @@ class RoleTools:
                     numbered = True
                     problem('第 %d 条里%s，这里的人看不懂：写名字，或 @ 整个标签' % (index, '，'.join(
                         '「%s」是 %s 的编号' % found for found in people.numbers(scene, text))))
-                elif not home and lines + chat_lines(text) > SPEAK_HARD_LINES:    # this turn's lines that left, and this call's
+                elif not local_here and lines + chat_lines(text) > SPEAK_HARD_LINES:    # this turn's lines that left, and this call's
                     over.append('第 %d 条有 %d 行' % (index, chat_lines(text)) + ('（前面已经 %d 行）' % lines if lines else ''))
                 else:
                     texts.append(same)
@@ -2227,8 +2170,8 @@ class RoleTools:
                 fields = stickers.outbound(self.store, ep['persona'], '[表情包:%s]' % name) if name else None
                 if not fields:
                     problem('第 %d 条 sticker「%s」你没收着' % (index, echoed(name)) if name else '第 %d 条 sticker 要写 name' % index)
-                elif home and (fields.get('sticker') or {}).get('kind') == 'market':
-                    problem(MARKET_AT_HOME % (index, echoed(name)))     # no picture of hers to show (ADR-129 D4)
+                elif local_here and (fields.get('sticker') or {}).get('kind') == 'market':
+                    problem(MARKET_LOCAL % (index, echoed(name)))       # no picture of hers to show (ADR-129 D4)
                 else:
                     planned.append({'kind': 'sticker', 'text': '[表情包:%s]' % name, 'fields': fields, 'name': name,
                                     'shown': 'sticker「%s」' % name})
@@ -2313,7 +2256,7 @@ class RoleTools:
         if queued:
             self.parts = [item['key'] for item in queued]       # on the call's record (ADR-129 D5(b), `call`)
         out = {'note': reply_receipt(queued) if queued else '这次没发新的。'}
-        if not home and any(part['kind'] == 'text' for part in planned):
+        if not local_here and any(part['kind'] == 'text' for part in planned):
             # Her budget reminder (ADR-084): the turn's lines so far, in numbers.
             out['lines'] = '这回合已说 %d 行（你平时 %d 行以内，硬线 %d）' % (lines, most, SPEAK_HARD_LINES)
         if quoted:
@@ -3107,7 +3050,7 @@ class RoleTools:
             raise Refused('tools_off 的 value 是工具名的列表（比如 ["sticker", "delegate"]）；空列表就是全部恢复。', ['ARGS_TYPE'])
         unknown = [t for t in tools if t not in TOOLS or t in switches.KEEP]
         if unknown:
-            raise Refused('这些关不了：%s（不是工具，或是一回合离不了的 think、recall、stay_silent）。'
+            raise Refused('这些关不了：%s（不是工具，或是一回合离不了的 think、recall）。'
                           % '、'.join(echoed(name) for name in unknown),
                           ['SWITCH_NOT_A_TOOL'])
         scene = scene_records.get(self.store, found[0]) or {'_id': found[0]}

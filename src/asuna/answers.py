@@ -94,24 +94,20 @@ def json_list(text):
 
 
 # ── the end of a character turn (ADR-011 §3.5) ─────────────────────
-# Her last text without a tool call is sent as it is. Only what cannot be right is handed back (owner, 2026-10-14):
-# a check that could stop a correct answer (JSON someone asked for, a script naming tools) is not made.
-def speech_problem(value, *, thought, consult=False):
-    """What makes the end of a turn impossible to send, in words for her; None when it can be said."""
-    text = (value.content or '').strip()
+# Only speak speaks (ADR-129 D8): her body text is never sent, so it is never checked as speech. What is handed back is
+# only what cannot be right (owner, 2026-10-14): an answer cut at its length limit, and a consult turn that did not
+# answer the action brain.
+CUT = '上一段到了长度上限还没写完。'
+
+
+def consult_problem(value):
+    """What keeps the end of a consult turn from answering the action brain, in words for her."""
     if value.finish_reason == 'length':
-        return '上一段到了长度上限还没写完。'
-    if consult:
-        return '你还没回答行动脑：用 task 的 answer 写下回答；这里写的正文不会发给任何人。'
-    if not thought:
-        return '这回合还没写心里话：先调用 think，再把要说的话写出来。'
-    if not text:
-        return '这回合没有写要说的话：写出要对对方说的话，或者用 stay_silent 结束。'
-    return None
+        return CUT
+    return '你还没回答行动脑：用 task 的 answer 写下回答；这里写的正文不会发给任何人。'
 
 
 def turn_note(issue):
-    """The program's words back to her, in the same turn. What she writes next replaces the whole unsent text, so
-    she is asked for all of it: a corrected sentence alone would go out alone."""
+    """The program's words back to her after a consult turn's end failed its check, in the same turn."""
     return ('程序检查：' + issue + '这段还没发出去：请在这一回合里把要说的话整段重新写一遍，这次写的会整段代替上一段发出去；'
             '只改这个问题，不改变你的意思。')

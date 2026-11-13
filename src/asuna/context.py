@@ -601,16 +601,10 @@ class ContextBuilder:
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
         session_class=visibility.session_class(self.store.config,self.store,scene,event['person_id'])
         place=visibility.place(self.store.config,self.store,scene,event['person_id'])
-        from . import channel_kinds as _kinds
         from . import stickers as _stickers
         # What the guide explains is only what this conversation can get (ADR-103): the faces note is said where
         # its platform declares its faces and stickers can leave -- the condition that adds faces_from_program.
-        # Her local chat has a guide of its own: speak beside body text (ADR-129 D6).
-        from .role_tools import local_chat as _local_chat
-        system,system_ref=render_system(self.store,persona,session_class,place,
-                                        'home' if _local_chat(self.store.config,scene['_id'])
-                                        else bool(scene.get('channel_id')) and bool(_kinds.reply_parts(scene['_id'])),
-                                        _stickers.has_faces(scene))
+        system,system_ref=render_system(self.store,persona,session_class,place,_stickers.has_faces(scene))
         docs=DocumentStore(self.store,persona)
         persona_doc=docs.read('persona')[1]
         body=render_markdown(readable_sections(persona_doc,visibility.OWNER_PRIVATE))
@@ -974,7 +968,8 @@ class ContextBuilder:
             errands=_places.errands_block(self.store,persona,moment)
             if errands:
                 context['errands_from_program']=errands
-        # ADR-016: her sticker shelf where stickers can go out (and at home, to tidy it), the platform's faces.
+        # ADR-016: her sticker shelf where stickers can go out, the platform's faces. In a local conversation stickers
+        # go by speak too (ADR-129 D9): the shelf's names, the whole shelf in the turns that tidy it.
         from . import stickers as _stickers
         if _stickers.sends(scene):
             context['stickers_from_program']=_stickers.send_block(self.store,persona)
@@ -985,9 +980,9 @@ class ContextBuilder:
             faces=_stickers.faces_block(self.store,scene)
             if faces:context['faces_from_program']=faces
         elif session_class==visibility.OWNER_PRIVATE and not event.get('episode_kind') in ('settlement',):
-            # At home a sticker cannot be sent: the whole shelf comes in the turns that tidy it, its names otherwise
-            # (measured 2026-10-16: 5,700 characters in every home turn, 7.8% of all she was sent; her answer: keep
-            # the names, which are hers and what she remembers them by).
+            # At home the whole shelf comes in the turns that tidy it, its names otherwise (measured 2026-10-16: 5,700
+            # characters in every home turn, 7.8% of all she was sent; her answer: keep the names, which are hers and
+            # what she remembers them by).
             tidying=event.get('episode_kind')=='self_development' or event.get('dice') in ('self_evaluation','review_dice')
             shelf=(_stickers.block(self.store,persona,scene,at_home=True) if tidying
                    else _stickers.names_block(self.store,persona))
@@ -1466,8 +1461,8 @@ class ContextBuilder:
             from .role_tools import SPEAK_HARD_LINES
             replying=bool(channel_kinds.reply_parts(scene['_id']))
             most=int(effective(model,'speak.max_messages',policy) or 1)
-            # How her words leave is said once, in her turn guide for this place (render: speaks); here only the
-            # number that is this turn's.
+            # How her words leave is said once, in her turn guide (block_guide.WORDS); here only what is this turn's,
+            # and QQ's line count where QQ's rules apply.
             speak={**({'sent':REPLY_SENT%(most,SPEAK_HARD_LINES)} if replying else {}),
                    'new_lines':'这段对话里新来的话——包括你这回合中途才到的——你看见了就算你接住了：'
                                '要回就在这回合一起回，它们不会再单独叫你一次。'}
@@ -1488,11 +1483,12 @@ class ContextBuilder:
                     shown='、'.join('〔%d〕'%n for n in later[:AMBIGUOUS_MAX])+('等' if len(later)>AMBIGUOUS_MAX else '')
                     speak['quote']=AMBIGUOUS%(len(later),shown)
             context['speak_from_program']=speak
-            unsent=(scene.get('unsent') or {}) if replying else {}
-            if unsent.get('text'):
-                # ADR-064 phase 2: words she wrote in the body of her last turn here never left; said once.
-                context['unsent_from_program']='没发出去：「%s」'%unsent['text']
-                manifest.setdefault('told',{})['unsent']=unsent.get('episode_id')
+        unsent=scene.get('unsent') or {}
+        if unsent.get('text'):
+            # ADR-064 phase 2, ADR-129 D8: words she wrote in the body of her last turn here never left; said once, in
+            # every conversation.
+            context['unsent_from_program']='没发出去：「%s」'%unsent['text']
+            manifest.setdefault('told',{})['unsent']=unsent.get('episode_id')
         if event.get('episode_kind')=='settlement':
             from .affect import kind_label
             from .affect import SHORT_ID, amendments_of

@@ -312,13 +312,15 @@ class Channels:
         return lines.is_closed(self.store, self.store.config['channels'][channel_id]['routes'][route_id]['scene_id'])
 
     def scope_check(self, channel_id, route_id, command, path, body):
-        """A route key posts as its own route, claims and confirms its own line's words, and nothing else."""
+        """A route key posts as its own route, claims, fetches the pictures of and confirms its own line's words, and
+        nothing else."""
         if command == 'POST' and path == ['events']:
             if body.get('route_id') != route_id:
                 raise Denied('ROUTE_KEY_OTHER_ROUTE')
         elif command == 'GET' and path == ['outbox']:
             pass
-        elif command == 'POST' and len(path) == 3 and path[0] == 'outbox' and path[2] == 'receipt':
+        elif ((command == 'POST' and len(path) == 3 and path[0] == 'outbox' and path[2] == 'receipt')
+              or (command == 'GET' and len(path) == 3 and path[0] == 'outbox' and path[2] == 'attachment')):
             row = message_records.get(self.store, path[1], fields=['target'], channel=channel_id)
             if not row or row.get('target') != self.route_target(channel_id, route_id):
                 raise Denied('ROUTE_KEY_OTHER_ROUTE')

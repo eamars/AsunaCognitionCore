@@ -25,7 +25,7 @@ def event(key='e', scene='dm-a', person='A', text='我回来了。'):
 
 def normal(store):
     """One ordinary character turn: her thought, then what she says."""
-    lane = FakeLane(store, [FakeTurn([THOUGHT], '回来了。')])
+    lane = FakeLane(store, [FakeTurn([THOUGHT, ('speak', {'parts': [{'kind': 'text', 'text': '回来了。'}]})], '')])
     return Coordinator(store, lane), lane
 
 

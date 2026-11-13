@@ -7,8 +7,7 @@ import re
 
 KIND = 'agent'                    # scene ids agent:<home>:dm:<agent>; person ids agent:<agent>
 TITLE = 'Agent'                   # the sidebar workspace its conversations live in
-IMAGE_HOSTS = ()                  # text only
-TEXT_ONLY = True
+IMAGE_HOSTS = ()                  # no platform media host: what an agent posts is text
 PEER_LINE = True                  # she can open/close each line herself (asuna/lines.py)
 HOME = True                       # a trusted home conversation (owner_private), like the DSH peer line
 ROUTE_KEYS = True                 # each route has a key of its own that opens only that line (channels.route_key)

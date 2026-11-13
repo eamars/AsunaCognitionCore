@@ -36,7 +36,7 @@ def test_each_home_place_has_its_own_working_folder_and_platform_places_are_not_
 
 def test_an_agent_line_is_a_trusted_home_line_of_its_own_kind():
     kind = channel_kinds.of_channel('agent')
-    assert kind.HOME and kind.TEXT_ONLY and kind.PEER_LINE and kind.ROUTE_KEYS
+    assert kind.HOME and kind.PEER_LINE and kind.ROUTE_KEYS and channel_kinds.sends_images(SCENE)
     assert kind.person_id('claude-code') == 'agent:claude-code' and kind.scene_parts(SCENE) == ('home', 'dm', 'claude-code')
     assert channel_kinds.of(SCENE) is kind and channel_kinds.home(SCENE)
 

@@ -24,7 +24,6 @@ def test_the_tool_lists_drop_think_only_in_thinking_mode():
     assert role_tools.thinking_mode({'thoughts': 'thinking'}) and not role_tools.thinking_mode({})
     assert role_tools.asks_thought({'turn_tools': ['think', 'recall']})
     assert not role_tools.asks_thought({'turn_tools': ['recall']}) and not role_tools.asks_thought({})
-    assert 'think' not in role_tools.STAY_SILENT_THINKING and '心里话' not in role_tools.STAY_SILENT_THINKING
     assert 'think' not in role_tools.CONSULT_ONLY_THINKING
 
 

@@ -26,7 +26,7 @@ Authenticated transport-neutral adapter seam. Platform protocol belongs to the a
   - `route_target`
   - `owner_lines` — What the owner wrote on this line from the Web (ADR-051) that its agent has not been shown yet, oldest first, each shown once: the agent never reads her answer to words it never saw.
   - `line_closed`
-  - `scope_check` — A route key posts as its own route, claims and confirms its own line's words, and nothing else.
+  - `scope_check` — A route key posts as its own route, claims, fetches the pictures of and confirms its own line's words, and nothing else.
   - `members`
   - `media_keys`
   - `faults` — The adapter's lane faults, counted by signature and hour (lane_faults.py, ADR-095).
@@ -67,7 +67,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 - def `answers_requests` — Whether a configured channel's kind brings requests her home answers (notices.py).
 - def `sends_images`
 - def `sends_stickers`
-- def `reply_parts` — The parts her `speak` takes in a conversation of this kind; empty where her words are speech.
+- def `reply_parts` — The parts her `speak` takes in a conversation of this kind, with QQ's rules on it; empty where it is local.
 - def `sticker_of` — 'custom', 'market' or None for a stored media item the adapter did not mark (asks each kind).
 - def `sticker_md5` — The md5 of a stored media item's bytes when its platform names the file by it, else None (asks each kind).
 - def `image_hosts` — The media hosts the installed platforms deliver images from (vision's default allowlist).
@@ -295,7 +295,7 @@ How long stored media bytes live: every kind of stored picture has an owner or a
 
 [src/asuna/outbound_media.py](../../src/asuna/outbound_media.py)
 
-出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
+出站图片附件：她的 speak 的 picture（一条 picture 一条消息）→ SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
 
 - def `sha256_of`
 - def `sniff_media_type` — 只认魔数，和 vision.sniff_media_type 同一张表（离线用例逐条比对，防两处漂移）。

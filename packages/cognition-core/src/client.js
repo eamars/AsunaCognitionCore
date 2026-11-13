@@ -631,8 +631,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     // after an update in one Context, and a Turn's or a call's first loaded event may be a result (a think call's,
     // or one whose call is on an older page).
     return [{ kind: 'asuna-speak', target: 'chat',
-      match: event => isCall(event) && typeof event.data.callId === 'string' ? { id: event.data.callId, role: 'start' }
-        : isResult(event) ? { id: event.data.message.toolCallId, role: 'start' } : null,
+      // Keyed by Turn and call id: some providers number calls per request, so an id comes back in a later Turn.
+      match: event => isCall(event) && typeof event.data.callId === 'string'
+        ? { id: event.data.turn + ':' + event.data.callId, role: 'start' }
+        : isResult(event) ? { id: event.data.turn + ':' + event.data.message.toolCallId, role: 'start' } : null,
       start: (_context, match, reader) => {
         const event = match.event;
         if (!isCall(event)) return resulted({ callId: event.data.message.toolCallId, called: false }, event);

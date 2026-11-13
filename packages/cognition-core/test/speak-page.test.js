@@ -50,3 +50,18 @@ test('the worker is asked only for a character session\'s call found in its even
     /SPEAK_CALL_NOT_FOUND/);
   assert.deepEqual(asked.filter(method => method.startsWith('speak.')), ['speak.parts'], 'nothing else reached the worker');
 });
+
+test('a call id that comes back in a later Turn is her speak call there, not the earlier call with that id', () => {
+  // Some providers number calls per request: turn 8's speak call is call_3, as turn 3's delegate call was.
+  seq = 0;
+  const events = [
+    ev('asuna/stage', { turn: 3, step: 1, operation: 'ep-a:TURN' }),
+    ev('tool/call', { turn: 3, step: 1, callId: 'call_3', name: 'delegate', arguments: '{}' }),
+    ev('tool/result', { turn: 3, step: 1, message: { toolCallId: 'call_3', isError: false } }),
+    ev('asuna/stage', { turn: 8, step: 2, operation: 'ep-b:TURN' }),
+    ev('tool/call', { turn: 8, step: 2, callId: 'call_3', name: 'speak', arguments: '{}' }),
+    ev('tool/result', { turn: 8, step: 2, message: { toolCallId: 'call_3', isError: false } }),
+  ];
+  assert.equal(speakCallIn(events, 'call_3', 'ep-b:TURN'), true);
+  assert.equal(speakCallIn(events, 'call_3', 'ep-a:TURN'), false, 'turn 3 made no speak call');
+});

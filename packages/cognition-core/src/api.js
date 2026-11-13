@@ -18,16 +18,17 @@ export async function sessionEvents(ctx, sessionId) {
   try { return (await handle.read()).events; } finally { await handle.close(); }
 }
 
-/** Whether these events hold her speak call `callId` with a result that is not an error, made in a step of the stage
- * `operation` (its `asuna/stage` mark, index.js): the page asks only about a call of this session (ADR-129 D5(b)). */
+/** Whether these events hold her speak call `callId` made in a step of the stage `operation` (its `asuna/stage` mark,
+ * index.js), with a result in the same Turn that is not an error: the page asks only about a call of this session
+ * (ADR-129 D5(b)). A call id may come back in another Turn (some providers number calls per request): each call with
+ * it is tried, never only the first. */
 export function speakCallIn(events, callId, operation) {
-  const call = events.find(event => event.type === 'tool/call' && event.data?.callId === callId);
-  if (!call || !['speak', 'reply'].includes(call.data.name)) return false;
-  const result = events.find(event => event.type === 'tool/result' && event.seq > call.seq
-    && event.data?.message?.toolCallId === callId);
-  if (!result || result.data.message.isError) return false;
-  return events.some(event => event.type === 'asuna/stage' && event.seq < call.seq && event.data?.operation === operation
-    && event.data.turn === call.data.turn && event.data.step === call.data.step);
+  return events.some(call => call.type === 'tool/call' && call.data?.callId === callId
+    && ['speak', 'reply'].includes(call.data.name)
+    && events.some(event => event.type === 'asuna/stage' && event.seq < call.seq && event.data?.operation === operation
+      && event.data.turn === call.data.turn && event.data.step === call.data.step)
+    && [events.find(event => event.type === 'tool/result' && event.seq > call.seq && event.data?.turn === call.data.turn
+      && event.data.message?.toolCallId === callId)].some(result => result && result.data.message.isError !== true));
 }
 
 export class AsunaApi extends TypertRemoteService {

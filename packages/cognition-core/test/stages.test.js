@@ -171,7 +171,7 @@ test('a think then speak Turn draws her speak node and marks the Turn, loaded wh
     return [view.nodes.filter(node => node.kind === 'asuna-speak').map(node => [node.id, node.anchorSeq, node.location.kind,
       node.data.operation, node.data.args.parts[0].text]), view.timeline.turns.get(1)?.data.get('asuna-spoke')];
   };
-  const expected = [[['c-speak', 7, 'session', 'ep-1:TURN', '回来啦']], true];
+  const expected = [[['1:c-speak', 7, 'session', 'ep-1:TURN', '回来啦']], true];
   const whole = assembler([...stageDefinitions(), ...speakDefinitions()]);
   whole.replaceWindow(events, false);
   assert.deepEqual(drawn(whole), expected, 'loaded whole');
@@ -183,6 +183,27 @@ test('a think then speak Turn draws her speak node and marks the Turn, loaded wh
   paged.replaceWindow(events.slice(8), true);                 // the window starts at the speak result
   paged.prepend(events.slice(0, 8), false);
   assert.deepEqual(drawn(paged), expected, 'a window that starts mid-Turn, then the older page');
+});
+
+test('a speak call whose id an earlier Turn already used is drawn in its own Turn', () => {
+  // Some providers number calls per request: turn 8's speak call is call_3, as turn 3's delegate call was.
+  const args = JSON.stringify({ parts: [{ kind: 'text', text: '回来啦' }] });
+  const engine = assembler([...stageDefinitions(), ...speakDefinitions()]);
+  engine.replaceWindow([entry(0, 'turn/start', { turn: 3 }), entry(1, 'step/start', { turn: 3, step: 1 }),
+    entry(2, 'asuna/stage', { turn: 3, step: 1, lane: 'character', phase: 'TURN', operation: 'ep-a:TURN' }),
+    entry(3, 'tool/call', { turn: 3, step: 1, callId: 'call_3', name: 'delegate', arguments: '{}' }),
+    entry(4, 'tool/result', { turn: 3, step: 1, message: { role: 'tool', toolCallId: 'call_3', isError: false, content: [] } }),
+    entry(5, 'turn/end', { turn: 3, reason: { kind: 'completed' } }), entry(6, 'turn/start', { turn: 8 }),
+    entry(7, 'step/start', { turn: 8, step: 1 }),
+    entry(8, 'asuna/stage', { turn: 8, step: 1, lane: 'character', phase: 'TURN', operation: 'ep-b:TURN' }),
+    entry(9, 'tool/call', { turn: 8, step: 1, callId: 'call_3', name: 'speak', arguments: args }),
+    entry(10, 'tool/result', { turn: 8, step: 1, message: { role: 'tool', toolCallId: 'call_3', isError: false, content: [] } }),
+    entry(11, 'turn/end', { turn: 8, reason: { kind: 'completed' } })], false);
+  const view = snapshot(engine);
+  assert.deepEqual(view.nodes.filter(node => node.kind === 'asuna-speak').map(node => [node.anchorSeq, node.data.operation]),
+    [[9, 'ep-b:TURN']]);
+  assert.equal(view.timeline.turns.get(8).data.get('asuna-spoke'), true);
+  assert.equal(view.timeline.turns.get(3).data.get('asuna-spoke'), undefined);
 });
 
 test('the program sending her final text back shows between the draft and the rewrite, never folded away', () => {

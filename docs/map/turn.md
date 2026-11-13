@@ -210,7 +210,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `called` — Whether this turn is someone calling her: an addressed group line, or a person's line in a one-to-one conversation (home, a private chat, a line); never a heartbeat, a visit, a note or a task's hand-back.
 - def `spoken` — (lines, texts) of this turn's text parts that left or may still leave, read from its outbox each time: a failure the platform reports after the call gives its lines back too.
 - def `operation_episode` — The episode a stage's operation names (Coordinator._operation: `<episode>:TURN…`).
-- def `sent_parts` — What one speak call sent, for the page (ADR-129 D5(b)): each part that left, in order, with its kind, its text as it left, a sticker's name and whether it carries a picture; None when nothing links the call to its rows.
+- def `sent_parts` — What one speak call sent, for the page (ADR-129 D5(b)): each part that left, in order, with its kind, its text as it left, a sticker's name and whether it carries a picture (and that picture's sha256); None when nothing links the call to it
 - def `sent_picture` — The picture of one part a speak call sent (ADR-129 D5(b)): {media_type, data (base64)}, through the fence the adapters' byte endpoint uses (outbound_media.serve); Denied for anything else.
 - def `chat_lines` — How many lines a text part is in a chat (owner 2026-10-14: in online chat a line break is another message): each line with words counts, a blank line does not, a fenced code block counts as one.
 - def `reply_receipt` — What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); and each sent line's own number in the conversation (ADR-079, ADR-108 D2).
@@ -393,7 +393,7 @@ The reasons behind her actions: what she did after each thought, and the thought
 
 - def `shown` — A thought as it comes back: hers within `chars`; one taken from the model's thinking (ADR-099) marked as another model's summary and cut at THINKING_CHARS, or within `chars` when she recalls it.
 - def `then` — What she did after this thought, in her words, one line each; [] when it was not followed by anything.
-- def `said` — What a turn said, for its readers (ADR-129 D7): its published body text, or, when that is empty and the turn queued speak parts, the texts of those parts as they left (a sticker as its row's own [表情包:name]; a picture adds nothing).
+- def `said` — What a turn said, for its readers (ADR-129 D7): its published body text, or, when that is empty and the turn queued speak parts, the texts of its text and sticker parts as they left (a sticker as its row's own [表情包:name]; a picture adds not
 - def `consequential` — Whether a call has consequences (the one table: _action).
 - def `before_thought` — Whether a call may run before her first thought in the turn: a read on the closed list READS.
 - def `newest` — The id of her newest thought in this turn (before the call at seq `before`), or None; a refused thought left no memory.

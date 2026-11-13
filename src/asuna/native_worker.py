@@ -1447,8 +1447,12 @@ class BusinessWorker:
                 'quote': bool(speak and 'quote' in speak['parameters'])}, record.get('scope_key', 'operator'))
             return specs
         if method == 'role_tool_aliases':
-            from .role_tools import aliases
-            return aliases()
+            # Her old names as a role session's guard applies them: that conversation's (ADR-129 D3); with no session,
+            # the global map (a plugin that asks once at start).
+            from .role_tools import aliases, session_aliases
+            record = (session_records.get(self.app.store, args['session_id'], native=True)
+                      if (args or {}).get('session_id') else None)
+            return session_aliases(record['scene_id']) if record else aliases()
         if method == 'role_tool':
             # Her call in a character turn (ADR-011 §3): answered by the coordinator's own thread, which is
             # waiting on this very turn (NativeLane.wait). A refusal is her own to correct, not an error.

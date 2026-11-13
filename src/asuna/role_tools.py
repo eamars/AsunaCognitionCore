@@ -864,6 +864,17 @@ def aliases():
             'stay_silent': 'speak'}
 
 
+def session_aliases(scene_id):
+    """aliases() as one conversation applies them (ADR-129 D3): stay_silent runs as speak only where speak alone
+    speaks (channel_kinds.reply_parts); elsewhere, her local chat included, it is a tool the conversation does not
+    list."""
+    from . import channel_kinds
+    found = aliases()
+    if not channel_kinds.reply_parts(scene_id):
+        found.pop('stay_silent')
+    return found
+
+
 # Where only speak speaks, a turn that does not call it says nothing: a stay_silent call there (26 a week in groups,
 # refused by the Host, the turn then ending anyway) ends the turn and says so once (C2, 2026-10-21).
 SILENT_WHERE_SPEAK = '这里不调 speak 就是不说话，用不着 stay_silent；这回合到此结束。'
@@ -1549,8 +1560,11 @@ class RoleTools:
             can = ability(name, args)
             if gone:
                 raise Refused(_names.gone(gone), ['NAME_RETIRED'])
-            if can == 'stay_silent' and 'speak' in (ep.get('turn_tools') or ()) and can not in ep['turn_tools']:
-                replaced = True                   # where speak replaced it: silence as she meant (SILENT_WHERE_SPEAK)
+            if (can == 'stay_silent' and 'speak' in (ep.get('turn_tools') or ()) and can not in ep['turn_tools']
+                    and 'stay_silent' in session_aliases(ep['scene_id'])):
+                # Where speak replaced it: silence as she meant (SILENT_WHERE_SPEAK). Not in her local chat, where speak
+                # is offered beside body text (ADR-129 D3): there it is refused as any tool not listed.
+                replaced = True
             elif can not in (ep.get('turn_tools') or ()):
                 raise Refused(not_now(self.store, ep, can), ['NOT_NOW'])
             # Layer 3, the general checks: collected, none of them stops the others.

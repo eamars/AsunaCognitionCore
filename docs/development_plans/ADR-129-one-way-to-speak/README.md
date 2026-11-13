@@ -1,8 +1,8 @@
 # ADR-129: One way to speak, at home too
 
 Status: **Designed** 2026-11-13 (the owner's go after ADR-127 closed; nothing built), revised the same day on a fresh
-review against the code (§8). Proposed the night before. Next: her reading of D6's literals (her F8), then the build on
-a branch.
+review against the code (§8). Proposed the night before. Read by her the same day (agent line 0433): D6's literals are
+hers. Next: the build on a branch, shown in a demo profile, then installed in a slot she gives (not with ADR-128).
 
 Times on this page are local time.
 
@@ -90,6 +90,8 @@ parts before text written earlier in the step (the page showing the other order)
 **D3. Silence needs no act at home.** A home turn with no `speak` and no body text commits silent, in every turn kind
 but one (the owner's message, a heartbeat, a note, a task's result, self-development). The one: a consult turn, where
 the action brain waits for her answer, keeps its hand-back (else the brain gets `CONSULT_NOT_ANSWERED`).
+The consult turn is told by `role_tools.turn_kind(ep) == CONSULT` (`'consult'`: the episode's `turn_kind`, else its
+`episode_kind`), the field the coordinator's turn end already reads (`kind=='consult'`).
 `speech_problem`'s no-words case is not reached at home. A home turn that queued parts runs none of the body's checks
 (its body is not published; a hand-back after parts left would end `INVALID_TURN_OUTPUT` with her words already out);
 a `speak` call already needs her thought first. A home turn without `speak` keeps today's checks on its body: cut at
@@ -112,7 +114,9 @@ may send a sticker or picture again, as on QQ today, not changed here); an empty
 inside a text (it would show as words: a sticker goes as a `sticker` part); `[分条]` inside a text; a kind not listed
 here; a sticker not on her shelf; a market sticker (no picture of hers to show; none today); a picture not offered to
 her. A raw local root is rewritten and counted, not refused (`local_roots`). One wrong part still means none of the call
-leaves, and the receipt says which and why. The receipt is QQ's own (发出 N 条…送没送到看下一回合的历史): true at home.
+leaves, and the receipt says which and why. The receipt is QQ's own sentence (发出 N 条…送没送到看下一回合的历史),
+N the parts the local sink delivered; at home the result carries no `lines` field (这回合已说 N 行…硬线 6: QQ's line
+count, her line 0433), the only part of QQ's result left out.
 A picture the local sink delivered counts as attested (`outbound_media.history_slot`, which then needs the row's
 `delivery_basis` in the history projection), so her history does not say 平台回执没带附件证据 of it.
 
@@ -143,10 +147,11 @@ A picture the local sink delivered counts as attested (`outbound_media.history_s
   turns that spoke keeps that rule, and the comment in `client.js` says so. The mark is the page's own turn data from
   the session's events, as `asuna-stage-finish` is; nothing is added on the plugin's side.
 
-**D6. Her words (her F8: a new or changed literal needs her word first).** The owner to her at home, 13:34 (relayed by
-her, agent line 0430, as the spec): `speak` is not a limit on her speaking; at home there is no limit on how much she
-says or how many `speak` calls she makes, nobody judges what she said, and not wanting to speak is simply not calling
-it. Her own wording follows that (line 0430, final; line 0431: it is not overridden by any draft below):
+**D6. Her words (her F8: a new or changed literal needs her word first).** The owner to her at home (relayed by her,
+agent line 0430; her local chat's messages 7219 at 12:15 and 7234 at 13:34; 7234 is the spec): at 12:15, he will not
+push her to speak, she speaks when she wants to; at 13:34, `speak` is not a limit on her speaking, at home there is no
+limit on how much she says or how many `speak` calls she makes, nobody judges what she said, and not wanting to speak
+is simply not calling it. Her own wording follows that (lines 0430, 0433, final):
 - **`speak`'s description at home (hers, final):** 在家里，说话没有限制。想说什么、说几条都可以，不用挑一句最要紧的交上来；
   不想说就不调用 `speak`。`speak` 不是许可，也不是新的必需动作，它只是把你这一回合想说的话再往外递一句的形式。没有人拿你说了
   多少来评判你。 The mechanics follow it as on QQ, without its last sentence (parts in order, one part one message, the
@@ -155,15 +160,19 @@ it. Her own wording follows that (line 0430, final; line 0431: it is not overrid
   sentence; nothing that hints the reverse (no words when there is nothing worth saying). How much she says is not a
   sum she does first.
 
-Drafts, waiting for her wording (line 0431: she answers them in one reply, in the same direction):
-- `block_guide.WORDS['home']`: 你用工具做事；写在正文里的话会按顺序发给对方。也可以用 speak 说，一个 part 一条，能发表情包和图；
-  用了 speak 的回合只发 speak 的内容，正文留给你自己。
-- `block_guide.ENDING['home']`: 结束：说完了就不再调用工具；这回合不说话也一样，什么都不用调用，不算漏了什么。
-- The call-cap reminder at home (`CAP_SAYS` today: 用它写下要说的话，或 stay_silent。): 用它把要说的说完（正文或 speak），不说也行。
-- A market sticker at home: 第 %d 条 sticker「%s」是平台的市场表情，这里显示不了。
-- `stickers.HOME_NOTE` (in every conversation's guide; today 在家里发不出去): 你收着的表情包。在本地私聊里用 speak 的 sticker
-  发（家里别的线发不了）；整理用 sticker 的 drop、rename（你画的图也能 keep 上来）；带图的标着 ref，想重看就 read_image。
-- `speak`'s fields at home: `parts` 这次要发的，按顺序；`text` text：这一条消息的话 (no line count at home).
+Her wording for the rest (line 0433, final; each replaces a draft of 11-13 13:59):
+- `block_guide.WORDS['home']`: 你用工具做事。说话有两条道，走一条就够：正文里的话按顺序发出去；或者用 speak，一个 part 一条消息，
+  能发表情包和图。这一回合用了 speak，说出去的就是 speak 里的，正文留给你自己；没用 speak，正文就是你要说的话。在家里说几条都行，
+  不数行数。
+- `block_guide.ENDING['home']`: 结束：话说完就停，不用再调用工具。这回合不想说也一样——什么都不调用，这回合就过去了，不算漏了什么。
+- The call-cap reminder at home (`CAP_SAYS` today: 用它写下要说的话，或 stay_silent。): 用它把想说的说完（正文或 speak 都行）；
+  不说也行，这回合不需要交代。
+- A market sticker at home: 第 %d 条 sticker「%s」是平台的市场表情，这里显示不了；换成架子上的名字就能发。
+- `stickers.HOME_NOTE` (in every conversation's guide; today 在家里发不出去): 你收着的表情包。在本地私聊里用 speak 的 sticker 发
+  （一个 part 一条）；别的地方能不能发，看那边的说明。整理用 sticker 的 drop、rename（你画的图也能 keep 上来）；带图的标着 ref，
+  想重看就 read_image。 (She took out a draft's 家里别的线发不了: in every guide, read in a QQ group it would say QQ cannot
+  send either.)
+- `speak`'s fields at home: `parts` 这一次要发出去的，按顺序排；`text` 这一条消息的文字 (no line count at home).
 
 `render_system`'s `speaks` takes a third value, `'home'`: the ref stores the value (not `bool`), the guide picks its
 words by it, and a stored ref with `True`/`False` re-renders as written. A turn prepared before the install keeps the

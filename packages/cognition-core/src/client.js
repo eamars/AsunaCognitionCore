@@ -609,6 +609,50 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }];
   }
 
+  /** What she said through speak (ADR-129 D5(a)): a node of its own for each call whose result is not an error,
+   * placed in the session at the call as the repair note is, so it shows whether DSH folds the Turn's process or not.
+   * It carries the call as recorded and the operation of its step's stage (the `asuna-stage` context), by which the
+   * page asks what the call sent. And the Turn's mark `asuna-spoke`: a speak result in it that is not an error
+   * (D5(c) folds her body text by it). */
+  const SPEAK_NAMES = ['speak', 'reply'];
+  function speakDefinitions() {
+    const isCall = event => event.type === 'tool/call' && SPEAK_NAMES.includes(event.data?.name);
+    const isResult = event => event.type === 'tool/result' && typeof event.data?.message?.toolCallId === 'string';
+    const resulted = (state, event) => isResult(event) && state && event.data.message.toolCallId === state.callId
+      ? { ...state, done: true, ok: event.data.message.isError !== true } : state;
+    const spoke = (state, event) => {
+      if (!state) return state;
+      if (isCall(event)) return { ...state, calls: [...state.calls, event.data.callId] };
+      if (isResult(event) && !state.spoke && state.calls.includes(event.data.message.toolCallId)
+          && event.data.message.isError !== true) return { ...state, spoke: true };
+      return state;
+    };
+    return [{ kind: 'asuna-speak', target: 'chat',
+      match: event => isCall(event) && typeof event.data.callId === 'string' ? { id: event.data.callId, role: 'start' }
+        : isResult(event) ? { id: event.data.message.toolCallId, role: 'update' } : null,
+      start: (_context, match, reader) => {
+        const event = match.event, stage = reader.previous('asuna-stage')?.state;
+        const here = stage && stage.turn === event.data.turn && stage.step === event.data.step;
+        return { seq: event.seq, callId: event.data.callId, args: parseArgs(event.data.arguments),
+          operation: here ? stage.stage?.operation : undefined, done: false, ok: false };
+      },
+      update: (context, match) => isCall(match.event) ? context.state : resulted(context.state, match.event),
+      buildViewNode: context => !context.state?.done || !context.state.ok ? null : ({ key: context.key,
+        kind: 'asuna-speak', id: context.id, target: 'chat', anchorSeq: context.state.seq, location: { kind: 'session' },
+        visibility: 'visible', data: context.state }),
+    }, { kind: 'asuna-spoke',
+      match: event => (isCall(event) || isResult(event)) && Number.isInteger(event.data.turn)
+        ? { id: String(event.data.turn), role: isCall(event) ? 'start' : 'update' } : null,
+      start: (_context, match) => spoke({ turn: match.event.data.turn, calls: [], spoke: false }, match.event),
+      update: (context, match) => spoke(context.state, match.event),
+      buildLocationData: (context, scope, previous) => {
+        if (scope !== 'turn' || !context.state?.spoke) return null;
+        if (previous?.value === true) return previous;
+        return { kind: 'turn', turn: context.state.turn, key: 'asuna-spoke', value: true };
+      },
+    }];
+  }
+
   // ── the two brains' thread (ADR-011 §7.1) ───────────────────────────
   /** One node per block of a task thread (collab.js: an entry after the conversation moved on starts a new
    * block where it happens), from her session's `asuna/collab` entries, anchored at the block's first. */
@@ -1154,14 +1198,17 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       name: 'conversation.composer.dock', id: 'asuna-brain-meters', order: 100 }, BrainMeters));
 
     // Add only Asuna business attribution in public extension points. Never
-    // shadow assistant-step or replace the native Chat grouping definition.
+    // take assistant-step over or replace the native Chat grouping definition:
+    // the one delegate of assistant-step (AssistantStep, ADR-129 D5(c)) changes
+    // only her Turns that spoke through speak and hands DSH's shipped component
+    // everything else (ADR-007).
     ctx.effect(() => {
       const style = document.createElement('style');
       style.textContent = brainPalette;
       document.head.append(style);
       return () => style.remove();
     });
-    for (const definition of [...stageDefinitions(), ...collabDefinitions(), ...repairDefinitions()])
+    for (const definition of [...stageDefinitions(), ...collabDefinitions(), ...repairDefinitions(), ...speakDefinitions()])
       ctx.effect(() => ctx.uiConversation.events.register(definition));
 
     // ── the collaboration thread ──────────────────────────────────────
@@ -1357,6 +1404,104 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
       name: 'conversation.chat.node', key: 'asuna-repair', locale: NS }, RepairNote));
 
+    // ── what she said through speak (ADR-129 D5(a), (b)) ──────────────
+    // What a call sent and each part's picture, fetched once per page (DSH remounts nodes as the list scrolls); a
+    // failed fetch is kept as null, so the node draws her call's own words.
+    const sentCache = new Map(), pictureCache = new Map();
+    const remembered = (cache, key, fetch) => {
+      if (!cache.has(key)) cache.set(key, fetch().catch(() => null));
+      return cache.get(key);
+    };
+    function useFetched(cache, key, fetch) {
+      const [value, setValue] = React.useState(undefined);
+      React.useEffect(() => {
+        if (!key) return undefined;
+        let live = true;
+        remembered(cache, key, fetch).then(found => { if (live) setValue(found); });
+        return () => { live = false; };
+      }, [key]);
+      return key ? value : null;
+    }
+    const spokenStyle = { padding: '4px 0', minWidth: 0 };
+    function SpokenWords({ parts, t }) {
+      return h('div', { style: spokenStyle },
+        h(MarkdownText, { text: parts.map(part => partLine(t, part)).join('\n\n'), labels: markdownLabels(t) }));
+    }
+    function SpokenPicture({ request, part, t }) {
+      const key = [request.session_id, request.operation, request.call_id, part.index].join('|');
+      const found = useFetched(pictureCache, key, () => rpc('speakPicture', { request: { ...request, index: part.index } }));
+      if (!found?.data || typeof found.media_type !== 'string') return h(SpokenWords, { parts: [part], t });
+      return h('img', { src: 'data:' + found.media_type + ';base64,' + found.data, alt: partLine(t, part),
+        style: { display: 'block', maxWidth: 240, maxHeight: 240, borderRadius: 8, margin: '4px 0' } });
+    }
+    function SpeakNode(props) {
+      const t = props.t, data = props.node.data;
+      const words = toolRow('speak', data.args).parts;
+      const request = data.operation && props.sessionId
+        ? { session_id: props.sessionId, operation: data.operation, call_id: data.callId } : null;
+      const sent = useFetched(sentCache, request && [request.session_id, request.operation, request.call_id].join('|'),
+        () => rpc('speakParts', { request }));
+      // While loading, on any error, and for a call with no link to its rows: her call's own words, as today.
+      if (!Array.isArray(sent?.parts)) return words.length ? h(SpokenWords, { parts: words, t }) : null;
+      if (!sent.parts.length) return null;
+      // A part that is not words or a picture (a poke, a reaction) reads as her call wrote it: the same kind's part in
+      // the same order; its row's text is the program's words to her.
+      const seen = {};
+      const asWritten = part => {
+        const nth = seen[part.kind] = (seen[part.kind] ?? -1) + 1;
+        return words.filter(written => written.kind === part.kind)[nth] ?? { kind: 'text', text: part.text };
+      };
+      return h('div', null, ...sent.parts.map(part => part.picture
+        ? h(SpokenPicture, { key: part.index, request, part, t })
+        : h(SpokenWords, { key: part.index, t, parts: [part.kind === 'text' ? { kind: 'text', text: part.text }
+          : ['sticker', 'picture'].includes(part.kind) ? part : asWritten(part)] })));
+    }
+    ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+      name: 'conversation.chat.node', key: 'asuna-speak', locale: NS }, SpeakNode));
+
+    // ── her body text in a Turn that spoke through speak, folded (ADR-129 D5(c)) ──
+    // A delegate of DSH's assistant-step node, registered as the turn-trigger and max-tokens notices are: in a Turn
+    // with a speak result that is not an error (`asuna-spoke`), the step's text blocks are drawn closed under a row
+    // of their own; DSH's shipped component draws the rest (its reasoning, tool-call and image blocks), and draws
+    // every other step as it is. It forwards the shipped entry's inject and declares its child slots.
+    const shippedAssistant = () => ctx.slots.entries('conversation.chat.node')
+      .find(entry => entry.options.key === 'assistant-step' && entry.component !== AssistantStep);
+    // Its row reads her own first sentence (no label of the program's), and opens to the whole text, as her thought's.
+    function Mumble({ text }) {
+      const [open, setOpen] = React.useState(false);
+      const Icon = primitives[TOOL_ICONS.think] ?? primitives.IconInfoOutlineRegular;
+      return h(DisclosureRow, { icon: h(Icon), previewChevron: false,
+        title: h('span', { style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          fontSize: 'var(--dsh-content-font-size-secondary, 13px)' } }, firstSentence(text) || text),
+        keepContentWhenOpen: true, open, expandable: true, expandOnRowClick: true, onToggle: () => setOpen(value => !value) },
+        open && h('div', { style: { padding: '4px 0 4px calc(22px + var(--dsh-content-font-delta, 0px))', minWidth: 0 } },
+          h(MarkdownText, { text, labels: markdownLabels(t), variant: 'compact' })));
+    }
+    function AssistantStep(props) {
+      const spoke = props.useTurnData?.('asuna-spoke') === true;
+      const shipped = shippedAssistant();
+      if (!shipped) return null;
+      const blocks = props.node?.data?.blocks ?? [];
+      const text = blocks.filter(block => block.kind === 'text').map(block => block.text ?? '').join('\n\n').trim();
+      if (!spoke || !text) return h(shipped.component, props);
+      const rest = { ...props, node: { ...props.node, data: { ...props.node.data,
+        blocks: blocks.filter(block => block.kind !== 'text') } } };
+      return h(React.Fragment, null, h(shipped.component, rest), props.groupPart !== 'reasoning' && h(Mumble, { text }));
+    }
+    ctx.slots.inject('conversation.chat.node', () => {
+      try {
+        return ctx.slots.register({ name: 'conversation.chat.node', key: 'assistant-step', priority: -1, locale: 'chat',
+          children: { 'conversation.chat.reasoning.body': { kind: 'single', scope: 'session' },
+            'conversation.chat.message.images': { kind: 'single', scope: 'session' } },
+          inject: sessionId => shippedAssistant()?.inject?.(sessionId) ?? {} }, AssistantStep);
+      } catch (error) {
+        // DSH refused the delegate: its own assistant rows stay as they are, and the rest of this page starts.
+        const text = 'Asuna: the assistant-step delegate was not registered: ' + (error?.message ?? error);
+        if (ctx.logger?.warn) ctx.logger.warn(text); else console.error(text);
+        return () => {};
+      }
+    });
+
     // ── where a conversation is: the local workspace's name, a group or a DM ──
     // DSH stores workspace titles as plain text: the client gives the words it shows, again on a switch.
     let titledIn;
@@ -1461,7 +1606,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }, ActiveStage));
 
   }
-  return { apply, isolatedRow, toolRow, stageDefinitions, collabDefinitions, repairDefinitions, threadOf, stageIdentity, stageLabel, subscribeInputPolicies, DICTIONARY,
+  return { apply, isolatedRow, toolRow, stageDefinitions, collabDefinitions, repairDefinitions, speakDefinitions, threadOf, stageIdentity, stageLabel, subscribeInputPolicies, DICTIONARY,
     inject: ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'connection', 'remote', 'remote.settings', 'remote.credentials', 'configForms',
       'sessions', 'conversation', 'uiConversation', 'uiWorkspace'] };
 } });

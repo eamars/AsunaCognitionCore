@@ -310,7 +310,7 @@ How long stored media bytes live: every kind of stored picture has an owner or a
 - def `returns_to` — Where an edit of someone else's picture may go (owner 2026-10-15): back to the conversation the picture came from, the scope key its source id names (edit_register).
 - def `edit_register` — generate_image's registration for an edit of someone else's picture: kept in this task's scope (so the task reads it back), marked to go back to the conversation the picture came from, and not counted as hers.
 - def `edits_back_to` — Edits of other people's pictures that go back to this conversation, newest first (as produced_images).
-- def `target_allowed` — 收件方向：任何一个私聊（路由 dm），或她在的任何一个群。主人的私聊能发这一边读得到的图；群和别人的 私聊只发她自己做的图（own_only，owner 2026-10-06：家往外不担心，发什么由她判断）。
+- def `target_allowed` — 收件方向：任何一个私聊（路由 dm），或她在的任何一个群。主人的私聊能发这一边读得到的图；群和别人的 私聊只发她自己做的图（own_only，owner 2026-10-06：家往外不担心，发什么由她判断）。她的本地私聊也收：图走本地 sink，网页画出来（ADR-129 D1）。
 - def `own_only` — Only pictures she made go here: a group, or anyone's chat that is not the owner's.
 - def `row_own_only` — own_only for a stored outbound row, recomputed from the row's own scene and route.
 - def `produced_images` — 她做出来的图（不分场景），新的在前；群聊回合里只列这些。

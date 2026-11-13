@@ -1321,11 +1321,11 @@ def the_local_scene_keeps_its_own_images_readable():
     listed = outbound_media.image_artifacts(store, LOCAL_SCOPE)
     assert art['artifact_id'] in [item['artifact_id'] for item in listed], listed
     assert not any(item.get('from_linked_scene') for item in listed), '本场景的图不该标成别人的入口'
-    # 本机这一轮的回复不走通道，所以没有「可发图」清单——图仍然登记着、读得到
+    # ADR-129 D1: her local chat takes speak's picture part (delivered to the local sink), so its pictures are offered
     local = store.db.scenes.find_one({'_id': LOCAL_SCENE})
-    assert outbound_media.offer(store, store.config, local, 'owner_private', 'owner-p') is None
-    assert outbound_media.target_allowed(store.config, local, 'owner_private')[1] == \
-        'scene_has_no_channel_route'
+    offered = outbound_media.offer(store, store.config, local, 'owner_private', 'owner-p')
+    assert art['artifact_id'] in [item['artifact_id'] for item in (offered or {}).get('items') or []], offered
+    assert outbound_media.target_allowed(store.config, local, 'owner_private') == (True, '')
     # 同一份字节再导一次是两份 artifact（不去重），清单里新的在前（Windows 时钟粒度粗：隔开一点，免得两次同一时刻）
     import time
     time.sleep(0.05)
@@ -1333,7 +1333,7 @@ def the_local_scene_keeps_its_own_images_readable():
     assert again['artifact_id'] != art['artifact_id']
     order = [item['artifact_id'] for item in outbound_media.image_artifacts(store, LOCAL_SCOPE)]
     assert order[0] == again['artifact_id'], order
-    return True, '本机场景里图仍登记可读；本机这一轮没有可发图清单（那条路没有通道）'
+    return True, '本机场景里图仍登记可读，也列在可发图清单里（ADR-129：本地私聊用 speak 的 picture 发）'
 
 
 def run_all():

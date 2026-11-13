@@ -106,6 +106,7 @@ Role system prompt rendering (ADR-009 §8.1).
 - def `common_text`
 - def `readable_sections` — Sections of a document visible to a session class, public before owner-private.
 - def `compose`
+- def `speaks_key` — How a conversation's words leave, as its guide and its system ref name it: True where only speak speaks, 'home' in her local chat (speak beside body text, ADR-129 D6), False where body text is speech.
 - def `role_text` — Her role system prompt: the persona render, then how a turn goes and what its blocks are (block_guide.py, ADR-056).
 - def `largest` — (estimated tokens, text) of the largest render over the places of raw documents, as written: what seed_estimate measures of a package's own seeds.
 - def `model_and_policy`
@@ -172,6 +173,8 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `thinking_mode` — ADR-099: her 心里话 come from the model's own thinking (`thoughts: thinking`), not from her think call; nothing then asks her to write her thoughts out.
 - def `asks_thought` — Whether this turn asks for her thought before anything else (ADR-099): `think` is in the turn's tools.
 - class `Refused` — A call she can correct herself: the message says, in words for her, what to do instead.
+- def `local_chat` — Whether this is her local Web chat (`config.chat.scene_id`).
+- def `speak_parts` — The parts speak takes in this conversation (ADR-129 D1): its channel kind's REPLY_PARTS, or HOME_PARTS in her local chat; empty where speak is not offered.
 - def `tools` — The tool specs her brain is shown (tiered memory's, ADR-062); `delegate` takes a tier when the owner configured the action brain's 高 (ADR-075).
 - def `tiered_delegate`
 - def `developer_ask` — message_developer's arguments as ask's: a question to the developer's line, a wake as an hour's patience and a note as until it is answered (ADR-061).
@@ -191,6 +194,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `conversation_class` — The class of a conversation's turns: the local chat's is its person's, a private chat's the person it is with, a group's its own.
 - def `placed_spec` — One tool's spec as a conversation of this class and kind shows it, `listed` being what it lists (abilities).
 - def `aliases` — Old name -> the tool it runs as (the plugin lets one through where that tool is listed).
+- def `session_aliases` — aliases() as one conversation applies them (ADR-129 D3): stay_silent runs as speak only where speak alone speaks (channel_kinds.reply_parts); elsewhere, her local chat included, it is a tool the conversation does not list.
 - def `turn_kind`
 - def `exposed` — What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the conversation's list (abilities).
 - def `writes_at_home` — Whether a turn writes her own documents at home, as _turn_rules and exposed give write_document: a home turn, not the program's consult or time-up, not opened by a note from outside (`first`, the note that opened it), with write_document no
@@ -205,6 +209,9 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `words` — A refusal in words for her (ADR-060): what is wrong and what to do.
 - def `called` — Whether this turn is someone calling her: an addressed group line, or a person's line in a one-to-one conversation (home, a private chat, a line); never a heartbeat, a visit, a note or a task's hand-back.
 - def `spoken` — (lines, texts) of this turn's text parts that left or may still leave, read from its outbox each time: a failure the platform reports after the call gives its lines back too.
+- def `operation_episode` — The episode a stage's operation names (Coordinator._operation: `<episode>:TURN…`).
+- def `sent_parts` — What one speak call sent, for the page (ADR-129 D5(b)): each part that left, in order, with its kind, its text as it left, a sticker's name and whether it carries a picture; None when nothing links the call to its rows.
+- def `sent_picture` — The picture of one part a speak call sent (ADR-129 D5(b)): {media_type, data (base64)}, through the fence the adapters' byte endpoint uses (outbound_media.serve); Denied for anything else.
 - def `chat_lines` — How many lines a text part is in a chat (owner 2026-10-14: in online chat a line break is another message): each line with words counts, a blank line does not, a fenced code block counts as one.
 - def `reply_receipt` — What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); and each sent line's own number in the conversation (ADR-079, ADR-108 D2).
 - class `RoleTools` — Runs one tool call for one episode, on the coordinator's thread (it holds the coordinator lock).
@@ -386,6 +393,7 @@ The reasons behind her actions: what she did after each thought, and the thought
 
 - def `shown` — A thought as it comes back: hers within `chars`; one taken from the model's thinking (ADR-099) marked as another model's summary and cut at THINKING_CHARS, or within `chars` when she recalls it.
 - def `then` — What she did after this thought, in her words, one line each; [] when it was not followed by anything.
+- def `said` — What a turn said, for its readers (ADR-129 D7): its published body text, or, when that is empty and the turn queued speak parts, the texts of those parts as they left (a sticker as its row's own [表情包:name]; a picture adds nothing).
 - def `consequential` — Whether a call has consequences (the one table: _action).
 - def `before_thought` — Whether a call may run before her first thought in the turn: a read on the closed list READS.
 - def `newest` — The id of her newest thought in this turn (before the call at seq `before`), or None; a refused thought left no memory.

@@ -20,6 +20,8 @@ The action brain's preset plugin: each action agent gets the executor's system p
 
 The `asunaApi` remote service the Web page calls: worker and model status, the settings card's save and apply, her memory pages, brain context views, session kinds and titles, and persona jobs.
 
+- def `sessionEvents` — A session's events, live or persisted (collab.js reads an action session the same way).
+- def `speakCallIn` — Whether these events hold her speak call `callId` with a result that is not an error, made in a step of the stage `operation` (its `asuna/stage` mark, index.js): the page asks only about a call of this session (ADR-129 D5(b)).
 - class `AsunaApi`
   - `status`
   - `memory`
@@ -30,6 +32,9 @@ The `asunaApi` remote service the Web page calls: worker and model status, the s
   - `uiLanguage` — The browser's language for the names the program gives (ui-language.js); unsupported means English.
   - `workspaceTitles` — Workspace titles in the viewer's language: DSH stores them as plain text, so the client says which words it shows (client.js).
   - `brainPresets` — The presets her two brains run in: her persona's and the action brain's.
+  - `speakParts` — ADR-129 D5(b): what one speak call of hers sent, for its node on the page: the parts as they left.
+  - `speakPicture` — ADR-129 D5(b): one part's picture of that call (base64), one part per request.
+  - `speakCall` — The fence of both: a character session's own speak call, found with its result in that session's events.
   - `personaSources`
   - `personaJob` — Owner operations from the settings card: dry-run / run a persona job, export documents.
   - `personaExport`

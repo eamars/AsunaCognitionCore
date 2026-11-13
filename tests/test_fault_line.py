@@ -184,15 +184,26 @@ def test_a_consult_that_never_answers_is_ended_told_and_answered_with_its_failur
     made = task_records.get(home, task['_id'])
     task = home.put('tasks', {**made, 'state': 'RUNNING', 'fencing_token': 1, 'lease_expires_at': 4e9},
                     expected=made['revision'], stream=made['_id'])
-    coordinator.character = FakeLane(home, [FakeTurn([], '还在想')] * 3)
+    # Her calls spent (the 24th refused, the 25th runs and ends the turn), then she tries to answer: each answer is
+    # past the hard line and runs nothing.
+    spent = [('think', {'thought': '想第%d遍。' % n}) for n in range(1, role_tools.CALLS_HARD + 2)]
+    answer = ('task', {'do': 'answer', 'answer': '用第一个。'})
+    coordinator.character = FakeLane(home, [FakeTurn(spent, ''), FakeTurn([answer], ''), FakeTurn([answer], '')])
     with pytest.raises(ProtocolFailure) as caught:
         coordinator.consult(task, 'call-1', {'question': '用哪一个？'})
     assert str(caught.value).startswith('CONSULT_NOT_ANSWERED: INVALID_TURN_OUTPUT: ')
     consult = list(home.collection('episodes').find({'episode_kind': 'consult'}))
     assert [ep['state'] for ep in consult] == ['FAILED_PROTOCOL']
+    calls = sorted(consult[0]['tool_calls'].values(), key=lambda call: call['seq'])
+    assert [(call['tool'], call.get('code')) for call in calls[-2:]] == [('task', role_tools.CALLS_OVER)] * 2
+    assert all('result' not in call for call in calls[-2:]) and not consult[0].get('answer')
     assert len(failed_rows(home, consult[0]['_id'])) == 1
     assert [(n['source']['cause'], n.get('count')) for n in notes(home)] == [('INVALID_TURN_OUTPUT', 1)]
-    assert scene_records.get(home, LOCAL)['fault']['kind'] == 'consult'
+    fault = scene_records.get(home, LOCAL)['fault']
+    assert (fault['kind'], fault.get('capped')) == ('consult', True)
+    from asuna import schedule_rules
+    said = faults.her_line(home, scene_records.get(home, LOCAL), schedule_rules.her_zone(home.config))
+    assert '（工具次数已经用完，收尾过不去）' in said and 'task' not in said     # an answer that never ran is no deed
     # The same call asked again runs no turn under the same key: it is answered with the failure again.
     coordinator.character = FakeLane(home, [])
     with pytest.raises(ProtocolFailure):

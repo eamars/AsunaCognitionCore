@@ -396,8 +396,10 @@ her local Web chat only (`role_tools.local_chat`); her agent lines and QQ keep t
 
 Built to D8-D12 and reviewed against the code. What the code decided, beyond the page:
 - **A cut answer.** A local turn with no `speak`, nothing written and its answer cut at the length limit is handed back
-  with `answers.CUT` alone (上一段到了长度上限还没写完。): the old wrapper said the rewrite would be sent, which is no
-  longer true. Her word on the sentence is asked. On QQ such a cut still commits silent, as before (D9: QQ unchanged).
+  with her sentence (agent line 0452) 上一段到了长度上限还没写完。要说的话用 `speak` 说。 (`answers.CUT_SPEAK`): the old
+  wrapper said the rewrite would be sent, no longer true. A consult turn cut so keeps the first sentence alone (it
+  answers through its task). On QQ such a cut still commits silent, as before (D9: QQ unchanged). The think-first
+  gate (`THINK_FIRST`) is unchanged everywhere.
 - **What she was told before.** QQ's carry of unsent words is unchanged: her next turn says it only if the turn's last
   attempt still had body text.
 - **Agent lines, like QQ.** Lines that arrive while her turn runs are taken by that turn (`_absorb`), and there is no

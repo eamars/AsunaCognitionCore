@@ -346,7 +346,7 @@ class Coordinator:
                 elif speech and not attempt:
                     issue,note='unsent',UNSENT_NOTE%speech          # whole, as written: she may reply it as is
                 elif not qq and not ep.get('reply') and not speech and value.finish_reason=='length':
-                    issue,note='length',answers.CUT
+                    issue,note='length',answers.CUT_SPEAK
                 if issue is None or (attempt==answers.REPAIRS and issue!='length'):
                     if speech:
                         scene_records.hold_unsent(self.store, ep['scene_id'], {

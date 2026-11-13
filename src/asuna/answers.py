@@ -98,6 +98,9 @@ def json_list(text):
 # only what cannot be right (owner, 2026-10-14): an answer cut at its length limit, and a consult turn that did not
 # answer the action brain.
 CUT = '上一段到了长度上限还没写完。'
+# A conversation turn cut that way is handed back with its way on (her words, agent line 0452); a consult turn answers
+# through its task, so it keeps CUT alone.
+CUT_SPEAK = CUT + '要说的话用 `speak` 说。'
 
 
 def consult_problem(value):

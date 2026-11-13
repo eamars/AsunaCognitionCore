@@ -115,7 +115,7 @@ def test_a_local_turn_cut_at_its_length_limit_is_not_her_silence(home):
     ep, lane = run(home, FakeTurn([THINK], '', finish_reason='length'),
                    FakeTurn([('speak', {'parts': [{'kind': 'text', 'text': '刚才没说完，回来啦'}]})], ''))
     assert [row['problem'] for row in audits(home, ep, 'turn.rejected')] == ['length']
-    assert lane.calls[1]['messages'][-1]['content'] == answers.CUT
+    assert lane.calls[1]['messages'][-1]['content'] == answers.CUT_SPEAK
     assert ep['state'] == 'COMMITTED' and [row['text'] for row in outbound(home, ep)] == ['刚才没说完，回来啦']
     # Parts already left: the turn commits whatever its finish.
     ep, lane = run(home, FakeTurn([THINK, ('speak', {'parts': [{'kind': 'text', 'text': '回来啦'}]})], '',

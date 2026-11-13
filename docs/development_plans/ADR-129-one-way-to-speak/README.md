@@ -283,28 +283,6 @@ Every conversation (D8). Local: her local Web chat, the agent lines (joined from
 QQ-kind: unchanged but for `stay_silent`'s alias and the page (D5). The first part, installed 11-13 17:50, was her
 local chat only.
 
-## 9. The build (2026-11-13 evening)
-
-Built to D8-D12 and reviewed against the code. What the code decided, beyond the page:
-- **A cut answer.** A local turn with no `speak`, nothing written and its answer cut at the length limit is handed back
-  with `answers.CUT` alone (上一段到了长度上限还没写完。): the old wrapper said the rewrite would be sent, which is no
-  longer true. Her word on the sentence is asked. On QQ such a cut still commits silent, as before (D9: QQ unchanged).
-- **What she was told before.** QQ's carry of unsent words is unchanged: her next turn says it only if the turn's last
-  attempt still had body text.
-- **Agent lines, like QQ.** Lines that arrive while her turn runs are taken by that turn (`_absorb`), and there is no
-  typing pace; the pace is QQ's alone.
-- **Stickers on an agent line.** A sticker's outbox item carries no name, so `poll` prints `[sticker] <path>`.
-- **A sticker she sent and later dropped.** The page's fetch went through the sending fence, which asks her shelf, so
-  a dropped sticker would have drawn as words: `outbound_media.kept_sticker` now passes a sticker row already
-  delivered (it is shown again, never sent again; D10).
-- **Older episodes.** `_publish` stays only to finish an episode an older version left in `SPEAK_ACCEPTED`. Its exit:
-  removed once a reading after the install finds no such episode.
-- **Left for a follow-up.** `attach_image` and `await_answer` are listed nowhere now; their code stays until removed on
-  its own. Her skill `asuna-image-generation-and-display` still names `stay_silent` and `attach_image`: hers to fix.
-- Literals retired with no replacement (told to her): the `stay_silent` description, `CALLED_LEFT`, the reasons line
-  所以我没说话, the plugin's `written` and refused-silence lines, `NAMES_NOTE`, `speech_problem`'s no-words and
-  no-thought sentences; the `tools_off` refusal lost the word `stay_silent`.
-
 ## 5. Failure modes
 
 | Case | What happens | Why it holds |
@@ -414,4 +392,24 @@ publication stays selected), the QQ adapter back by itself. The id changed from 
 was pushed through the gate, the branch rebased onto it and the suite run again (green). Scope, as she asked it: home is
 her local Web chat only (`role_tools.local_chat`); her agent lines and QQ keep their own words and tools.
 
+## 9. The build (2026-11-13 evening)
 
+Built to D8-D12 and reviewed against the code. What the code decided, beyond the page:
+- **A cut answer.** A local turn with no `speak`, nothing written and its answer cut at the length limit is handed back
+  with `answers.CUT` alone (上一段到了长度上限还没写完。): the old wrapper said the rewrite would be sent, which is no
+  longer true. Her word on the sentence is asked. On QQ such a cut still commits silent, as before (D9: QQ unchanged).
+- **What she was told before.** QQ's carry of unsent words is unchanged: her next turn says it only if the turn's last
+  attempt still had body text.
+- **Agent lines, like QQ.** Lines that arrive while her turn runs are taken by that turn (`_absorb`), and there is no
+  typing pace; the pace is QQ's alone.
+- **Stickers on an agent line.** A sticker's outbox item carries no name, so `poll` prints `[sticker] <path>`.
+- **A sticker she sent and later dropped.** The page's fetch went through the sending fence, which asks her shelf, so
+  a dropped sticker would have drawn as words: `outbound_media.kept_sticker` now passes a sticker row already
+  delivered (it is shown again, never sent again; D10).
+- **Older episodes.** `_publish` stays only to finish an episode an older version left in `SPEAK_ACCEPTED`. Its exit:
+  removed once a reading after the install finds no such episode.
+- **Left for a follow-up.** `attach_image` and `await_answer` are listed nowhere now; their code stays until removed on
+  its own. Her skill `asuna-image-generation-and-display` still names `stay_silent` and `attach_image`: hers to fix.
+- Literals retired with no replacement (told to her): the `stay_silent` description, `CALLED_LEFT`, the reasons line
+  所以我没说话, the plugin's `written` and refused-silence lines, `NAMES_NOTE`, `speech_problem`'s no-words and
+  no-thought sentences; the `tools_off` refusal lost the word `stay_silent`.

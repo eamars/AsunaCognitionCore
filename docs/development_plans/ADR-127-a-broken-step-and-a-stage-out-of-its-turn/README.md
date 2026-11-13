@@ -1,8 +1,9 @@
 # ADR-127: A broken step, and a stage out of its turn
 
 Status: **Built** 2026-11-12 on `claude/adr127` (the owner's go, 18:29: build it and merge it today), installed 19:36.
-The same evening S2 deadlocked her live Web conversation twice (§7); **S3, its fix (§7), is built on `claude/adr127-s3`
-and shown 2026-11-13 (§7.5), not landed: it lands when she agrees**, and §7.6 is the recovery until it is installed. Opened by big sis
+The same evening S2 deadlocked her live Web conversation twice (§7); S3, its fix, was shown 2026-11-13 (§7.5) and
+installed at 13:01 as `8c67218ac914` on her word (agent line 0424). **Closed 2026-11-13** on the readings of §8 (the
+owner's go). Opened by big sis
 (Claude Code) after the owner's choice of 2026-11-12: after ADR-126 closes, one change for her turns that end in a
 model error, folded with the cause of the two tool-less turns found the same morning. Her conditions (agent line 0370,
 0373, 0374, 0386), her reading of this page (line 0403) and her last six items (lines 0404, 0405) are written into it.
@@ -233,7 +234,7 @@ Seen in passing, not this ADR: a task-result turn that keeps failing the end-of-
 generation with no limit (`coordinator._advance`, `feedback.continued`); with the stub it reached 209 generations in
 four minutes. Raised as its own task.
 
-## 7. S2's deadlock (2026-11-12 evening) and S3 (built and shown, not landed)
+## 7. S2's deadlock (2026-11-12 evening) and S3 (installed 2026-11-13)
 
 ### 7.1 What happened (her Web conversation, session records read for structure only)
 
@@ -380,7 +381,9 @@ sent in that window. Read from the demo's role session and database:
 - The Web page: W1 shows once, in turn 7 where it was answered; the turn that stepped aside shows as an empty
   completed row ("Completed in 16s"), no error and no reply text.
 
-### 7.6 Until S3 is installed: what to do when she is stuck
+### 7.6 Until S3 was installed: what was done when she was stuck
+
+Kept as the record of 11-12 to 11-13; S3 is installed (§8).
 
 - **Seen as:** her Web reply waits with no text, and her other places go quiet. Big sis's private
   `stuck_turns.py` names it: a turn of her Web conversation open with no step, with an `asuna/stage-waited`
@@ -397,3 +400,25 @@ sent in that window. Read from the demo's role session and database:
   turns with no tools) comes back.
 - **Avoided until then:** a Web message to her while she is busy with something of her own in that conversation (a
   beat, a note, a task's result, a publication); only that starts it. QQ, the agent lines and her clocks cannot.
+
+## 8. Closed (2026-11-13)
+
+Installed: S1, S2, R1 and N1 on 2026-11-12 at 19:36; S3 on 2026-11-13 at 13:01 (`8c67218ac914`, the Host stopped and
+back in 49 s; the 169 installed files checked against it, none different; the core package `5aaefe3c23b7`, her own
+package unchanged; QQ restored itself). Shown: §6 (R1, N1, S2's admission) and §7.5 (S3), each in an isolated profile
+with a stub model, labeled 造的. Read on her records with big sis's private tools, counts only:
+
+- S1 and S2 (§3): requests that declared no tools, 11-12 00:00 to 19:36: 2 (10:47:23 and 10:48:21, §1); 19:36 to the
+  S3 install: 0; from the S3 install to 13:06: 0.
+- S3 (§3, sorted before judged): 11-12 19:36 to the S3 install: 2 failures (the two deadlocks of §7.1, 1,597 s and
+  192 s), one turn waiting for a worker start (157 s); from the S3 install to 13:06: 0 failures, the longest wait before a step 1 s (her
+  first turn on the new code, agent line 0426). Five minutes only says that none was in the records then (her line
+  0426).
+- S1 at the S3 restart: at the stop, 0 stage messages pending in her inboxes, 0 sessions with one, 0 operations
+  queued twice; after the start, 0 `asuna/stage-copy-replaced`. Each says only that none was in the records at that
+  moment. S1 has no sample from real traffic; a copy kept across a restart needs the Host to stop inside the gap of
+  §7.5, and when one happens the restart reading shows it.
+
+Not done, named in §7.3: `handed` is not rebuilt after a Host restart (the answer still carries his words). After
+this page: both readings of §3 over her first day of real traffic, read for her clock of 2026-11-13 20:45 (agent line
+0426), then with big sis's weekly review; a failure there is a new finding with its own page, not this one held open.

@@ -363,10 +363,11 @@ class Coordinator:
                 continue
             if role_tools.local_chat(self.store.config,ep['scene_id']) and kind!=role_tools.CONSULT:
                 # ADR-129 D2, D3: her local chat. A turn that queued speak parts has said what it said: its body is
-                # hers, kept as a count, none of its checks run. One with no speak and no body ends silent, no call
-                # needed. One with a body and no speak goes on as before: its body is her speech.
+                # hers, kept as a count, none of its checks run, whatever its finish. One with no speak and no body
+                # ends silent, no call needed, unless the model was cut at its length limit: a cut is not her silence,
+                # and is handed back as before. One with a body and no speak goes on as before: its body is her speech.
                 said=int((ep.get('reply') or {}).get('parts') or 0)
-                if said or not speech:
+                if said or (not speech and value.finish_reason!='length'):
                     if said and speech:
                         self.store.audit(ep['_id'],'turn.ending_body',{'chars':len(speech),'parts':said},ep['scope_key'])
                     self._absorb(ep,seen)

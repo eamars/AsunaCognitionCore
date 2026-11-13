@@ -66,6 +66,18 @@ def test_a_home_turn_with_no_speak_and_no_words_ends_silent_and_a_consult_is_sti
         '你还没回答行动脑：用 task 的 answer 写下回答；这里写的正文不会发给任何人。']
 
 
+def test_a_home_turn_cut_at_its_length_limit_is_not_her_silence(home):
+    # No speak and no body, cut: handed back as before, and what she writes then is her speech.
+    ep, lane = run(home, FakeTurn([THINK], '', finish_reason='length'), FakeTurn([], '刚才没说完，回来啦'))
+    assert [row['problem'] for row in audits(home, ep, 'turn.rejected')] == ['上一段到了长度上限还没写完。']
+    assert ep['state'] == 'COMMITTED' and [row['text'] for row in outbound(home, ep)] == ['刚才没说完，回来啦']
+    # Parts already left: the turn commits whatever its finish.
+    ep, lane = run(home, FakeTurn([THINK, ('speak', {'parts': [{'kind': 'text', 'text': '回来啦'}]})], '',
+                                  finish_reason='length'), key='e2')
+    assert ep['state'] == 'COMMITTED' and not audits(home, ep, 'turn.rejected') and len(lane.calls) == 1
+    assert [row['text'] for row in outbound(home, ep)] == ['回来啦']
+
+
 def test_home_speak_has_no_line_rules_and_still_refuses_a_text_sent_twice(home):
     seven = '\n'.join('第%d行' % n for n in range(1, 8))
     ep, lane = run(home, FakeTurn([THINK, ('speak', {'parts': [{'kind': 'text', 'text': seven},

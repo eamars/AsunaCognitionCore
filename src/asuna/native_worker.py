@@ -1453,6 +1453,17 @@ class BusinessWorker:
             record = (session_records.get(self.app.store, args['session_id'], native=True)
                       if (args or {}).get('session_id') else None)
             return session_aliases(record['scene_id']) if record else aliases()
+        if method in ('speak.parts', 'speak.picture'):
+            # ADR-129 D5(b): what one speak call of her role sessions sent, for the page; only the rows its own record
+            # names, in the session's conversation (the plugin found the call in that session's events).
+            from .role_tools import sent_parts, sent_picture
+            record = self.session(args['session_id'])
+            if record['lane'] != 'character':
+                raise Denied('ROLE_SESSION_REQUIRED')
+            if method == 'speak.parts':
+                return sent_parts(self.app.store, record['scene_id'], args.get('operation'), args.get('call_id'))
+            return sent_picture(self.app.store, record['scene_id'], args.get('operation'), args.get('call_id'),
+                                args.get('index'))
         if method == 'role_tool':
             # Her call in a character turn (ADR-011 §3): answered by the coordinator's own thread, which is
             # waiting on this very turn (NativeLane.wait). A refusal is her own to correct, not an error.

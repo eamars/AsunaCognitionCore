@@ -1439,6 +1439,67 @@ def spoken(store, ep):
     return sum(chat_lines(text) for text in words), [' '.join(text.split()) for text in words]
 
 
+def operation_episode(operation):
+    """The episode a stage's operation names (Coordinator._operation: `<episode>:TURN…`)."""
+    return str(operation or '').split(':', 1)[0]
+
+
+def _call_rows(store, scene_id, operation, call_id):
+    """(index, row) of each row one speak call queued, as the call's own record names them (ADR-129 D5(b)), in its
+    order; [] for a call that is not a speak call of that episode in that conversation, or names none (a call made
+    before the link existed)."""
+    ep_id = operation_episode(operation)
+    ep = episode_records.get(store, ep_id, fields=['scene_id', 'tool_calls']) if ep_id else None
+    if not ep or ep.get('scene_id') != scene_id or not isinstance(call_id, str):
+        return []
+    call = (ep.get('tool_calls') or {}).get(call_id)
+    if not isinstance(call, dict) or call.get('tool') != 'speak' or 'result' not in call:
+        return []
+    out = []
+    for index, key in enumerate(call.get('parts') or ()):
+        row = message_records.get(store, key) if isinstance(key, str) else None
+        if row and row.get('episode_id') == ep_id and row.get('reply_part') and row.get('direction') == 'outbound':
+            out.append((index, row))
+    return out
+
+
+def sent_parts(store, scene_id, operation, call_id):
+    """What one speak call sent, for the page (ADR-129 D5(b)): each part that left, in order, with its kind, its text as
+    it left, a sticker's name and whether it carries a picture; None when nothing links the call to its rows."""
+    from . import outbound_media
+    rows = _call_rows(store, scene_id, operation, call_id)
+    if not rows:
+        return None
+    parts = []
+    for index, row in rows:
+        if row.get('delivery_state') in NEVER_LEFT:
+            continue
+        sticker = row.get('sticker') if isinstance(row.get('sticker'), dict) else None
+        kind = ('sticker' if sticker else 'picture' if row.get('attachment') else 'file' if row.get('file')
+                else (row.get('action') or {}).get('kind') or 'text')
+        parts.append({'index': index, 'kind': kind, 'text': row.get('text') or '',
+                      **({'name': sticker.get('name')} if sticker else {}),
+                      'picture': bool(outbound_media.declared(row))})
+    return {'parts': parts}
+
+
+def sent_picture(store, scene_id, operation, call_id, index):
+    """The picture of one part a speak call sent (ADR-129 D5(b)): {media_type, data (base64)}, through the fence the
+    adapters' byte endpoint uses (outbound_media.serve); Denied for anything else."""
+    import base64
+    from . import outbound_media
+    from .blobs import BlobStore
+    for at, row in _call_rows(store, scene_id, operation, call_id):
+        if at != index or row.get('delivery_state') in NEVER_LEFT:
+            continue
+        declared = outbound_media.declared(row)
+        if not declared:
+            break
+        data, media_type = outbound_media.serve(store, BlobStore(store), row, declared)
+        return {'media_type': media_type, 'data': base64.b64encode(data).decode('ascii')}
+    raise Denied('SPEAK_PICTURE_NOT_SENT')
+
+
 def chat_lines(text):
     """How many lines a text part is in a chat (owner 2026-10-14: in online chat a line break is another message):
     each line with words counts, a blank line does not, a fenced code block counts as one."""
@@ -1589,6 +1650,7 @@ class RoleTools:
             else:
                 self.over = {}                        # one note per field, however often the field is checked
                 self.__dict__.pop('report', None)
+                self.__dict__.pop('parts', None)
                 self.collecting = 'tool_' + can.replace('.', '_') in self.SPLIT
                 if not self.collecting:
                     self.checkpoint()                 # a handler that is not split runs on what the general layers passed
@@ -1641,6 +1703,7 @@ class RoleTools:
         # A picture's bytes go back to the turn only: the record keeps the receipt (the bytes are in the blob store).
         self._record(ep_id, call_id, name, args, conclude=conclude, called_as=called_as, olds=olds,
                      report=self.__dict__.pop('report', None), repairs=self.repairs,
+                     parts=self.__dict__.pop('parts', None),
                      result=picture_receipt(result) if name == _READ_IMAGE['name'] else result)
         return self._local(ep, result), conclude
 
@@ -1680,7 +1743,7 @@ class RoleTools:
         return local_time.for_model(result, local_time.her_zone(self.store))
 
     def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False, called_as=None, code=None,
-                olds=None, report=None, codes=None, repairs=None):
+                olds=None, report=None, codes=None, repairs=None, parts=None):
         c = self.coordinator
         ep = episode_records.get(self.store, ep_id)
         calls = dict(ep.get('tool_calls') or {})
@@ -1694,7 +1757,9 @@ class RoleTools:
                           **({'refused': refused} if refused else {'result': result}),
                           **({'code': code} if code else {}),
                           **({'reason_ref': reason} if reason else {}),
-                          **({'conclude': True} if conclude else {})}
+                          **({'conclude': True} if conclude else {}),
+                          # ADR-129 D5(b): the rows a speak call queued, read only by the page (never shown to her).
+                          **({'parts': list(parts)} if parts else {})}
         c._update(ep, tool_calls=calls)
         self.store.audit(ep_id, 'role_tool', {'call_id': call_id, 'tool': name, 'args': _audited_args(name, args),
                                               **({'called_as': called_as} if called_as else {}),

@@ -1,7 +1,8 @@
 # ADR-129: One way to speak, at home too
 
-Status: **Designed** 2026-11-13 (the owner's go after ADR-127 closed; nothing built). Proposed the night before. Next:
-a fresh review against the code, then her reading of §3's literals (her F8), then the build on a branch.
+Status: **Designed** 2026-11-13 (the owner's go after ADR-127 closed; nothing built), revised the same day on a fresh
+review against the code (§8). Proposed the night before. Next: her reading of D6's literals (her F8), then the build on
+a branch.
 
 Times on this page are local time.
 
@@ -33,9 +34,12 @@ and pictures, and folds the body text of a turn that called `speak`.
   (`REPLY_THINK_NOTE`). At home (her Web chat, the agent lines, the peer line) body text is speech, published as one
   message at the turn's end (`coordinator._publish`), and silence is the `stay_silent` tool.
 - **One switch does two jobs.** `channel_kinds.reply_parts(scene)` non-empty both offers `speak` with those parts and
-  makes body text unsent. It is read at 12 sites (`role_tools` `abilities` and `_turn_rules`, `speak_kinds`, the call-cap reminder,
-  `tool_stay_silent`, `turn_parts`; `coordinator` turn end and `publish_queued`; `context` guide and speak block;
-  `outbound_media` offer note; `outbound_files`).
+  makes body text unsent. It is read at 10 sites (`role_tools` `abilities`, `_turn_rules`, `speak_kinds`, the call-cap
+  reminder, `tool_stay_silent`; `coordinator`'s turn end; `context`'s guide and speak block; `outbound_media`'s offer
+  note; `outbound_files`). Four more gates read whether `speak` is listed: the `stay_silent` → `speak` alias
+  (`role_tools` call path), line-taking (`coordinator._absorb`), and in the plugin the alias guard and the
+  `stay_silent` result's `written` line. Recovery (`publish_queued`) reads the row flag `reply_part`, not the scene, so
+  it already works at home.
 - **She already reaches for `speak` at home.** 33 calls in her home Web session since 10-29, every one refused as not
   listed: 2 on 10-29, 1 on 11-03, 5 on 11-04, 1 on 11-05, 21 on 11-08, 1 on 11-09, 2 on 11-11.
 - **Silence at home is rising, in runs.** Turns of her Web chat started by the owner's message and ended with
@@ -48,9 +52,14 @@ and pictures, and folds the body text of a turn that called `speak`.
 - **No stickers and no pictures leave at home.** `stickers.sends` needs a platform scene, so `sticker` there only tidies
   her shelf; `outbound_media.target_allowed` refuses a scene with no channel route, so `attach_image` is never listed
   at home. Her shelf: 59 stickers, all custom (each has a picture of hers); 0 market (read 11-13).
-- **The page.** `client.js` draws a `speak` call as DSH's disclosure row 说话 · its first text, closed (DSH's
-  `useDisclosure` is always initially closed), its parts as text: a sticker as ［表情包：name］, a picture as ［图片］. The
-  home page shows no picture of hers at all today.
+- **The page.** `client.js` draws a `speak` call as DSH's disclosure row 说话 · its first text, closed, its parts as
+  text: a sticker as ［表情包：name］, a picture as ［图片］. The home page shows no picture of hers at all today. In every
+  view but verbose, DSH folds a finished turn's process: every row before its answer step (the last step with text and
+  no tool call; none when the turn ends on a tool call). A `speak` row is inside that fold. The program's repair note is
+  placed in the session, not the turn, for this reason, and so shows when the turn is folded.
+- **Two readers of what she said read only body text.** The affect appraisal (`affect.py`, `ep['speech']`) and the
+  reasons line 所以我说了「…」 (`reasons.py`) read `ep['speech']`; a turn that spoke only through `speak` gives them
+  nothing (on QQ today too).
 - **"Her Web chat" is one scene.** Every Web input goes to the local chat scene (`config.chat.scene_id`) or to a joined
   agent line (`native_worker` `input`); the agent lines and the peer line have their own scenes with a channel.
 
@@ -71,39 +80,54 @@ one meaning, "here only `speak` speaks" (QQ). At home `stay_silent` and `attach_
 home parts (no platform behind them). A `picture` part needs the local chat allowed as a picture target:
 `target_allowed` answers yes for it (delivered to the local sink, shown on the page by D5).
 
-**D2. One speech per turn.** At home, a turn that queued any `speak` part has said what it said: its body text is
-hers, not published, counted as on QQ (`turn.ending_body`). A turn that did not call `speak` publishes its body text
+**D2. One speech per turn.** At home, a turn that queued any `speak` part (`ep['reply']['parts']`, kept across the
+turn's generations) has said what it said: its body text is hers, not published, counted as on QQ
+(`turn.ending_body`). A turn that did not call `speak` publishes its body text
 as today (`_publish`, key `<ep>:speak:0`). The two never meet in one turn, so the two defects the census found cannot
 happen: `_publish`'s `<ep>:speak:0` taking the first part's key (its text silently lost), and her history ordering
 parts before text written earlier in the step (the page showing the other order).
 
-**D3. Silence needs no act at home.** A home turn with no `speak` and no body text commits silent, every turn kind
-(the owner's message, a heartbeat, a note, a task's result, self-development). `speech_problem`'s no-words case is not
-reached at home. Kept, as on QQ: a turn cut at the length limit (its text is not whole), a missing thought where her
-mode asks for one, a sticker token in body text she does not have. `stay_silent` is not listed at home and nothing is
-added for a call of it (owner: no design for her habit): the `stay_silent` → `speak` alias (`aliases()`, its sentence
-`SILENT_WHERE_SPEAK` true only where `speak` alone speaks) applies only where `reply_parts` is non-empty, so at home a
-call is refused as any unlisted tool is.
+**D3. Silence needs no act at home.** A home turn with no `speak` and no body text commits silent, in every turn kind
+but one (the owner's message, a heartbeat, a note, a task's result, self-development). The one: a consult turn, where
+the action brain waits for her answer, keeps its hand-back (else the brain gets `CONSULT_NOT_ANSWERED`).
+`speech_problem`'s no-words case is not reached at home. A home turn that queued parts runs none of the body's checks
+(its body is not published; a hand-back after parts left would end `INVALID_TURN_OUTPUT` with her words already out);
+a `speak` call already needs her thought first. A home turn without `speak` keeps today's checks on its body: cut at
+the length limit, a missing thought, a sticker or face token in it. `stay_silent` is not listed at home and nothing is
+added for a call of it (owner: no design for her habit). The alias `stay_silent` → `speak` (`aliases()`; its sentence
+`SILENT_WHERE_SPEAK` is true only where `speak` alone speaks) is gated on `reply_parts` in both places that apply it,
+the worker's call path and the plugin's guard, so at home a call is refused as any unlisted tool is.
 
 **D4. No rules on `speak` at home.** Not applied at home: the line limit (`SPEAK_HARD_LINES`, `speak.max_messages`,
-and the receipt's line count), a text already sent this turn, a `#number` line label (`LINE_NUMBER`), a person's
-number (`people.numbers`), the typing pace (already none: `not_before` only for a scene with a channel). Still checked,
-because they are about what can be shown or what may leave: an empty part; a sticker written inside a text (it would
-show as words: it goes as a `sticker` part); `[分条]` inside a text (a text is one message); a raw local root
-(`local_roots`, privacy); a sticker not on her shelf; a market sticker (no picture of hers to show; none today); a
-picture not offered to her. One wrong part still means none of the call leaves, and the receipt says which and why
-(as on QQ). The receipt is QQ's own (发出 N 条…送没送到看下一回合的历史): true at home, no new words.
+the receipt's line count), a `#number` line label (`LINE_NUMBER`), a person's number (`people.numbers`, and `force`
+that overrides it), the typing pace (already none: `not_before` only for a scene with a channel). Not listed at home
+(the spec per scene, as `speak_spec` already varies it): `quote` (not carried there), `wait` and `patience` (groups
+only), `force`. Still checked: a text already sent in this turn (the one guard against her words leaving twice when a
+turn is run again as a new generation without its lane receipt: after a Host stop, after her session is carried on,
+after a failed task-result turn is queued again; it is not a manner rule); an empty part; a sticker or face token
+inside a text (it would show as words: a sticker goes as a `sticker` part); `[分条]` inside a text; a kind not listed
+here; a sticker not on her shelf; a market sticker (no picture of hers to show; none today); a picture not offered to
+her. A raw local root is rewritten and counted, not refused (`local_roots`). One wrong part still means none of the call
+leaves, and the receipt says which and why. The receipt is QQ's own (发出 N 条…送没送到看下一回合的历史): true at home.
+A picture the local sink delivered counts as attested (`outbound_media.history_slot`), so her history does not say
+平台回执没带附件证据 of it.
 
-**D5. The page** (everywhere `speak` appears, the owner's choice), through DSH's own facilities:
-- (a) The 说话 row is open by default: our row reads DSH's disclosure state inverted (closed only after a click).
-- (b) Its `sticker` and `picture` parts are drawn as pictures under the row, through DSH's attachments and its
-  `tool.call.images` slot (`loadImage`). The bytes never reach her model: the plugin asks the worker for them (`page`
-  in the call's envelope), saves them as DSH attachments, returns the refs in the tool's `output.presentationMeta`
-  (stored as the result's `meta`, page-only), and `asunaRender` leaves `page` out of what the model reads. A part
-  whose picture cannot be saved is drawn as its words, as today.
-- (c) In a turn that called `speak`, the body text is drawn folded like her thoughts: the plugin marks the turn
-  (turn data, as `asuna-stage-finish` is today) and our override of DSH's `assistant-step` node draws that text in
-  DSH's own reasoning disclosure.
+**D5. The page** (everywhere `speak` appears, the owner's choice), with DSH's own extension points:
+- (a) **What she said through `speak` is a node of its own**, placed in the session at the call (as the repair note
+  is), so it shows whether the turn's process is folded or open: the call's parts in order, a text as her speech, a
+  sticker or a picture as the picture. Drawn for a call whose result is not an error. The 说话 row inside the process
+  stays as it is.
+- (b) **Pictures are fetched by the page, never carried in a tool result.** The node asks Asuna's API (the page's
+  existing `asunaApi` RPC) for the pictures of that call, by session and call id; the worker reads that call's queued
+  outbound rows and returns their attachments' bytes, only for a call of her role sessions, only the parts it sent.
+  Nothing new is written into her session or her episode, so no picture can reach her model; animated stickers stay
+  animated (DSH's attachment store would flatten them). A picture that cannot be fetched is drawn as its words.
+- (c) **Her mumble is folded.** In a turn with a `speak` result that is not an error, the text of her steps is drawn
+  closed under a row of its own (DSH's `DisclosureRow`), through a delegate of DSH's `assistant-step` node registered
+  as the turn-trigger and max-tokens notices are (priority -1, DSH's shipped component for everything else). ADR-007
+  forbids taking `assistant-step` over globally (every DSH assistant becoming her); a delegate that changes only her
+  turns that spoke keeps that rule, and the comment in `client.js` says so. The mark is the page's own turn data from
+  the session's events, as `asuna-stage-finish` is; nothing is added on the plugin's side.
 
 **D6. Her words (her F8: a new or changed literal needs her word first).** Drafts, for her reading:
 - `block_guide.WORDS['home']`: 你用工具做事；写在正文里的话会按顺序发给对方。也可以用 speak 说，一个 part 一条，能发表情包和图；
@@ -111,7 +135,17 @@ picture not offered to her. One wrong part still means none of the call leaves, 
 - `block_guide.ENDING['home']`: 结束：说完了就不再调用工具；这回合不说话也一样，什么都不用调用，不算漏了什么。
 - The call-cap reminder at home (`CAP_SAYS` today: 用它写下要说的话，或 stay_silent。): 用它把要说的说完（正文或 speak），不说也行。
 - A market sticker at home: 第 %d 条 sticker「%s」是平台的市场表情，这里显示不了。
-`render_system`'s `speaks` takes a third value (`'home'`); a stored ref with `True`/`False` re-renders as written.
+- `stickers.HOME_NOTE` (in every conversation's guide; today 在家里发不出去): 你收着的表情包。在家里用 speak 的 sticker 发；
+  整理用 sticker 的 drop、rename（你画的图也能 keep 上来）；带图的标着 ref，想重看就 read_image。
+- `speak`'s fields at home: `parts` 这次要发的，按顺序；`text` text：这一条消息的话 (no line count at home).
+
+`render_system`'s `speaks` takes a third value, `'home'`: the ref stores the value (not `bool`), the guide picks its
+words by it, and a stored ref with `True`/`False` re-renders as written. A turn prepared before the install keeps the
+guide it was prepared with.
+
+**D7. What she said, for its readers.** One helper gives a turn's words: its published body text, or the texts of the
+`speak` parts it sent. The affect appraisal and the reasons line read it, so a turn that spoke through `speak` is not
+read as saying nothing. It also closes the same gap on QQ (wider than the ask, one helper; the owner told).
 
 ## 4. Where
 
@@ -123,39 +157,57 @@ page (D5).
 
 | Case | What happens | Why it holds |
 |---|---|---|
-| Body text and `speak` in one turn | Parts are her speech; text kept as a count, folded on the page | D2: never both published |
+| Body text and `speak` in one turn | Parts are her speech; the body is kept as a count and drawn folded | D2, D5(c) |
 | No words, no `speak` | Silent commit, no hand-back | D3 |
-| Host stops after parts were queued | Recovery publishes the READY parts (`recover` → `publish_queued`, local sink) | existing path |
+| A consult turn with no answer | Handed back, as today | D3's one exception |
+| Parts left, then the body is cut at the length limit | Commits; the body is hers, not checked | D3 |
+| The turn run again as a new generation (Host stop, session carried on, a task result queued again) | A part already sent is refused as sent; `ep['reply']` carries the count, so D2 still holds | D4 keeps the repeat check |
+| Host stops after parts were queued | Recovery publishes the READY parts through the local sink | `publish_queued` reads `reply_part` |
 | Turn fails after parts were shown | Her next line (ADR-127 N1) counts them as sent | `faults.lost` reads delivered rows |
-| Turn replayed from its lane receipt | Parts are not queued again; the turn commits as recorded | `speak` ran once; replay reads the receipt |
-| Newer worker, older plugin | No `page` asked, no bytes returned; the page draws words | D5(b) asks first |
-| Newer plugin, older worker | No `page` in the reply; the page draws words | the plugin reads it only if present |
-| A picture cannot become an attachment | The part is drawn as its words; she is not told (it left) | D5(b) |
-| Sticker erased or not on the shelf | Refused with its reason; none of the call leaves | existing checks |
-| A large picture | Same inline path as `read_image`'s bytes; bounded by the blob store's limit | existing path |
-| `stay_silent` called at home | Refused as unlisted; the turn goes on | D3, owner: no habit design |
-| Her cache | Each home session's tools and system prompt change once at the install: one miss | known cost |
-| QQ | `reply_parts` and every QQ rule unchanged; only the page changes (D5) | D1 keeps its meaning |
-| Agent lines, peer line | Own scenes with a channel: no `speak_parts`, unchanged | D1 is the local scene only |
+| Turn replayed from its lane receipt | Parts are not queued again | the receipt is replayed, not the tools |
+| `speak` refused, then she writes body text | The body is published and not folded | D2 reads queued parts; D5 marks non-error results |
+| `stay_silent` called at home | Refused as unlisted; the turn goes on | D3: the alias is gated in worker and plugin |
+| Plugin and worker at different versions | An old page never asks for pictures; a new page asking an old worker draws words | D5(b) is read-only and separate |
+| A picture cannot be fetched | Drawn as its words; she is not told (it left) | D5(b) |
+| A sticker or picture asked for by the page | Served only for a call of her role sessions and the parts it sent | D5(b)'s fence |
+| Animated sticker | Stays animated on the page | D5(b) does not use DSH's attachment store |
+| A finished turn folded by DSH | Her `speak` node stays visible | D5(a) is placed in the session |
+| A turn prepared before the install | Keeps the guide it was prepared with (says `stay_silent`) | system refs re-render as written; one turn |
+| Her cache | Each home session's tools and system prompt change once at the install; `HOME_NOTE` changes every conversation's guide once | known cost, one restart |
+| QQ | Every QQ rule unchanged; the page changes (D5) and D7 reads its parts too | D1 keeps `reply_parts`' meaning |
+| Agent lines, peer line | Own scenes with a channel: unchanged | D1 is the local scene only |
 | Line-taking (`_absorb`) | Home lines carry no channel receipt: nothing absorbed | `stageView` `seen_inputs` |
-| ADR-127 S3 (a turn steps aside, messages return) | Independent of how a turn speaks | different layer |
-| Consult and task-time turns | Their own toolboxes return before `speak` is added | `role_tools` returns early |
+| ADR-127 S3 | Independent of how a turn speaks | different layer |
+| Consult and task-time toolboxes | Return before `speak` is added | `_turn_rules` |
 
 ## 6. Tests (only where a failure would be silent)
 
 - A home turn that calls `speak`: its parts reach the outbound history in order; its body text is not published and is
-  counted (`turn.ending_body`).
-- A home turn with no `speak` and no words: committed silent, no hand-back, no failure.
-- A home `speak` that QQ would refuse (seven lines, a repeated text, a `#number`): it goes out.
-- The worker returns picture bytes only when the plugin asks (bytes reaching her model would be silent and costly).
+  counted.
+- A home turn with no `speak` and no words commits silent with no hand-back; a home consult turn with no answer is
+  still handed back.
+- A home `speak` that QQ would refuse (seven lines, a `#number`) goes out; a text already sent in the turn is refused.
+- `stay_silent` at home is refused in the worker (not run as silence).
+- The page's picture call serves only the parts of a call of her role sessions (a fence: anything else would be a
+  silent leak).
 
 ## 7. Shown, then installed. Closes when
 
 - **Shown** in an isolated demo profile with a stub model and the real worker, labeled 造的: a home turn with `speak`
-  (text, a sticker, a picture; the row open, the sticker and the picture drawn, its body text folded), one with body
-  text only, one with neither (silent, no hand-back), one with a long `speak` and a repeated line; the home toolbox
-  lists `speak` and not `stay_silent`; a QQ-kind scene's `speak` unchanged.
+  (text, an animated sticker, a picture; the node visible with the turn folded and open, the pictures drawn, its body
+  text folded), one with body text only (published, not folded), one with neither (silent, no hand-back), one with a
+  long `speak`; the home toolbox lists `speak` and not `stay_silent`; a QQ-kind scene's `speak` unchanged.
 - **Installed** in a restart slot she gives, after her reading of D6.
 - **Closed** when, over her own home use, there are no refused `speak` calls and no hand-backs for a missing answer at
   home, and her `speak` replies (a sticker among them) are seen on the page. How often she is silent is hers, not a
   closing condition.
+
+## 8. Review (2026-11-13)
+
+A fresh reviewer read the first design against the code. Fixed above: a `speak` row would have been hidden in DSH's
+fold of a finished turn (D5(a)); the alias would have accepted `stay_silent` at home with a false sentence (D3); the
+repeat check is the guard against re-sent words, not a manner rule (D4); the body checks would have handed back a turn
+whose parts had left, and a consult turn would have committed unanswered (D3); D6 missed `HOME_NOTE`, `speak`'s field
+wording and the picture note (D4, D6); a `'home'` guide would have been stored as `True`, QQ's (D6); picture bytes in a
+tool result would have been kept in her episode and session and flattened (D5(b)); the fold and D2 read different
+things (D5(c)); the census counted wrongly (§1); two readers of her words miss `speak` (D7).

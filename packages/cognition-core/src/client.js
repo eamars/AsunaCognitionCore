@@ -1410,19 +1410,27 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       name: 'conversation.chat.node', key: 'asuna-repair', locale: NS }, RepairNote));
 
     // ── what she said through speak (ADR-129 D5(a), (b)) ──────────────
-    // What a call sent and each part's picture, fetched once per page (DSH remounts nodes as the list scrolls); a
-    // failed fetch is kept as null, so the node draws her call's own words.
+    // What a call sent, and each picture by its bytes' hash (a sticker sent again is fetched once), fetched once per
+    // page (DSH remounts nodes as the list scrolls); each cache keeps its newest CACHED, the oldest dropped. A failed
+    // fetch is kept as null, so the node draws her call's own words; a picture's is not kept by its hash, which
+    // another call may still be served.
+    const CACHED = 64;
     const sentCache = new Map(), pictureCache = new Map();
-    const remembered = (cache, key, fetch) => {
-      if (!cache.has(key)) cache.set(key, fetch().catch(() => null));
+    const remembered = (cache, key, fetch, keepFailure = true) => {
+      if (!cache.has(key)) {
+        const found = fetch().catch(() => null);
+        cache.set(key, found);
+        if (cache.size > CACHED) cache.delete(cache.keys().next().value);
+        if (!keepFailure) found.then(value => { if (value === null && cache.get(key) === found) cache.delete(key); });
+      }
       return cache.get(key);
     };
-    function useFetched(cache, key, fetch) {
+    function useFetched(cache, key, fetch, keepFailure) {
       const [value, setValue] = React.useState(undefined);
       React.useEffect(() => {
         if (!key) return undefined;
         let live = true;
-        remembered(cache, key, fetch).then(found => { if (live) setValue(found); });
+        remembered(cache, key, fetch, keepFailure).then(found => { if (live) setValue(found); });
         return () => { live = false; };
       }, [key]);
       return key ? value : null;
@@ -1433,8 +1441,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         h(MarkdownText, { text: parts.map(part => partLine(t, part)).join('\n\n'), labels: markdownLabels(t) }));
     }
     function SpokenPicture({ request, part, t }) {
-      const key = [request.session_id, request.operation, request.call_id, part.index].join('|');
-      const found = useFetched(pictureCache, key, () => rpc('speakPicture', { request: { ...request, index: part.index } }));
+      const byHash = typeof part.sha256 === 'string' && part.sha256;
+      const key = byHash ? 'sha256:' + part.sha256 : [request.session_id, request.operation, request.call_id, part.index].join('|');
+      const found = useFetched(pictureCache, key, () => rpc('speakPicture', { request: { ...request, index: part.index } }),
+        !byHash);
       if (!found?.data || typeof found.media_type !== 'string') return h(SpokenWords, { parts: [part], t });
       return h('img', { src: 'data:' + found.media_type + ';base64,' + found.data, alt: partLine(t, part),
         style: { display: 'block', maxWidth: 240, maxHeight: 240, borderRadius: 8, margin: '4px 0' } });

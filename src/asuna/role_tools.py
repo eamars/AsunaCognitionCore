@@ -1465,7 +1465,8 @@ def _call_rows(store, scene_id, operation, call_id):
 
 def sent_parts(store, scene_id, operation, call_id):
     """What one speak call sent, for the page (ADR-129 D5(b)): each part that left, in order, with its kind, its text as
-    it left, a sticker's name and whether it carries a picture; None when nothing links the call to its rows."""
+    it left, a sticker's name and whether it carries a picture (and that picture's sha256); None when nothing links the
+    call to its rows."""
     from . import outbound_media
     rows = _call_rows(store, scene_id, operation, call_id)
     if not rows:
@@ -1477,9 +1478,11 @@ def sent_parts(store, scene_id, operation, call_id):
         sticker = row.get('sticker') if isinstance(row.get('sticker'), dict) else None
         kind = ('sticker' if sticker else 'picture' if row.get('attachment') else 'file' if row.get('file')
                 else (row.get('action') or {}).get('kind') or 'text')
+        picture = outbound_media.declared(row)
         parts.append({'index': index, 'kind': kind, 'text': row.get('text') or '',
                       **({'name': sticker.get('name')} if sticker else {}),
-                      'picture': bool(outbound_media.declared(row))})
+                      # the page keeps a picture by its bytes' hash: a sticker sent again is fetched once
+                      'picture': bool(picture), **({'sha256': picture['sha256']} if picture else {})})
     return {'parts': parts}
 
 

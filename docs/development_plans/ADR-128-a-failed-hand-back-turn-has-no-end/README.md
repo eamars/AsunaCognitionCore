@@ -1,8 +1,9 @@
 # ADR-128: A turn that fails its check: a hand-back with no end, and no one told
 
-Status: **Designed** 2026-11-13; proposed 2026-11-12 by big sis (Claude Code). Nothing built. Designed against
-`main` at `c287d051eaba` (ADR-127 installed); read again 2026-11-14 against `main` at `8fd48818d844` (ADR-129 installed
-2026-11-13 20:12 as `816e825ea84f`, and closed), and every line number and count on this page is from that reading.
+Status: **Built and shown** 2026-11-14 (§9), not yet installed; designed 2026-11-13, proposed 2026-11-12 by big sis
+(Claude Code). Designed against `main` at `c287d051eaba` (ADR-127 installed); read again 2026-11-14 against `main` at
+`8fd48818d844` (ADR-129 installed 2026-11-13 20:12 as `816e825ea84f`, and closed): every line number and count in
+§1-§8 is from that reading.
 The owner's decisions of 2026-11-12, relayed by the ADR-127 session: the whole class is in scope (D3), and this is a
 plan only. Read by her on 2026-11-13 after ADR-127 closed (agent line 0433, 0435, 0436): D1 and D3 agreed, D2's words
 hers (§3). The owner, 2026-11-13: write it now; built only after ADR-129 is fully deployed. The owner, 2026-11-14: go
@@ -102,13 +103,16 @@ reaches `_turn` by one of two paths, and neither reports a `ProtocolFailure`:
 | `_advance` (`coordinator.py:586-626`), from the queue loop, `recover()` and `feedback` | external, presence, settlement, visit, note, scheduled, self_development, task_feedback | `FAILED_PROTOCOL` and a `phase.failed` row; no note, no line |
 | `_task_turn` (`coordinator.py:193-241`), from `consult` and `time_up` | consult, task_time | the exception leaves `_turn` and the episode stays `TURN`; `consult` hands the error to the action brain, `time_up` audits `task.time_up_failed`; no note, no line, and the episode never says it failed |
 
-**On her real data** (read-only counts, no content, 2026-11-14): 0 `feedback.continued` rows ever; 1,987
+**On her real data** (read-only counts, no content, 2026-11-14; audit rows of these kinds are kept 30 days, so
+the audit counts cover 2026-10-14 on): 0 `feedback.continued` rows in the audit kept; 1,987
 `task_feedback` episodes, of which 1,963 `COMMITTED`, 20 `WAITING_TASK`, 3 `FAILED_RUNTIME`, 1 `FAILED_PROTOCOL`. The
 one `FAILED_PROTOCOL` carries a code from before ADR-011 (`INVALID_STAGE_OUTPUT`) and its task is `CANCELLED` with
 `feedback_state: SUPPRESSED`: nothing is in flight. All 18 `FAILED_PROTOCOL` episodes (16 external, 1
-self_development, 1 task_feedback) are the same as on 2026-11-12; one `phase.failed` row exists at all (2026-10-30, a
-`self_development` turn, `INVALID_TURN_OUTPUT`), and that turn was told to no one. No `turn.rejected` row has ever
-named `length`: since ADR-129 nothing of hers has failed the check. The design closes a class that is quiet on her
+self_development, 1 task_feedback) are the same as on 2026-11-12; the audit kept holds one `phase.failed` row
+(2026-10-30, a `self_development` turn, `INVALID_TURN_OUTPUT`), and that turn was told to no one. No `turn.rejected`
+row in the audit kept names `length`. From ADR-129's install (2026-11-13 20:12:17) to 2026-11-14 12:3x: 30
+`turn.rejected` rows, all `unsent` (a first attempt with words in the body, which then passed), none for a consult, and
+no `phase.failed`: nothing of hers failed the check in that window. The design closes a class that is quiet on her
 data and loud the first time it happens.
 
 ## 2. The broken invariants
@@ -242,7 +246,7 @@ unknown reason in `vision.py`'s `IMAGE_NOT_PULLABLE` (`vision.py:655`, 「原因
 | A full hand-back fails its check | Only that result; at most 60 s to the next sweep | The short version, with her line in its context |
 | The short one fails too | Nothing more is tried | `give_up_handback`: `UNDELIVERABLE`, developer told, her task list says so (as for `FAILED_RUNTIME` today) |
 | Her model server is down, or the Host stops | Unchanged: these come back as an `error`, `FAILED_RUNTIME` (or `INTERRUPTED` while stopping), outside this design | As today |
-| The report itself fails (the inbox or the scene write) | Nothing | `turn.fault_unreported` on the episode; the turn is still ended `FAILED_PROTOCOL`, the hand-back still goes down the ladder. This is the one case where a turn did not run and she is told nothing (her line 0435): the row is what a reader of the audit finds, and big sis's line watcher reports `turn.fault_unreported` and `schedule.fault_unreported` rows by day with a count (her line 0436) |
+| The report itself fails (the inbox or the scene write) | Nothing | `turn.fault_unreported` on the episode; the turn is still ended `FAILED_PROTOCOL`, the hand-back still goes down the ladder. This is the one case where a turn did not run and she is told nothing (her line 0435): the row is what a reader of the audit finds, and big sis's line watcher (`line_watch.py --new`, a tool of hers outside the repository, added with this build: §9) reports `turn.fault_unreported` and `schedule.fault_unreported` rows by day with a count (her line 0436) |
 | Something raises after a turn ended `FAILED_PROTOCOL` | Nothing | The exception path leaves the turn as it is (no second note); a hand-back's `missed` record is written; the watchdog gives the short version |
 | A consult fails its check | The action brain's call, as today | The action brain gets `CONSULT_NOT_ANSWERED` with the failure; her episode now says `FAILED_PROTOCOL`, and she is told |
 
@@ -266,6 +270,8 @@ still runs from `_turn`'s `finally` and reads nothing of the state.
   episode `FAILED_PROTOCOL`, one `phase.failed` row, one developer-inbox note per kind and cause that day (never a
   second for the same turn), and her line in her next turn in that conversation; a consult's action brain gets
   `CONSULT_NOT_ANSWERED`.
+- Her 0283: `vision.py`'s `IMAGE_NOT_PULLABLE` with no recorded reason says `faults.NO_CAUSE` (「原因没记下来」), never
+  「原因不明」.
 
 ## 6. Tests
 
@@ -299,5 +305,44 @@ stub that made ADR-127's 209 generations wrote no thought, which since ADR-129 f
 counted from the stub's own request log), and D3's local external and consult cases (the notes and the line read
 from the demo's database and the next turn's context). Her line is shown to her word for word as the demo's next turn
 read it, both words of D2, not "the line is there" (her ask, line 0433: ADR-127 taught that a word not seen landed is
-not landed). Then installed, and checked by content: the running worker's `faults.CAUSES` holds her word for
-`INVALID_TURN_OUTPUT`, and its `_turn` ends a failed check (the installed files read, not a date waited for).
+not landed). Then installed, and checked by content, the installed files read (not a date waited for): the running
+worker's `faults.CAUSES['INVALID_TURN_OUTPUT']` and `faults.CAPPED` hold her two words, its `_turn` ends a failed
+check, its `vision.py` has no 「原因不明」 and takes `NO_CAUSE`, and its `role_tools` records a call past the hard
+line as `CALLS_OVER` (§9).
+
+## 9. The build (2026-11-14)
+
+Built on `claude/adr128`; the suite green (Python 1034 passed, 13 skipped; JS 325 passed). What the code decided,
+beyond the page:
+- **Capped.** `turn_failed` writes `capped` when the cause is `INVALID_TURN_OUTPUT` and the failed turn holds more
+  calls than `CALLS_HARD`: the 25th ran and ended the turn, so every later call ended it at once. A turn of 24 calls
+  still had its last one.
+- **A call past the hard line ran nothing, and is now recorded so.** Found by the staging: such a call was recorded
+  with a `result`, like a call that ran, so her line about the capped consult said 「那一拍你做成了这些工具：task」 for an
+  answer that never ran. The same record misled every reader that takes a `result` for a deed: the resumed turn's
+  notice (`coordinator._notice`), the tools a place saw used (`places.py`), and the visit, idea and memory counts in
+  `role_tools`. It is now recorded as not run (`refused`, code `CALLS_OVER`, `role_tools.CALLS_OVER`); it still ends
+  the turn, and a replay of it ends the turn again. A count of her refusals by code sees the new code.
+- **The operator notice** for such a turn: 「[系统] 她这一回合没跑成，状态：FAILED_PROTOCOL。请展开本轮执行详情查看原始过程。」
+- **`line_watch.py`** (big sis's tool in `<data>/private/claude-tools/`, outside the repository): `--new` ends with
+  `unreported faults, last 7 days: …`, the `turn.fault_unreported` and `schedule.fault_unreported` rows by local day
+  with a count, or `UNCHECKED` when the database cannot be read (never taken for none). 2026-11-14: none.
+
+**Shown (2026-11-14 12:26-12:30, 造的).** An isolated profile and database (`asuna_v2_demo_adr128`, dropped after),
+the demo persona, one agent line (a local conversation), every route on a stub model, the Host started with no model
+key; installed from the build. Read from the demo's database, the stub's request log and the next turns' prepared
+contexts:
+- D3, a local turn: three deliveries, each cut at the length limit (`turn.rejected` `length` three times); the episode
+  `FAILED_PROTOCOL` with one `phase.failed`; one developer note (回话, `INVALID_TURN_OUTPUT`, count 1); the operator
+  notice above. The next turn on that line read, word for word:
+  「你在这里 11/14 12:26 那一回合没跑成：是程序出了错（收尾的检查三次没过），不是你做错了什么。那一拍你没说出口一个字、也没做成任何事——那件事到现在还是没做。这条已经记进开发者收件箱；开发者收件箱里还有 1 条没被读过。」
+- D3 and D2's second word, a consult: her turn sent a task, the stub action brain asked her, and her consult turn spent
+  25 calls, then tried `task answer` in both repairs (each `CALLS_OVER`, nothing ran). The episode `FAILED_PROTOCOL`
+  with one `phase.failed`, a developer note (回答行动脑), and the action brain's call answered
+  `CONSULT_NOT_ANSWERED: INVALID_TURN_OUTPUT: …`. The next turn there (the task's result) read, word for word:
+  「你在这里 11/14 12:27 那一回合没跑成：是程序出了错（工具次数已经用完，收尾过不去），不是你做错了什么。那一拍你没说出口一个字、也没做成任何事——那件事到现在还是没做。这条已经记进开发者收件箱；开发者收件箱里还有 2 条没被读过。」
+- D1: a task's result handed back to turns cut every time. The full episode `FAILED_PROTOCOL` (three deliveries); at
+  the watchdog's next sweep the short version, a new episode whose context held her line about the full one,
+  `FAILED_PROTOCOL` (three deliveries); at the sweep after, given up: the task `UNDELIVERABLE` and the developer note
+  「行动结果交不回给她：…原因 turn；全文和短版都试过了。报告还存在任务里。」. Six deliveries in all (the stub's log), no
+  `resume:` operation, no `feedback.continued` row; 93 seconds from the message that sent the task to the give-up.

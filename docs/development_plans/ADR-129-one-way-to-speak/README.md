@@ -1,7 +1,7 @@
 # ADR-129: One way to speak, at home too
 
-Status: **Revised, not built** 2026-11-13 evening (the owner): one rule in every conversation (D8-D12), replacing the
-first part's split between her local chat and the rest. The first part was installed 2026-11-13 17:50 as 92fd20700e55
+Status: **Revised and built, not installed** 2026-11-13 evening (the owner): one rule in every conversation (D8-D12),
+replacing the first part's split between her local chat and the rest. Built on branch claude/adr129-one-rule (§9). The first part was installed 2026-11-13 17:50 as 92fd20700e55
 (her local chat only; agent lines 0438, 0440, 0444). Next: the owner's reading of the revision, her reading of D12's
 literals, the build on a branch, shown in a demo profile (造的), installed in a slot she gives. ADR-128 waits until this
 page closes.
@@ -208,7 +208,8 @@ D8-D12 replace the first part's home split (D1-D3 where they speak of home as on
 D3's per-session alias, D6's home guide words). D4's list of what is and is not checked, D5 and D7 stand, for every
 local conversation.
 
-**D8. One rule, every conversation.** Only `speak` speaks: QQ's rule as built (`reply_parts`), now in every
+**D8. One rule, every conversation.** It separates her talking to herself from the record (the owner, relayed by
+her, agent line 0450: not "hides" it). Only `speak` speaks: QQ's rule as built (`reply_parts`), now in every
 conversation. Body text is hers: never published, never a message row, counted (`turn.ending_body`). Written with no
 `speak`, she is told once in the turn that it was not sent (`UNSENT_NOTE`) and her next turn's history says so, so a
 turn she meant to speak in is not silent without her knowing. Not calling `speak` is silence. `stay_silent` is gone
@@ -217,7 +218,10 @@ from every conversation: the tool and `tool_stay_silent`, the alias `stay_silent
 `CAP_SAYS`, and `answers.speech_problem`'s no-words case. Nothing else is added for a call of it. The page shows her
 body text as DSH shows a turn's answer step: DSH folds a finished turn's process, not its answer (D5(c) stays
 dropped). A consult turn is not speech in a conversation (it publishes nothing; its answer goes to the action brain,
-`coordinator` consult) and keeps its hand-back. D7's helper reads the turn's parts only.
+`coordinator` consult) and keeps its hand-back. D7's helper reads the turn's parts only. Her body text stays in
+her own session: her next turns see it as her own earlier words until a compaction takes it into the summary; it
+is not in the message database, not in her history block, and the other side never gets it (her question, agent
+line 0449). No fold is added for it on the page (the owner: not a problem).
 
 **D9. Where QQ's rules apply.** A conversation is QQ-kind when its channel kind declares `REPLY_PARTS` (napcat-qq,
 qq-bot). Every other conversation is local: her local Web chat, the agent lines, the peer line. QQ keeps all its rules
@@ -258,17 +262,48 @@ artifact, D10) and prints the file's path where the part is, so the agent sees w
 drops `TEXT_ONLY`. The peer line's bridge carries text only: a sticker or picture there fails or leaves as text, as on
 any channel that does not declare it.
 
-**D12. Her words (her F8: before the build).** Retired: `WORDS['home']`, `ENDING['home']`, `CAP_HOME` (body text as
-speech), and `WORDS[False]`, `ENDING[False]`, `CAP_SAYS` (they name `stay_silent`). Every conversation's guide reads
-QQ's `WORDS[True]` and `ENDING[True]`, existing literals now said at home too. She reads before the build: that guide
-pair in a local chat, `HOME_NOTE` (it says 本地私聊; stickers now go in every local conversation), `HOME_SPEAK` (its
-在家里 now means every local conversation), `UNSENT_NOTE` in a local chat, and the rename.
+**D12. Her words (her F8; read in agent lines 0449, 0450).** Retired: `WORDS['home']`, `ENDING['home']`, `CAP_HOME`,
+`WORDS[False]`, `ENDING[False]`, `CAP_SAYS`, `stickers.HOME_NOTE`. Final, hers:
+- The one guide, every conversation: 你用工具做事；只有 `speak` 发得出去。写在正文里的话不发出去、也不进消息库——页面上它会显示
+  出来，但那不是你说出去的话。 / 结束：要说的话都用 `speak` 说；说完了，或者这回合不想说，就不再调用工具——这一回合到此为止，
+  不算漏了什么。 (Her condition: the page must show body text on a QQ session too, checked in the demo; otherwise the
+  first sentence's last clause is said in local conversations only.)
+- The call cap everywhere: `CAP_SPEAKS` (用它 speak 把要说的说完。), nothing added.
+- `LOCAL_SPEAK` (was `HOME_SPEAK`): 在家里（不是 QQ 的那几条对话都算），说话没有限制。 then her text unchanged.
+- `SEND_NOTE` everywhere, `HOME_NOTE`'s three points moved in: 你收着的表情包的名字（你起的）。能发的地方：speak 里写一个
+  kind=sticker 的 part（name 照抄这里的名字），作为单独一条发出去；哪条对话发不了，看那边的说明。你写的用法用 sticker 的 shelf
+  看；整理用 sticker 的 drop、rename（你画的图也能 keep 上来）；带图的标着 ref，想重看就 read_image。群里别人发的表情包下面标
+  着「表情包 ref：att-…」，喜欢的用 sticker 的 keep 收下；你认得的表情包下面标着你给它起的名字。
+- `UNSENT_NOTE` unchanged, now in every conversation.
+- The rename `home` -> `local`: on the landing day she gets the list of names that no longer read back.
 
 ## 4. Where
 
 Every conversation (D8). Local: her local Web chat, the agent lines (joined from the Web or not), the peer line.
 QQ-kind: unchanged but for `stay_silent`'s alias and the page (D5). The first part, installed 11-13 17:50, was her
 local chat only.
+
+## 9. The build (2026-11-13 evening)
+
+Built to D8-D12 and reviewed against the code. What the code decided, beyond the page:
+- **A cut answer.** A local turn with no `speak`, nothing written and its answer cut at the length limit is handed back
+  with `answers.CUT` alone (上一段到了长度上限还没写完。): the old wrapper said the rewrite would be sent, which is no
+  longer true. Her word on the sentence is asked. On QQ such a cut still commits silent, as before (D9: QQ unchanged).
+- **What she was told before.** QQ's carry of unsent words is unchanged: her next turn says it only if the turn's last
+  attempt still had body text.
+- **Agent lines, like QQ.** Lines that arrive while her turn runs are taken by that turn (`_absorb`), and there is no
+  typing pace; the pace is QQ's alone.
+- **Stickers on an agent line.** A sticker's outbox item carries no name, so `poll` prints `[sticker] <path>`.
+- **A sticker she sent and later dropped.** The page's fetch went through the sending fence, which asks her shelf, so
+  a dropped sticker would have drawn as words: `outbound_media.kept_sticker` now passes a sticker row already
+  delivered (it is shown again, never sent again; D10).
+- **Older episodes.** `_publish` stays only to finish an episode an older version left in `SPEAK_ACCEPTED`. Its exit:
+  removed once a reading after the install finds no such episode.
+- **Left for a follow-up.** `attach_image` and `await_answer` are listed nowhere now; their code stays until removed on
+  its own. Her skill `asuna-image-generation-and-display` still names `stay_silent` and `attach_image`: hers to fix.
+- Literals retired with no replacement (told to her): the `stay_silent` description, `CALLED_LEFT`, the reasons line
+  所以我没说话, the plugin's `written` and refused-silence lines, `NAMES_NOTE`, `speech_problem`'s no-words and
+  no-thought sentences; the `tools_off` refusal lost the word `stay_silent`.
 
 ## 5. Failure modes
 
@@ -336,6 +371,8 @@ The revision (D8-D12):
   not sent, with `UNSENT_NOTE`; no `stay_silent` in any toolbox (local chat, agent line, a QQ-kind scene); a QQ-kind
   turn otherwise unchanged; after the shelf sticker is dropped and `media_life.sweep` runs, its message rows and bytes
   still there and drawn on the page.
+  Also (her asks, agent lines 0449-0451): one text part of 1,200 to 1,300 characters sent in one go, arriving whole;
+  a QQ-kind session's body text shown on the page; a sticker dropped after it was sent still drawn.
 - **Installed** in a slot she gives, after her reading of D12.
 - **Closed** when, over her use, no local conversation has a refused `speak` or a hand-back for a missing answer, a
   `speak` with a sticker is seen on the page in her local chat and arrives on an agent line, and no toolbox lists

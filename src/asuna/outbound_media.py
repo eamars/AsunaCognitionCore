@@ -537,9 +537,13 @@ def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=Fals
 
 
 def kept_sticker(store, row, item):
-    """This row sends a sticker, and its picture is one she keeps on her shelf."""
+    """This row sends a sticker, and its picture is one she keeps on her shelf, or kept when it left: a sticker row
+    already delivered is only shown again (the page, ADR-129 D5(b)), never sent again, and what she sent stays
+    viewable after she drops it from her shelf (D10)."""
     if not isinstance((row or {}).get('sticker'), dict):
         return False
+    if row.get('delivery_state') == 'DELIVERED':
+        return True
     from .stickers import on_shelf
     return on_shelf(store, item['_id'])
 

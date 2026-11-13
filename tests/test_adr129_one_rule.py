@@ -219,3 +219,13 @@ def test_poll_writes_her_picture_to_a_file_and_its_receipt_carries_the_evidence(
     row = {'direction': 'outbound', 'delivery_state': 'DELIVERED', 'attachment': {**attachment, 'size': len(PNG)},
            'platform_receipt': receipts['p1']}
     assert outbound_media.sent_attachment(row)['attested'] is True
+
+
+def test_a_sticker_she_sent_stays_viewable_after_she_drops_it(home):
+    """D10: the page shows what left; a sticker row already delivered passes the sticker fence whatever her shelf holds
+    now. One not yet sent still needs the shelf."""
+    item = {'_id': 'att-gone-from-shelf'}
+    row = {'sticker': {'kind': 'custom', 'name': '晚安'}, 'delivery_state': 'DELIVERED'}
+    assert outbound_media.kept_sticker(home, row, item)
+    assert not outbound_media.kept_sticker(home, {**row, 'delivery_state': 'SENDING'}, item)
+    assert not outbound_media.kept_sticker(home, {'delivery_state': 'DELIVERED'}, item)       # not a sticker row

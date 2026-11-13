@@ -1,7 +1,7 @@
 # ADR-130: A turn of hers waits, open and empty, behind another conversation's turn
 
-Status: **Proposed** 2026-11-13 by big sis (Claude Code), from ADR-127's after-close reading. Nothing designed; the
-owner chooses (§3). Times on this page are local time.
+Status: **Closed, not built** 2026-11-13 (the owner). Proposed the same evening by big sis (Claude Code), from
+ADR-127's after-close reading. Times on this page are local time.
 
 ## 1. What was found
 
@@ -44,3 +44,17 @@ conversations) is not a turn: it is a message waiting.
 Chosen by the owner, designed, shown in a demo profile (a long turn of one conversation while a Web message arrives:
 the Web turn steps aside with no step, its message carried when its turn starts), installed in her slot, and then a
 reading over her use finds no turn of hers open with no step for longer than a worker start.
+
+## 5. Closed (the owner, 2026-11-13)
+
+"The bottleneck is the model server, nothing can be done to help with that, opening new turn aside couldn't really
+help." Every turn of hers goes through the one model server, so a Web turn stepping aside (option A) would change what
+the page shows, not when her answer comes; B does not help while a turn already runs. What shortens the wait is fewer
+and shorter turns: option C, already in effect (the developer sends one batched message, none only to acknowledge;
+she keeps work that is not urgent out of a turn that answers him, agent line 0468).
+
+The reading changes with it: ADR-127's S3 reading (`toolless_since.py`, the developer's tool) sorts a wait behind
+another conversation's turn into its own class, `behind a turn` (a turn of another of her conversations ran from
+before this one opened until at most 15 s before its first step), not judged; only `neither` over 180 s is a failure.
+Read so on 2026-11-13: the 674 s wait of §1 is `behind a turn`; every wait over 10 s since 13:01 is too; the longest
+`neither` wait is 3 s.

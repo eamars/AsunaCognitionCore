@@ -1406,8 +1406,10 @@ export class CognitionCore {
         const spec = lane === 'character' ? this.state(exec.agent.session.id).specs?.[exec.name] : undefined;
         return spec ? argsRefusal(exec.name, spec, exec.arguments) : undefined;
       }
-      // An old name of hers runs where the tool it was merged into is listed (role_tools.RENAMED).
-      if (lane === 'character' && exposed.has(this.roleAliases?.[exec.name])) return undefined;
+      // An old name of hers runs where the tool it was merged into is listed (role_tools.RENAMED), by her
+      // conversation's own set (ADR-129 D3: stay_silent runs as speak only where speak alone speaks).
+      const aliases = lane === 'character' ? this.state(exec.agent.session.id).aliases ?? this.roleAliases : undefined;
+      if (lane === 'character' && exposed.has(aliases?.[exec.name])) return undefined;
       const usable = [...exposed].join('、') || '（没有）';
       // The action brain: the broker's own sentence for this tool (ADR-053), so both layers say the same.
       return lane === 'character' ? `这个对话里没有 ${exec.name} 这个工具；有的是：${usable}。用其中一个，或者不用工具接着说。`
@@ -1669,6 +1671,10 @@ export class CognitionCore {
     const specs = await this.worker.call('role_tool_specs', { session_id: agent.session.id });
     // Kept for the guard: a call's arguments are checked against this session's own definitions (tool-args.js).
     this.state(agent.session.id).specs = Object.fromEntries((specs ?? []).map(spec => [spec.name, spec]));
+    // Her old names as this conversation applies them (ADR-129 D3); a worker that answers without the session gives
+    // the global map, as before.
+    const aliases = await this.worker.call('role_tool_aliases', { session_id: agent.session.id }).catch(() => null);
+    if (aliases && typeof aliases === 'object') this.state(agent.session.id).aliases = aliases;
     for (const spec of specs ?? []) {
       // Offered in a step only when that step's stage lists it (exposed()); the stage is admitted first (admit).
       const when = async ({ agent: subject, signal }) => {

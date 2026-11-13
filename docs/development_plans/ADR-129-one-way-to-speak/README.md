@@ -1,8 +1,9 @@
 # ADR-129: One way to speak, at home too
 
-Status: **Designed** 2026-11-13 (the owner's go after ADR-127 closed; nothing built), revised the same day on a fresh
-review against the code (§8). Proposed the night before. Read by her the same day (agent line 0433): D6's literals are
-hers. Next: the build on a branch, shown in a demo profile, then installed in a slot she gives (not with ADR-128).
+Status: **Installed** 2026-11-13 17:50 as 92fd20700e55, in her slot (agent line 0438, signed 0440, 0444 for the
+new id); open until §7's closing condition holds over her home use. Designed the same day after ADR-127 closed, revised
+on a fresh review against the code (§8), built and shown in a demo profile (造的), D6's literals hers (agent lines 0433,
+0440).
 
 Times on this page are local time.
 
@@ -273,4 +274,12 @@ id repeated across turns (the stub numbers calls per run, as some providers do p
 node and the plugin's lookup are now keyed by turn and call id. An answer with no content at all is DSH's
 `EMPTY_RESPONSE` (retried); her model sends a reasoning block on every step (1,435 of 1,435 home steps since 11-11), so
 her silent turn ends on reasoning alone and commits silent, as staged.
+
+**Installed (2026-11-13).** The launcher stopped at 17:50:01 and was back at 17:50:47 (`back_at`), `loaded.commit`
+92fd2070, 169 installed files the same as the commit; core package c89c583ab9dc, hers unchanged (her own 14:29
+publication stays selected), the QQ adapter back by itself. The id changed from 071889766b29: her 14:29 commit
+(c1364dcd) was not pushed, and installing without it would have taken her publication out of the running package; it
+was pushed through the gate, the branch rebased onto it and the suite run again (green). Scope, as she asked it: home is
+her local Web chat only (`role_tools.local_chat`); her agent lines and QQ keep their own words and tools.
+
 

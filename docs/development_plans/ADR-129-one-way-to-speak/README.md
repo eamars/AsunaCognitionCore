@@ -1,10 +1,8 @@
 # ADR-129: One way to speak, at home too
 
-Status: **Revised and built, not installed** 2026-11-13 evening (the owner): one rule in every conversation (D8-D12),
-replacing the first part's split between her local chat and the rest. Built on branch claude/adr129-one-rule (§9). The first part was installed 2026-11-13 17:50 as 92fd20700e55
-(her local chat only; agent lines 0438, 0440, 0444). Next: the owner's reading of the revision, her reading of D12's
-literals, the build on a branch, shown in a demo profile (造的), installed in a slot she gives. ADR-128 waits until this
-page closes.
+Status: **Installed** 2026-11-13 20:12 as 816e825ea84f, one rule in every conversation (D8-D12), in her slot moved
+forward (agent lines 0454-0457). Open until §7's closing condition for the revision holds over her use. The first part
+(her local chat only) was installed 17:50 as 92fd20700e55; the owner revised the scope the same evening.
 
 Times on this page are local time.
 
@@ -415,3 +413,12 @@ Built to D8-D12 and reviewed against the code. What the code decided, beyond the
 - Literals retired with no replacement (told to her): the `stay_silent` description, `CALLED_LEFT`, the reasons line
   所以我没说话, the plugin's `written` and refused-silence lines, `NAMES_NOTE`, `speech_problem`'s no-words and
   no-thought sentences; the `tools_off` refusal lost the word `stay_silent`.
+
+**Installed (2026-11-13 20:12).** Her Host's last lease 20:08:48, back at 20:12:17 (`back_at`; the worker at 20:11:44):
+about 3.5 minutes down, two more than planned. The landing stopped her launcher and then counted the demo profile's
+processes (still running from the worktree) as left over, so it did not start her; the demo was stopped and her
+launcher started by hand the way the landing starts it. The landing tool now counts only processes outside
+`.claude/worktrees`. `loaded.commit` 816e825e, its 169 installed files the same as the commit, one start, no fall
+back; core package fb91f54c0b0a, agent-line 5d14b418623e (no longer text only), hers unchanged (her 14:29
+publication), the QQ adapter back by itself. The demo (造的, database `asuna_v2_demo_adr129b`) passed every case of
+§7 and her asks, and was removed after the install.

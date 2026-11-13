@@ -322,7 +322,7 @@ How long stored media bytes live: every kind of stored picture has an owner or a
 - def `offer` — 上下文里那块 ``image_artifacts_from_program``；方向不允许或没图可引用就不出现。
 - def `refuse_erased_named` — A picture she names that this turn did not offer: if an erasure deleted it and it is one she could otherwise send here, ADR-105's sentence, in the call that names it; anything else is left to the caller's own refusal.
 - def `accept_artifact` — 程序接受一张图准备随这条消息发出去：读一次字节、认魔数、按行内 sha 复核。
-- def `kept_sticker` — This row sends a sticker, and its picture is one she keeps on her shelf.
+- def `kept_sticker` — This row sends a sticker, and its picture is one she keeps on her shelf, or kept when it left: a sticker row already delivered is only shown again (the page, ADR-129 D5(b)), never sent again, and what she sent stays viewable after she drops
 - def `serve` — 字节端点的围栏：只发这一条 publication 自己声明的那张图，且行内 sha 复核通过。
 - def `without_text` — A PNG without its text chunks: a generator writes its whole request there (the prompt, its settings), which must not leave with the picture.
 - def `register_imported_image` — 把刚导入的字节登记成这个 scope 里的 image artifact；不是图片就什么都不做。

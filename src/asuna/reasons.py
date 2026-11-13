@@ -13,6 +13,9 @@ result, a reply to her line, the night block (`for_call`, `for_message`). One ta
 """
 from __future__ import annotations
 
+import threading
+from collections import OrderedDict
+
 from .records import episodes as episode_records
 from .records import memories as memory_records
 
@@ -124,9 +127,8 @@ def then(store, unit):
         return []
     anchored = unit.get('source') == 'thinking'
     if anchored and call_id == 'end':
-        episode = episode_records.get(store, episode_id, fields=['speech']) or {}
-        said = _short(episode.get('speech'), SAID_CHARS)
-        return ['所以我说了「%s」' % said] if said else []
+        words = _short(said(store, episode_id), SAID_CHARS)
+        return ['所以我说了「%s」' % words] if words else []
     from . import audit as audit_trail
     calls = audit_trail.events(store, 'role_tool', stream=episode_id, by='seq').rows(fields=['payload'])
     names = [(c['payload'].get('call_id'), c['payload'].get('tool')) for c in calls]
@@ -149,11 +151,42 @@ def then(store, unit):
         if words:
             lines.append('所以我' + words)
     if last_thought:
-        episode = episode_records.get(store, episode_id, fields=['speech']) or {}
-        said = _short(episode.get('speech'), SAID_CHARS)
-        if said:
-            lines.append('所以我说了「%s」' % said)
+        words = _short(said(store, episode_id), SAID_CHARS)
+        if words:
+            lines.append('所以我说了「%s」' % words)
     return lines
+
+
+# A turn's speak parts as words, kept per turn and its count of parts (said): read once per turn, not per thought.
+_SAID, _SAID_KEPT, _SAID_LOCK = OrderedDict(), 256, threading.Lock()
+
+
+def said(store, episode):
+    """What a turn said, for its readers (ADR-129 D7): its published body text, or, when that is empty and the turn
+    queued speak parts, the texts of those parts as they left (a sticker as its row's own [表情包:name]; a picture adds
+    nothing). `episode`: the turn, or its id."""
+    if not isinstance(episode, dict):
+        found = episode_records.get(store, episode, fields=['speech', 'reply']) if episode else None
+        episode = {**(found or {}), '_id': episode}
+    speech = episode.get('speech')
+    parts = int((episode.get('reply') or {}).get('parts') or 0)
+    if speech or not parts or not episode.get('_id'):
+        return speech
+    key = (getattr(store, 'name', id(store)), episode['_id'], parts)
+    with _SAID_LOCK:
+        if key in _SAID:
+            _SAID.move_to_end(key)
+            return _SAID[key]
+    from .records import messages as message_records
+    from .role_tools import NEVER_LEFT
+    rows = message_records.turn_parts(store, episode['_id'], reply_parts=True, not_states=NEVER_LEFT,
+                                      by='segment_index').rows(fields=['text'])
+    words = '\n\n'.join(text for text in ((row.get('text') or '').strip() for row in rows) if text)
+    with _SAID_LOCK:
+        _SAID[key] = words
+        while len(_SAID) > _SAID_KEPT:
+            _SAID.popitem(last=False)
+    return words
 
 
 def consequential(tool, args):

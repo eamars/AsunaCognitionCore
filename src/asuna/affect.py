@@ -829,11 +829,11 @@ class Appraiser:
         ledger = AffectLedger(self.store, ep['persona'], model, policy)
         if not ledger.enabled or proposal_of_turn(self.store, episode_id):
             return []
-        from .reasons import shown
+        from .reasons import said, shown
         monologues = [shown(row, len(row.get('body_markdown') or '') or 1) or '' for row in memory_records.many(
             self.store, ep.get('monologue_refs', [])).each(fields=['body_markdown', 'source'])]   # ADR-099: a summary short
         payload = {'input': ep['context'].get('event', {}).get('text'), 'monologue': monologues,
-                   'speech': ep.get('speech'), 'ref_index': _refs(ep),
+                   'speech': said(self.store, ep), 'ref_index': _refs(ep),
                    'how_to_record': recording_guide(ledger.model)}
         from . import answers
         question = (prompt_path(self.store.config, 'stage_appraise.md').read_text(encoding='utf-8')

@@ -140,15 +140,11 @@ is fetched once; each cache holds 64 entries, oldest dropped, since DSH remounts
   record names. Nothing is written into her session; no picture can reach her model; animated stickers stay animated
   (DSH's attachment store would flatten them). While loading, on any error (an older worker or plugin, an unknown
   method), and for a call made before the install (no link), the node draws her call's own words as today.
-- (c) **Her mumble is folded.** In a turn with a `speak` result that is not an error, the text of her steps is drawn
-  closed under a row of its own (DSH's `DisclosureRow`), through a delegate of DSH's `assistant-step` node registered
-  as the turn-trigger and max-tokens notices are (priority -1, DSH's shipped component for everything else). Unlike
-  those, it forwards the shipped entry's `inject` and declares the same child slots (as the permission picker
-  forwards its own), takes out only `text` blocks (DSH's `reasoning`, `tool-call` and `image` blocks stay DSH's), and
-  draws its row only outside DSH's reasoning group. ADR-007
-  forbids taking `assistant-step` over globally (every DSH assistant becoming her); a delegate that changes only her
-  turns that spoke keeps that rule, and the comment in `client.js` says so. The mark is the page's own turn data from
-  the session's events, as `asuna-stage-finish` is; nothing is added on the plugin's side.
+- (c) **Her mumble folded: dropped** (the owner, 2026-11-13, after staging). DSH refuses a second registration of its
+  `assistant-step` node's child slots (`conversation.chat.reasoning.body`, `conversation.chat.message.images`), and
+  without them a delegate cannot draw a step's reasoning or images; DSH has no public way to fold one step's text and
+  keep the rest its own. Her body text in a turn that spoke stays visible as DSH's answer; it is still not sent and not
+  in her history (D2), and her `speak` node shows above it. A DSH change (the owner's) can bring the fold back.
 
 **D6. Her words (her F8: a new or changed literal needs her word first).** The owner to her at home (relayed by her,
 agent line 0430; her local chat's messages 7219 at 12:15 and 7234 at 13:34; 7234 is the spec): at 12:15, he will not
@@ -199,7 +195,7 @@ page (D5).
 
 | Case | What happens | Why it holds |
 |---|---|---|
-| Body text and `speak` in one turn | Parts are her speech; the body is kept as a count and drawn folded | D2, D5(c) |
+| Body text and `speak` in one turn | Parts are her speech; the body is kept as a count, shown on the page as DSH's answer | D2 (D5(c) dropped) |
 | No words, no `speak` | Silent commit, no hand-back | D3 |
 | A consult turn with no answer | Handed back, as today | D3's one exception |
 | Parts left, then the body is cut at the length limit | Commits; the body is hers, not checked | D3 |
@@ -207,7 +203,7 @@ page (D5).
 | Host stops after parts were queued | Recovery publishes the READY parts through the local sink | `publish_queued` reads `reply_part` |
 | Turn fails after parts were shown | Her next line (ADR-127 N1) counts them as sent | `faults.lost` reads delivered rows |
 | Turn replayed from its lane receipt | Parts are not queued again | the receipt is replayed, not the tools |
-| `speak` refused, then she writes body text | The body is published and not folded | D2 reads queued parts; D5 marks non-error results |
+| `speak` refused, then she writes body text | The body is published | D2 reads queued parts |
 | `stay_silent` called at home | Refused as unlisted; the turn goes on | D3: the alias is per session in worker and plugin |
 | An older plugin with a newer worker | The plugin's global alias lets the call through; the worker refuses it at home | D3, transient |
 | Page, plugin and worker at different versions | An old page never asks; a new page meeting an older plugin or worker gets an error and draws her words | D5(b) falls back on any error |
@@ -270,3 +266,10 @@ as speech (D7); an empty answer cut at the length limit would have committed as 
 without bound and fetched a repeated sticker each time (D5(b)); the fold's root changed mid-turn (D5(c)). Her image
 skill (`asuna-image-generation-and-display`, hers) still says pictures at home go by `attach_image`: she is told at the
 install, and edits it herself.
+
+**Staging (2026-11-13, 造的).** In the demo the fold never showed: DSH refused the delegate (D5(c), dropped). A tool-call
+id repeated across turns (the stub numbers calls per run, as some providers do per request) hid a `speak` node: the
+node and the plugin's lookup are now keyed by turn and call id. An answer with no content at all is DSH's
+`EMPTY_RESPONSE` (retried); her model sends a reasoning block on every step (1,435 of 1,435 home steps since 11-11), so
+her silent turn ends on reasoning alone and commits silent, as staged.
+

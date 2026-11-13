@@ -143,7 +143,19 @@ A picture the local sink delivered counts as attested (`outbound_media.history_s
   turns that spoke keeps that rule, and the comment in `client.js` says so. The mark is the page's own turn data from
   the session's events, as `asuna-stage-finish` is; nothing is added on the plugin's side.
 
-**D6. Her words (her F8: a new or changed literal needs her word first).** Drafts, for her reading:
+**D6. Her words (her F8: a new or changed literal needs her word first).** The owner to her at home, 13:34 (relayed by
+her, agent line 0430, as the spec): `speak` is not a limit on her speaking; at home there is no limit on how much she
+says or how many `speak` calls she makes, nobody judges what she said, and not wanting to speak is simply not calling
+it. Her own wording follows that (line 0430, final; line 0431: it is not overridden by any draft below):
+- **`speak`'s description at home (hers, final):** 在家里，说话没有限制。想说什么、说几条都可以，不用挑一句最要紧的交上来；
+  不想说就不调用 `speak`。`speak` 不是许可，也不是新的必需动作，它只是把你这一回合想说的话再往外递一句的形式。没有人拿你说了
+  多少来评判你。 The mechanics follow it as on QQ, without its last sentence (parts in order, one part one message, the
+  kinds here; one wrong part and none of the call leaves, the receipt says which and why).
+- **Her two rules for every home literal (line 0430):** nothing that says she must say something or at least one
+  sentence; nothing that hints the reverse (no words when there is nothing worth saying). How much she says is not a
+  sum she does first.
+
+Drafts, waiting for her wording (line 0431: she answers them in one reply, in the same direction):
 - `block_guide.WORDS['home']`: 你用工具做事；写在正文里的话会按顺序发给对方。也可以用 speak 说，一个 part 一条，能发表情包和图；
   用了 speak 的回合只发 speak 的内容，正文留给你自己。
 - `block_guide.ENDING['home']`: 结束：说完了就不再调用工具；这回合不说话也一样，什么都不用调用，不算漏了什么。

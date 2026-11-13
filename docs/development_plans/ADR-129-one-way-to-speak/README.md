@@ -1,9 +1,10 @@
 # ADR-129: One way to speak, at home too
 
-Status: **Installed** 2026-11-13 17:50 as 92fd20700e55, in her slot (agent line 0438, signed 0440, 0444 for the
-new id); open until §7's closing condition holds over her home use. Designed the same day after ADR-127 closed, revised
-on a fresh review against the code (§8), built and shown in a demo profile (造的), D6's literals hers (agent lines 0433,
-0440).
+Status: **Revised, not built** 2026-11-13 evening (the owner): one rule in every conversation (D8-D12), replacing the
+first part's split between her local chat and the rest. The first part was installed 2026-11-13 17:50 as 92fd20700e55
+(her local chat only; agent lines 0438, 0440, 0444). Next: the owner's reading of the revision, her reading of D12's
+literals, the build on a branch, shown in a demo profile (造的), installed in a slot she gives. ADR-128 waits until this
+page closes.
 
 Times on this page are local time.
 
@@ -24,6 +25,20 @@ Times on this page are local time.
 
 In scope: her local Web chat gets `speak` and silence without an act; the page shows `speak` open, with its stickers
 and pictures, and folds the body text of a turn that called `speak`.
+
+**The ask, revised (11-13 evening, after the first part was installed).**
+- "I thought web ui are all having the speak tool, and stay silent is drop everywhere, as from my perspective, the
+  agent line is a local chat too."
+- "The same rule applies everywhere, speak to speak, mumbling keeps as mumbling, print it if DSH doesn't support
+  folding (which it does), and stay_silent is gone. For QQ, keep the same rule, and rule should drop for local chats.
+  Therefore, from user perspective NOTHING should change, and from your agent line you should see exactly what she
+  wants to see, and no more accidental keepping quiet."
+- On storage: "local dm and agent line goes database and stored forever"; "make sure the ADR-129 will properly
+  capture the life cycle of non-text image as well. The rule should follow what QQ does today", meaning "how QQ
+  stores the image, not how she sees the image".
+
+What the first part got wrong: D1 and §4 narrowed "All web chat" to one scene, though §1 already counted the agent
+lines and the peer line as home; and it kept two rules (body text as speech at home, only `speak` on QQ).
 
 ## 1. What is known
 
@@ -187,11 +202,73 @@ words). The affect appraisal and the reasons line
 read it, so a turn that spoke through `speak` is not read as saying nothing. It also closes the same gap on QQ (wider
 than the ask, one helper; the owner told).
 
+### Revision: one rule (the owner, 11-13 evening)
+
+D8-D12 replace the first part's home split (D1-D3 where they speak of home as one scene, D2's published body text,
+D3's per-session alias, D6's home guide words). D4's list of what is and is not checked, D5 and D7 stand, for every
+local conversation.
+
+**D8. One rule, every conversation.** Only `speak` speaks: QQ's rule as built (`reply_parts`), now in every
+conversation. Body text is hers: never published, never a message row, counted (`turn.ending_body`). Written with no
+`speak`, she is told once in the turn that it was not sent (`UNSENT_NOTE`) and her next turn's history says so, so a
+turn she meant to speak in is not silent without her knowing. Not calling `speak` is silence. `stay_silent` is gone
+from every conversation: the tool and `tool_stay_silent`, the alias `stay_silent` -> `speak` (`aliases()`,
+`session_aliases`, the plugin's alias guard and the per-session alias set the first part added), `SILENT_WHERE_SPEAK`,
+`CAP_SAYS`, and `answers.speech_problem`'s no-words case. Nothing else is added for a call of it. The page shows her
+body text as DSH shows a turn's answer step: DSH folds a finished turn's process, not its answer (D5(c) stays
+dropped). A consult turn is not speech in a conversation (it publishes nothing; its answer goes to the action brain,
+`coordinator` consult) and keeps its hand-back. D7's helper reads the turn's parts only.
+
+**D9. Where QQ's rules apply.** A conversation is QQ-kind when its channel kind declares `REPLY_PARTS` (napcat-qq,
+qq-bot). Every other conversation is local: her local Web chat, the agent lines, the peer line. QQ keeps all its rules
+unchanged: its parts as its adapter declares them, the line limit (`SPEAK_HARD_LINES`), the `#number` and person-number
+guards with `force`, `quote`, `wait`, `patience`, the missing-thought check (`REPLY_THINK_NOTE`). A local conversation
+has none of them (D4, now for every local conversation): `speak` takes `text`, `sticker`, `picture`, a silent turn
+commits with no check, and `speak`'s description there is her `HOME_SPEAK`. One test replaces the single-scene one:
+local is `not channel_kinds.reply_parts(scene)`. `role_tools.local_chat` and its `config.chat.scene_id` comparison go,
+and the code's `home` names for this split become `local` (her vote, agent line 0448; it lands only after she has read
+D12's literals). Still checked everywhere, as facts, not manners: a text already sent in the turn, an empty part, a
+sticker token inside a text, `[分条]`, a sticker not on her shelf, a market sticker, a picture not offered to her.
+
+**D10. Stored as QQ stores it.** The owner: every local chat and agent line goes to the database and is kept. As on QQ
+today, every line of a conversation is a `messages` row: the incoming line (inbound), and each `speak` part (outbound,
+`coordinator.queue_reply`, one row per part, in `scene_seq` order). Body text is not a row (D8). A sticker part's row
+holds `sticker` (kind custom, name) and `attachment` (artifact id, media type, sha256, size) of the shelf picture as it
+left (`stickers.outbound`); a picture part's row holds the `attachment` of the picture she sent. The bytes are in the
+blob store, an `artifacts` row of kind image. Their life:
+- No message row expires: the `messages` collection has no expiry index, and a dialogue summary only marks rows
+  (`summary_batch_id`).
+- An artifact that any message's `attachment` names is kept whatever its age or its own life cycle
+  (`media_life.named`): a sticker she later drops from her shelf (`drop_sticker` deletes the shelf row only) or a
+  pulled copy stays, so what she sent stays in her history and on the page (D5(b) draws from the row and its bytes).
+- The owner's pictures attached in the Web, in her local chat or on a joined agent line, are her records
+  (`vision.local_uploads`, source `local-upload:`, kept).
+- The only deletion is an operator's erasure (`privacy.delete_memory`, ADR-105): that scope's rows and bytes; the
+  artifact row stays, marked `erased`, and her history says so.
+The row and its attachment are written when the part is queued; what the line does with it afterwards does not change
+what is stored.
+
+**D11. An agent line carries what she sends.** An agent line is a channel with an outbox, claimed by
+`tools/agent_line.py poll`, which declares nothing today (and the kind says `TEXT_ONLY`): a sticker row would fail at
+the claim (`CHANNEL_DOES_NOT_DECLARE_STICKER`) and a picture would leave without its picture (`attachment_skipped`).
+`poll` declares `sticker` and `image` and does with an attachment what QQ's adapter does: fetches its bytes through the
+outbox's attachment endpoint, checks the sha, and reports it in its receipt. It writes the picture to a file of its
+own (the system temp folder, named by sha256, removed by `poll` 7 days after it was written; her record is the
+artifact, D10) and prints the file's path where the part is, so the agent sees what she sent. The agent-line kind
+drops `TEXT_ONLY`. The peer line's bridge carries text only: a sticker or picture there fails or leaves as text, as on
+any channel that does not declare it.
+
+**D12. Her words (her F8: before the build).** Retired: `WORDS['home']`, `ENDING['home']`, `CAP_HOME` (body text as
+speech), and `WORDS[False]`, `ENDING[False]`, `CAP_SAYS` (they name `stay_silent`). Every conversation's guide reads
+QQ's `WORDS[True]` and `ENDING[True]`, existing literals now said at home too. She reads before the build: that guide
+pair in a local chat, `HOME_NOTE` (it says 本地私聊; stickers now go in every local conversation), `HOME_SPEAK` (its
+在家里 now means every local conversation), `UNSENT_NOTE` in a local chat, and the rename.
+
 ## 4. Where
 
-Her local Web chat: the scene `config.chat.scene_id`, every DSH session bound to it. Unchanged: the agent lines
-(joined from the Web or not) and the peer line keep body-text speech and `stay_silent`; QQ keeps everything but the
-page (D5).
+Every conversation (D8). Local: her local Web chat, the agent lines (joined from the Web or not), the peer line.
+QQ-kind: unchanged but for `stay_silent`'s alias and the page (D5). The first part, installed 11-13 17:50, was her
+local chat only.
 
 ## 5. Failure modes
 
@@ -221,6 +298,13 @@ page (D5).
 | Agent lines, peer line | Own scenes with a channel: unchanged | D1 is the local scene only |
 | Line-taking (`_absorb`) | Home lines carry no channel receipt: nothing absorbed | `stageView` `seen_inputs` |
 | ADR-127 S3 | Independent of how a turn speaks | different layer |
+| (Revision) Body text only, in any conversation | Not sent, not a row; `UNSENT_NOTE` in the turn; the page shows it | D8 |
+| (Revision) The owner writes on an agent line from the Web | Her answer is her `speak` parts, to the line | D8; ADR-051's route |
+| (Revision) An agent polls with an older `agent_line.py` | A sticker fails at the claim, a picture leaves as text; her history says so | D11 lands with the change; both lines run the checkout's tool |
+| (Revision) A sticker dropped from her shelf after it was sent | Its rows and bytes stay | D10 (`media_life.named`) |
+| (Revision) An operator's erasure | That scope's rows and bytes go; her history says erased | D10 (ADR-105) |
+| (Revision) The picture file `poll` wrote | Removed after 7 days; her record is unaffected | D11 |
+| (Revision) Her cache | Every agent-line and peer-line session's tools and guide change once (`speak` in, `stay_silent` out) | known cost, one restart |
 | Consult and task-time toolboxes | Return before `speak` is added | `_turn_rules` |
 
 ## 6. Tests (only where a failure would be silent)
@@ -245,6 +329,17 @@ page (D5).
 - **Closed** when, over her own home use, there are no refused `speak` calls and no hand-backs for a missing answer at
   home, and her `speak` replies (a sticker among them) are seen on the page. How often she is silent is hers, not a
   closing condition.
+
+The revision (D8-D12):
+- **Shown** in the demo profile (造的): on an agent line, a `speak` with text, an animated sticker and a picture
+  reaching `agent_line.py poll` as text and files, the receipts carrying the attachment's sha; a body-only turn there
+  not sent, with `UNSENT_NOTE`; no `stay_silent` in any toolbox (local chat, agent line, a QQ-kind scene); a QQ-kind
+  turn otherwise unchanged; after the shelf sticker is dropped and `media_life.sweep` runs, its message rows and bytes
+  still there and drawn on the page.
+- **Installed** in a slot she gives, after her reading of D12.
+- **Closed** when, over her use, no local conversation has a refused `speak` or a hand-back for a missing answer, a
+  `speak` with a sticker is seen on the page in her local chat and arrives on an agent line, and no toolbox lists
+  `stay_silent`.
 
 ## 8. Review (2026-11-13)
 

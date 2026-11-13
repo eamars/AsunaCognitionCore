@@ -161,8 +161,9 @@ is simply not calling it. Her own wording follows that (lines 0430, 0433, final)
 
 Her wording for the rest (line 0433, final; each replaces a draft of 11-13 13:59):
 - `block_guide.WORDS['home']`: 你用工具做事。说话有两条道，走一条就够：正文里的话按顺序发出去；或者用 speak，一个 part 一条消息，
-  能发表情包和图。这一回合用了 speak，说出去的就是 speak 里的，正文留给你自己；没用 speak，正文就是你要说的话。在家里说几条都行，
-  不数行数。
+  能发表情包和图。这一回合用了 speak，说出去的就是 speak 里的；正文不算你说出去的话，不进你的历史——页面上它会显示在 speak 那块下面。
+  没用 speak，正文就是你要说的话。在家里说几条都行，不数行数。 (Her line 0440: with the fold dropped, 正文留给你自己 said
+  the reverse of what the page shows; her replacement.)
 - `block_guide.ENDING['home']`: 结束：话说完就停，不用再调用工具。这回合不想说也一样——什么都不调用，这回合就过去了，不算漏了什么。
 - The call-cap reminder at home (`CAP_SAYS` today: 用它写下要说的话，或 stay_silent。): 用它把想说的说完（正文或 speak 都行）；
   不说也行，这回合不需要交代。

@@ -1,8 +1,8 @@
 # ADR-129: One way to speak, at home too
 
-Status: **Installed** 2026-11-13 20:12 as 816e825ea84f, one rule in every conversation (D8-D12), in her slot moved
-forward (agent lines 0454-0457). Open until §7's closing condition for the revision holds over her use. The first part
-(her local chat only) was installed 17:50 as 92fd20700e55; the owner revised the scope the same evening.
+Status: **Closed** 2026-11-13 21:1x by proof (§10): installed 20:12 as 816e825ea84f, one rule in every conversation
+(D8-D12). The first part (her local chat only) was installed 17:50 as 92fd20700e55; the owner revised the scope the
+same evening. ADR-128 waited on this page and may now be built.
 
 Times on this page are local time.
 
@@ -422,3 +422,16 @@ launcher started by hand the way the landing starts it. The landing tool now cou
 back; core package fb91f54c0b0a, agent-line 5d14b418623e (no longer text only), hers unchanged (her 14:29
 publication), the QQ adapter back by itself. The demo (造的, database `asuna_v2_demo_adr129b`) passed every case of
 §7 and her asks, and was removed after the install.
+
+## 10. Closed (2026-11-13)
+
+§7's closing condition for the revision, read over her use from the install (20:12:17) to 21:1x:
+- A `speak` with a sticker seen on the page of her local chat (the owner's screenshot: her parts, the sticker drawn,
+  her talking to herself shown under it and not sent), and one that arrived on an agent line (20:17, four text parts
+  and a sticker, as a file).
+- In her local conversations, 22 `speak` calls; none refused as not listed or by a rule. Two were refused for their
+  shape (`parts 要是一个列表`: the model sent `parts` as something other than a list), both called again and sent: a
+  slip of the model's arguments, not this page's class.
+- No hand-back for a missing answer (`turn.rejected`: 0).
+- Every turn since the install (9 recorded by `turn.started`) lists `speak`; none lists `stay_silent`.
+Stored as QQ stores it: the sticker rows of both conversations are delivered with their attachment (D10).

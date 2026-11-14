@@ -214,6 +214,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `reply_receipt` — What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); and each sent line's own number in the conversation (ADR-079, ADR-108 D2).
 - class `RoleTools` — Runs one tool call for one episode, on the coordinator's thread (it holds the coordinator lock).
   - `call` — (result, concludes_turn).
+  - `tool_end_turn`
   - `checkpoint` — End of a handler's check part: refuses with everything found, or lets the effect begin.
   - `combined` — The one refusal for a call: its problems numbered, the call's own first thought first, her words in none of them; one problem stands alone.
   - `take_thought` — ADR-099: in a turn that does not ask for her thought, the model's first thinking in it becomes her 心里话: the same monologue unit, `source` thinking, stored contracted (ADR-098), anchored to the call it came with ('end' when the turn made non

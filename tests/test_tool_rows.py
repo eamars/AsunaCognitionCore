@@ -9,7 +9,9 @@ CLIENT = (Path(__file__).resolve().parents[1] / 'packages/cognition-core/src/cli
 # Retired tools whose calls stay in her history, by the names DSH recorded in them. update_self (ADR-069): every one of
 # its calls (75 calls, 606 copies across her live and archived sessions, read 2026-11-02; one also carried revision_id).
 # stay_silent (ADR-129 D8): the name she was shown (ADR-060) and the handler's, which older calls carry.
-RECORDED = {'update_self': {'target', 'body', 'reason'}, 'stay_silent': {'why', 'reason'}}
+# attach_image and await_answer (ADR-129's exits): the fields she was shown for them.
+RECORDED = {'update_self': {'target', 'body', 'reason'}, 'stay_silent': {'why', 'reason'},
+            'attach_image': {'artifact_id', 'why'}, 'await_answer': {'wait', 'why'}}
 
 
 def table(name):

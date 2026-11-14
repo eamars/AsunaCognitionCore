@@ -30,6 +30,7 @@ python3 skills/asuna-dsh-failure-scan/dsh_failure_scan.py --no-files           #
 - **组 B 静默没跑**：`missed_looks`（关口该判没判，`cause` 分 clash／timeout／unanswered／cut／error）、`provider.request 无响应`（响应头里读不出 `status_code` 的那条另列成 `provider.response 状态码读不出`、自己标着「没真判」）、`host_stops` 的非计划停机、`rhythm.heartbeat_missed`、`schedule.stale_dispatch`、`schedule.stale_skipped`、`task.time_up`、`task.time_up_outcome`、卡住或老于阈值还挂着的任务。
 - **组 D 计划没排上／晚交到**：`schedule.fault_told`（到点没排上、这一拍告诉了她；`payload.failed_at` 才是故障时刻）、`schedule.fault_unreported`（连给开发者的说明都没写进去）、`schedule.handoff_late`（超过巡查线才交到手上，`payload.due` 是 DSH 的 `acceptedAt`）、`schedule.handoff_failed`（晚交那一拍自己抛异常）、`schedule.handoff_watch_failed`（晚交巡查自己抛异常）。这五个 type 是较近才装上的，更早的窗口数出 0 是**库里没有**，不是那件事没发生过。
 - **组 C 对照（列条数、不计入失败总数）**：`attend.fallback`（**与 `attend.failed` 同一拍的伴生句，不许相加**）、`note.refused`（**是 `role_tool.refused` 的子集，不许相加**）、`role_tool.refused`（我自己那一侧被拒，不是系统坏了）、`state.conflict`、`turn.unsent_body`、`render.over_budget`、`host.inbound_slow`（入站变慢）。
+- 过线之后的调用不算跑过：`refused`、code `CALLS_OVER`（ADR-128 之后）。这类调用什么都没执行，读我调用记录的地方不许把它算进“做成了”；数被拒调用时它是独立 code，不并进“真跑过”。
 - **只数名册里的 type**：三张审计名册（A／B／D）就是查询的 `$in` 名单，库里另有别的 type 也不进任何一组——加新类型要动名册，不改名册就一行都数不到（自检钉着这一条）。
 
 - **本机断端类（推断）降对照**：`host.log` 里栈末落在 `channels.py` 的 `wfile.write`、异常是 ConnectionReset（10054）／ConnectionAborted（10053）的那一族，三样都在同一件事里才归这一类，列在组 C 下「`host.log[本机断端类（推断）]`」，不进报数。归类是推断（本机通道 HTTP 服务写回时对端提前断开），`lane_faults` 没行只是旁证，不是正面证据；只有异常名、没有 `channels.py` 栈帧的照旧留在组 A。

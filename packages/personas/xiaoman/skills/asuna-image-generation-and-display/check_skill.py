@@ -170,7 +170,7 @@ ATTACH = [
     ("attach_canonical_person", "canonical person"),
     ("attach_local_scope_example", "scene:local-dm"),
     ("attach_qq_scene_example", "（主人的 QQ 私聊场景，场景 id 以配置为准）"),
-    # 怎么写（当前口径：那一轮调用 attach_image 工具）
+    # 怎么写（当前口径：所有对话都用 speak 的 picture part，artifact_id 从 image_artifacts_from_program 照抄）
     ("attach_max_one_per_turn", "一回合最多一张"),
     ("attach_replace_on_second_call", "再调用就换成新的那张"),
     ("attach_id_required", "必填"),

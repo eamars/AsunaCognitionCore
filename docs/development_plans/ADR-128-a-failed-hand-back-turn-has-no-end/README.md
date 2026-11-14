@@ -126,7 +126,8 @@ data and loud the first time it happens.
   (`chat.py:414`), a new or recovered input, a hand-back and task scheduling, none of which re-runs a failed turn;
   the queue loop advances only `RESUMABLE` states (`chat.py:467`) and `recover()` only `PREPARED`, `TURN` and
   `SPEAK_ACCEPTED`; `SessionCarried` runs a turn again once (`coordinator.py:278-283`). The continuation is the only
-  unbounded one.
+  unbounded one. (As read that day; `SPEAK_ACCEPTED` was removed 2026-11-14 with ADR-129's exits, `46d8aa99e3a6`,
+  installed 15:09: `recover()` now takes `PREPARED` and `TURN`.)
 - **Every turn of hers that fails is told to the developer and to her** (ADR-076 R4, `faults.py`'s own docstring:
   "nobody may be left not knowing"). It holds for a turn that raises; it fails for every turn that fails its check,
   on both paths of §1, because the report is written by one caller's exception path and not where a turn ends.

@@ -16,7 +16,7 @@ Authenticated transport-neutral adapter seam. Platform protocol belongs to the a
 - def `kept_raw` — What of the adapter's raw event the host keeps: the sender profile verified against this authenticated sender and group, the profiles of the people it @-mentions (each bound to a mentioned account and this group), the normalized media block
 - def `called_by_name` — Whether a message says one of her names (her display name and the persona's other names, 2+ characters).
 - def `addressees` — The people her line is addressed to: whoever she @-tagged by label, and the author of the line she answered.
-- def `awaited_answer` — Whether this unaddressed line may be the answer her last line here waits for: her newest delivered line in this group was addressed to this person (or she asked for an answer from anyone with await_answer), it was under AWAIT_SECONDS ago, s
+- def `awaited_answer` — Whether this unaddressed line may be the answer her last line here waits for: her newest delivered line in this group was addressed to this person (or, on a line from before speak, she asked anyone here), it was under AWAIT_SECONDS ago, she
 - def `reply_parent` — A reused platform id resolves within this scene to the latest line no later than the reply.
 - def `group_context` — Bind a normalized reply to an actual record in this group and epoch.
 - def `route_key` — The key that opens one route of a channel whose kind declares ROUTE_KEYS (ADR-033 D4): derived from the channel's token, so nothing new is stored, and useless for any other route or channel.
@@ -303,7 +303,6 @@ How long stored media bytes live: every kind of stored picture has an owner or a
 - def `supports_image`
 - def `descriptor` — 行上那份附件元数据（校验过的副本）；形状不对就当没有，不猜。
 - def `declared` — 这条 publication **现在**到底有没有声明「随这条消息发一张图」。
-- def `attachment_for_speak` — 这一轮被程序接受的那张图 → SPEAK 第一行要写的元数据（没有就 None）。
 - def `route_target` — 这个场景的路由目标类型（dm / group），没有渠道路由就是 None。
 - def `group_scene` — 一个真正的群：场景是群，路由目标也是群（配置把私聊路由成群的不算）。
 - def `produced` — 她自己做出来的图：从她自己的生成端点导入时登记的（import_register）。

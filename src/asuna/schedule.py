@@ -52,7 +52,7 @@ def night_stage_busy(store):
     or one of her publications still being activated. One waiting for a Host restart does not hold the night: only
     that project takes no new publication until then (floor.js publish, waiting_restart)."""
     # A turn still at work (one waiting on its task is judged by the task below).
-    if episode_records.open(store, ['ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED'],
+    if episode_records.open(store, ['ATTENDING', 'PREPARED', 'TURN'],
                             kind='self_development').first(fields=['_id']):
         return 'STAGE_BUSY'
     # Only a queued or running task is at work: one a restart cut comes back to her (ADR-112 §12.3), and counted as

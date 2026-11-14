@@ -27,7 +27,7 @@ from .ingress import program_group_context
 from .lanes import Lane
 from .publish import PublishService
 from .render import episode_system
-from . import answers, faults, visibility, outbound_media, role_tools
+from . import answers, faults, visibility, role_tools
 from .state import Store, Denied, now
 from .tasks import FeedbackStale, require_current_feedback
 from .queue import database_effects_lock
@@ -52,7 +52,7 @@ class SessionCarried(RuntimeError):
 
 
 # Every state a turn can be resumed from after a restart (chat.py, tasks.py, recover()).
-RESUMABLE = ('ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED', 'INTERRUPTED')
+RESUMABLE = ('ATTENDING', 'PREPARED', 'TURN', 'INTERRUPTED')
 # What started a turn, for the conversation's trigger title (the client words it in the viewer's language).
 TRIGGERS = {'task_feedback': 'task_result', 'consult': 'question', 'task_time': 'internal', 'self_development': 'internal',
             'presence': 'internal', 'settlement': 'internal', 'scheduled': 'schedule', 'visit': 'visit', 'note': 'note'}
@@ -502,25 +502,6 @@ class Coordinator:
                 break
         return queued
 
-    def _publish(self, ep):
-        """Body text an older version accepted as her speech (SPEAK_ACCEPTED, from before ADR-129 D8): one message,
-        carrying her attach_image picture when she gave one. No turn accepts body text now; this only finishes such a
-        turn that was in flight when the version changed."""
-        ep_id=ep['_id']
-        key=ep_id+':speak:0'
-        if not message_records.get(self.store, key):
-            sequence=scene_records.next_seq(self.store, ep['scene_id'])
-            row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY',**({'errand':True} if ep.get('errand') else {})}
-            # 这一回合被程序接受的那张图（没有就 None）：字节仍在 BlobStore，行上只写元数据。
-            attach_meta=outbound_media.attachment_for_speak(ep)
-            if attach_meta:
-                row['attachment']=dict(attach_meta)
-            message_records.save(self.store, row,stream=ep_id)
-        self.publisher.publish(key)
-        self.crash('before_episode_commit')
-        return self._update(episode_records.get(self.store, ep_id),
-                            state='WAITING_TASK' if self._waits(ep) else 'COMMITTED')
-
     def _attend(self, ep):
         """Ask the gate (attend.py) in her per-group session; 不理 ends the episode before any recall."""
         from . import attend
@@ -619,7 +600,7 @@ class Coordinator:
             if ep['state']=='INTERRUPTED':
                 # Explicitly resumed role generation keeps its scene/session. Completed tools and
                 # publications are not replayed: tool calls keep their recorded results.
-                ep=self._update(ep,state='SPEAK_ACCEPTED' if ep.get('speech') else 'TURN',
+                ep=self._update(ep,state='TURN',
                                 resume_diagnostic=ep.get('failure','宿主中断'))
             elif ep['state']=='TURN' and not ep.get('resume_diagnostic'):
                 ep=self._update(ep,resume_diagnostic='宿主重启时这一回合还没结束')
@@ -630,8 +611,6 @@ class Coordinator:
                         return ep
                 if ep['state'] in ('PREPARED','TURN'):
                     ep=self._turn(ep)
-                if ep['state']=='SPEAK_ACCEPTED':
-                    ep=self._publish(ep)
                 return ep
             except FeedbackStale as exc:
                 return self._suppress_feedback(episode_records.get(self.store, ep_id), exc)
@@ -642,7 +621,7 @@ class Coordinator:
 
     def recover(self):
         self.store.recover_commits()
-        episodes=episode_records.open(self.store,['PREPARED','TURN','SPEAK_ACCEPTED'],
+        episodes=episode_records.open(self.store,['PREPARED','TURN'],
                                       not_kind=role_tools.ABOUT_A_TASK).rows()
         for ep in episodes:
             if ep['state']=='TURN':

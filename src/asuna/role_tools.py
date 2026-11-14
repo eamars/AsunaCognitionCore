@@ -207,9 +207,6 @@ CALLS_ENDED = '这回合的工具调用过了硬线（%d），回合到这里结
 CALLS_OVER = 'CALLS_OVER'          # the code of a call past the hard line: it ran nothing
 TITLE_FROM_BRIEF = '没写 title：用了 brief 的第一句：%s'
 from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her words for a function not carried here
-# What speak carries itself, so it is listed nowhere speak is (owner 2026-10-19): in every conversation only speak
-# speaks, and a turn that does not call it is silent (ADR-129 D8).
-REPLY_REPLACES = ('await_answer', 'attach_image')
 # ADR-129 D9: a local conversation (every one whose channel kind declares no REPLY_PARTS: her local Web chat, the agent
 # lines, the peer line) has speak with these parts and none of QQ's rules on it.
 LOCAL_PARTS = ('text', 'sticker', 'picture')
@@ -302,13 +299,6 @@ TOOLS = {
             'patience': _s('wait=question 时等多久（不写是一会儿）', enum=['一会儿', '半天', '一天']),
             'force': _s('yes：text 里的 #数字照原样发', enum=['yes', 'no'])},
     },
-    'await_answer': {
-        'description': ('等不等回话。群里你这句 @ 了谁或在回谁，程序默认等他：发出后约三分钟里他的下一句会叫你看一眼（接不接由你）'
-                         '，一句只看一次。wait=no 不等这一句（随口一句、不需要他回）；没 @ 谁也没回谁、却想等这里谁回话，'
-                         'wait=yes。只管这一句、这个群、三分钟；几个小时里在哪儿都想知道某人开口，用 watch。'),
-        'parameters': {'wait': _s('等还是不等（不写就是 yes）', enum=['yes', 'no']),
-                       'why': _s(limit=200, description='wait=yes 时：在等什么回话，一句话')},
-    },
     'credential': {
         'description': ('保险箱，只在家里：有人给你密码、令牌、账号这类凭据，用 keep 收进去（name 起个短名；note 写它是干什么的；'
                          'env 是环境变量名到值）。收进去后值谁都看不到，你和行动脑也看不到；要用就交代行动脑在 sandbox_run 里写 credentials 这个名字。'
@@ -331,11 +321,6 @@ TOOLS = {
                        'mode': _s('on 用：once 或 burst，默认 once', enum=['once', 'burst']),
                        'why': _s('on 可写：为什么盯他，一句话（家里写的只在家里看得到）'),
                        'id': _s('off 用：watching_from_program 里的 id')},
-    },
-    'attach_image': {
-        'description': ('给这回合的话配一张图，随话一起发出。artifact_id 照抄 image_artifacts_from_program 里的；'
-                         '正文只写要说的话，不写文件名、路径或「见图」。一回合一张，再调用就换成新的那张。'),
-        'parameters': {'artifact_id': _s('图片 artifact_id', required=True), 'why': _s(limit=500, description='为什么发这张', required=True)},
     },
     'sticker': {
         'description': ('整理你的表情包架子（stickers_from_program），do 选一样：keep 收下一个（ref 照抄群里表情包下标的「表情包 ref」（att-…）'
@@ -933,8 +918,6 @@ def _turn_rules(store, ep):
     if tasks and not outside and task_records.many(store, [task['_id'] for task in tasks],
                                                    states=['READY', 'RUNNING']).first(fields=['_id']):
         names.append('task.stop')
-    if context.get('image_artifacts_from_program'):
-        names.append('attach_image')
     if context.get('stickers_from_program') or context.get('stickers_review_from_program')             or context.get('sticker_candidates_from_program'):
         names.append('sticker')
     scene_kind = (scene_records.get(store, ep['scene_id'], fields=['kind']) or {}).get('kind')
@@ -948,7 +931,7 @@ def _turn_rules(store, ep):
         names.append('find_member')
     if scene_kind == 'group':
         # A home group a note from outside opened a visit in: its focus is home's to set.
-        names += ['await_answer', *([] if outside else ['group_focus'])]
+        names += [] if outside else ['group_focus']
     if cls == visibility.OWNER_PRIVATE:
         # restart: the Host supervisor (ADR-034), in every home turn: a plan or a note of her own that wakes her
         # to restart is when she needs it most.
@@ -985,7 +968,7 @@ def _turn_rules(store, ep):
     names += note_tool
     # ADR-064 phase 2, ADR-129 D8: in every conversation she speaks only through speak, whose parts carry the quote,
     # the wait and pictures where they are carried.
-    return [name for name in names if name not in REPLY_REPLACES] + ['speak']
+    return names + ['speak']
 
 
 # Her tools by where the conversation is (visibility.place) and what its channel carries. Every turn of a conversation
@@ -996,7 +979,7 @@ WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answe
 # herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
 AT_HOME = ('write_document', 'note', 'set_policy', 'ideas.read', 'ideas.review',
            'ask.ask', 'ask.read', 'ask.close', 'restart', 'group_focus')
-IN_GROUPS = ('write_document', 'note', 'await_answer', 'find_member', 'group_focus')
+IN_GROUPS = ('write_document', 'note', 'find_member', 'group_focus')
 # Her heartbeats, her nights and her vault are in the local chat.
 LOCAL_CHAT = ('visit', 'promote_memory', 'credential')
 
@@ -1009,7 +992,7 @@ def toolbox(store, ep):
 def abilities(store, ep):
     """What her conversation lists, by option, the same in each of its turns: decided by its place, its channel and
     the configuration, never by the turn's kind or context."""
-    from . import channel_kinds, group_admin, lines, outbound_media, stickers
+    from . import channel_kinds, group_admin, lines, stickers
     from .affect import AffectLedger
     from .grants import conversation_workspace
     from .people import People
@@ -1045,8 +1028,6 @@ def abilities(store, ep):
         names.append('read_image')
     if channel_kinds.file_hosts(ep['scene_id']) or cls == visibility.OWNER_PRIVATE:
         names.append('received_file')           # files people send (ADR-102); at home, from any of her conversations
-    if outbound_media.target_allowed(config, scene, cls)[0]:
-        names.append('attach_image')
     if stickers.sends(scene) or web_chat:
         names.append('sticker')                 # in the local chat, to tidy her shelf
     if where == 'home':
@@ -1055,7 +1036,7 @@ def abilities(store, ep):
         names += LOCAL_CHAT
         if channel_kinds.answers_requests(config):
             names.append('group_action')        # answering the friend and group requests listed at home
-    names = [name for name in names if name not in REPLY_REPLACES] + ['speak']      # ADR-064 phase 2, ADR-129 D8
+    names.append('speak')                   # ADR-064 phase 2, ADR-129 D8: in every conversation only speak speaks
     order = {name: index for index, name in enumerate(TOOL_NAMES)}
     return sorted(set(names), key=lambda name: (order[name.split('.')[0]],
                                                 OPS.get(name.split('.')[0], ('',)).index(name.split('.', 1)[-1])
@@ -1074,8 +1055,6 @@ NOT_NOW = {
     'delegate': '这回合说话的人在这里没有交给行动脑的授权，这件事交不了；能直接答的就直接答，答不了就照实说。',
     'task.message': '这个对话现在没有交给行动脑的事；要交新的事用 delegate。',
     'task.stop': '现在没有在做或暂停着的任务可停。',
-    'attach_image': ('这回合没有能带的图：能发的图列在 image_artifacts_from_program 里，这回合没有；'
-                     '要新图，先用 delegate 交代行动脑画，画好那回合再带。'),
     'sticker': ('这回合没有表情包可用：架子和候选不在这回合里（夜间沉淀只在列出 stickers_review_from_program 那晚整理架子）；'
                 '在能发表情包的对话里，或者家里别的回合再用。'),
     'credential': '保险箱只在家里有人跟你说话、或者任务交回来的那一回合用；心跳、计划到点、自我改进这些回合不收不删。',
@@ -1110,7 +1089,6 @@ HOME_AUTHORITY = frozenset(('delegate', 'task.message', 'task.stop', 'errand', '
 INSTEAD = {
     'task.answer': (('task.message', '给行动脑补话、改目标'),),
     'task.message': (('delegate', '把一件新的事交给行动脑'),),
-    'attach_image': (('delegate', '先让行动脑把图画出来'),),
     'errand': (('visit', '自己出门去那个群看看'),),
     'visit': (('plan', '把这件事留到将来再想'),),
 }
@@ -2085,17 +2063,6 @@ class RoleTools:
             return watches.stop(self.store, ep['persona'], args.get('id')), False
         raise Refused('do 是 on、off 或 block%s。' % _given(args, 'op'), ['ARGS_ENUM'])
 
-    def tool_await_answer(self, ep, call_id, args):
-        wait = args.get('wait', 'yes')
-        if wait not in ('yes', 'no'):
-            raise Refused('wait 是 yes 或 no%s。' % _given(args, 'wait'), ['ARGS_ENUM'])
-        if wait == 'no':
-            self.coordinator._update(self._fresh(ep), await_answer={'off': True})
-            return {'note': '这回合不等回话。'}, False
-        why = self._text(args, 'why', 200)
-        self.coordinator._update(self._fresh(ep), await_answer={'why': why})
-        return {'note': '这句发出去后约三分钟里，你 @ 的人、你回的人（都没有时这里任何人）下一句没 @ 你也会叫你看一眼。'}, False
-
     def tool_speak(self, ep, call_id, args):
         """ADR-064 phase 2: her speech here, in parts. Every part is checked before any is queued: one wrong part
         means none of this call leaves, and the result says which and why."""
@@ -2568,31 +2535,6 @@ class RoleTools:
         scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
         return received_files.run(self.store, scene, self.store.config, args, persona=ep['persona'],
                                   session_class=self._cls(ep)), False
-
-    def tool_attach_image(self, ep, call_id, args):
-        from . import outbound_media
-        from .blobs import BlobStore
-        artifact = self._text(args, 'artifact_id', 200)
-        self._text(args, 'why', 500)
-        cls = self._place(ep)
-        scene = scene_records.get(self.store, ep['scene_id'], fields=['_id', 'channel_id', 'kind', 'scope_key', 'members'])
-        allowed, reason = outbound_media.target_allowed(self.store.config, scene, cls)
-        if not allowed:
-            raise Denied('ATTACH_TARGET_NOT_ALLOWED: %s；重试也一样，这回合只说话不带图'
-                         % ATTACH_REASONS.get(reason, reason))
-        mine_only = outbound_media.own_only(self.store.config, scene, cls)
-        scopes = [] if mine_only else outbound_media.image_scopes(self.store, self.store.config, scene, cls,
-                                                                  ep.get('person_id'))
-        here, scene_id = (scene or {}).get('scope_key'), (scene or {}).get('_id')
-        offered = (ep.get('context') or {}).get('image_artifacts_from_program') or {}
-        if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
-            outbound_media.refuse_erased_named(self.store, artifact, scopes, produced_only=mine_only, here=here,
-                                               scene_id=scene_id)
-            raise Denied('ATTACH_ARTIFACT_NOT_IN_CONTEXT: ' + echoed(artifact))
-        meta = outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact, scopes,
-                                              produced_only=mine_only, here=here, scene_id=scene_id)
-        self.coordinator._update(self._fresh(ep), attachment=dict(meta))
-        return {'attached': artifact, 'note': '这张图会随你这回合要说的话一起发出去。'}, False
 
     def tool_sticker(self, ep, call_id, args):
         from . import stickers

@@ -222,7 +222,6 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_recall`
   - `tool_credential`
   - `tool_watch`
-  - `tool_await_answer`
   - `tool_speak` — ADR-064 phase 2: her speech here, in parts.
   - `tool_task_answer`
   - `tool_delegate`
@@ -232,7 +231,6 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_task_stop`
   - `tool_read_image`
   - `tool_received_file`
-  - `tool_attach_image`
   - `tool_sticker`
   - `tool_write_document`
   - `tool_understand_person`

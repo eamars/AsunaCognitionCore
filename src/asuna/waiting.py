@@ -1,5 +1,5 @@
-"""Who she is still waiting for: her lines of the last hour in a group that called someone with an @, or asked for an
-answer with `await_answer` wait=yes, whose people have not spoken there since.
+"""Who she is still waiting for: her lines of the last hour in a group that called someone with an @ (speak's wait not
+turned off), whose people have not spoken there since.
 
 Computed each time from the stored lines; nothing is kept. A person drops off the list when they speak in that
 group, a line she set wait=no never counts, a plain reply does not count, and a line older than HORIZON is no

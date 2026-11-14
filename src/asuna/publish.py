@@ -63,7 +63,7 @@ class PublishService:
         ep=episode_records.get(self.store,msg['episode_id'])
         scene=scene_records.get(self.store, msg['scene_id'])
         # A part of her reply leaves while her turn still runs (ADR-064 phase 2); words leave once the turn accepted them.
-        speaking=('SPEAK_ACCEPTED','COMMITTED')+(('TURN',) if msg.get('reply_part') else ())
+        speaking=('COMMITTED',)+(('TURN',) if msg.get('reply_part') else ())
         if not ep or ep['state'] not in speaking or ep['policy_epoch']!=scene['policy_epoch'] or msg['scope_key']!=scene['scope_key']:
             raise Denied('PUBLICATION_CONTEXT_STALE')
         from .tasks import require_current_feedback

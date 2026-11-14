@@ -127,7 +127,7 @@ def called_by_name(store, text):
 
 # A line of hers addressed to someone waits for their answer: the people she @-tagged and the person she answered.
 # Their next unaddressed line within this long gets her one look (owner 2026-10-06: by default, like a reply; she
-# turns it off for a line with await_answer). Human answers in her groups: median 40 s, 90% within ~3 min.
+# turns it off for a line with speak's wait). Human answers in her groups: median 40 s, 90% within ~3 min.
 AWAIT_SECONDS = 180
 
 
@@ -146,7 +146,7 @@ def addressees(store, scene, line):
 
 def awaited_answer(store, scene, person_id, mentions, reply):
     """Whether this unaddressed line may be the answer her last line here waits for: her newest delivered line in
-    this group was addressed to this person (or she asked for an answer from anyone with await_answer), it was under
+    this group was addressed to this person (or, on a line from before speak, she asked anyone here), it was under
     AWAIT_SECONDS ago, she did not turn the wait off, the line @s or quotes no one else, and hers has not had its
     look yet."""
     if mentions or reply:
@@ -612,7 +612,7 @@ class Channels:
                 or message['channel_account_id'] != self.store.config['channels'][channel_id]['account_id']):
             raise Denied('PUBLICATION_CONTEXT_STALE')
         # A part of her reply leaves while her turn still runs (ADR-064 phase 2), as in publish._publish.
-        speaking = ('SPEAK_ACCEPTED', 'WAITING_TASK', 'COMMITTED') + (('TURN',) if message.get('reply_part') else ())
+        speaking = ('WAITING_TASK', 'COMMITTED') + (('TURN',) if message.get('reply_part') else ())
         if not episode or episode['state'] not in speaking:
             raise Denied('PUBLICATION_EPISODE_STALE')
         if episode.get('task_id'):

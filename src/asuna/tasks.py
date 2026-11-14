@@ -660,7 +660,7 @@ class TaskService:
                     observations_total=len(observations),finished_at=current.get('finished_at'))
             self.handback(task,'handing',short=short)
             ep=coordinator.ingest(event,persona=original['persona'])
-        if ep['state'] in ('PREPARED','TURN','SPEAK_ACCEPTED','INTERRUPTED'):
+        if ep['state'] in ('PREPARED','TURN','INTERRUPTED'):
             ep=coordinator.advance(ep['_id'])
         with self.lock:
             latest = task_records.get(self.store, task['_id'])

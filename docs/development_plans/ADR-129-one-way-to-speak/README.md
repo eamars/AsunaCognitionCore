@@ -1,6 +1,7 @@
 # ADR-129: One way to speak, at home too
 
-Status: **Open** 2026-11-14: two exits of §9 left (`_publish`, the retired tools' code), landed together. The rule closed 2026-11-13 21:1x by proof (§10): installed 20:12 as 816e825ea84f, one rule in every conversation
+Status: **Closed** 2026-11-14 15:09: §9's two exits (`_publish`, the retired tools' code) installed as `8c07e4e02cc2` and read
+by content (§11). The rule closed 2026-11-13 21:1x by proof (§10): installed 20:12 as 816e825ea84f, one rule in every conversation
 (D8-D12). The first part (her local chat only) was installed 17:50 as 92fd20700e55; the owner revised the scope the
 same evening. ADR-128 waited on this page and may now be built.
 
@@ -407,9 +408,11 @@ Built to D8-D12 and reviewed against the code. What the code decided, beyond the
   a dropped sticker would have drawn as words: `outbound_media.kept_sticker` now passes a sticker row already
   delivered (it is shown again, never sent again; D10).
 - **Older episodes.** `_publish` stays only to finish an episode an older version left in `SPEAK_ACCEPTED`. Its exit:
-  removed once a reading after the install finds no such episode.
+  removed once a reading after the install finds no such episode. (Removed 2026-11-14 with the state itself: the
+  reading found none, §11.)
 - **Left for a follow-up.** `attach_image` and `await_answer` are listed nowhere now; their code stays until removed on
   its own. Her skill `asuna-image-generation-and-display` still names `stay_silent` and `attach_image`: hers to fix.
+  (The code removed 2026-11-14, §11. She read those mentions in her skill and keeps them, agent line 0483.)
 - Literals retired with no replacement (told to her): the `stay_silent` description, `CALLED_LEFT`, the reasons line
   所以我没说话, the plugin's `written` and refused-silence lines, `NAMES_NOTE`, `speech_problem`'s no-words and
   no-thought sentences; the `tools_off` refusal lost the word `stay_silent`.
@@ -435,3 +438,35 @@ publication), the QQ adapter back by itself. The demo (造的, database `asuna_v
 - No hand-back for a missing answer (`turn.rejected`: 0).
 - Every turn since the install (9 recorded by `turn.started`) lists `speak`; none lists `stay_silent`.
 Stored as QQ stores it: the sticker rows of both conversations are delivered with their attachment (D10).
+
+## 11. The exits, installed and closed (2026-11-14)
+
+Her verdict on the three commits together: install, nothing in the way (agent line 0498), with three conditions:
+all three at once, the page's `await_answer` sentence as the tip has it, and this page read by content and corrected
+with the install. Her commit `ca18b6d7ce2e` (her failure-scan skill) landed on `main` first; the three were rebased
+onto it (her rule 0444): `git range-diff` shows each patch unchanged (`=`), only the parent new. Landed 14:59-15:09
+at her word (agent line 0499), before the 16:00 she had set, so the fix after it could go in sooner.
+
+- `46d8aa99e3a6`: `coordinator._publish` and the `SPEAK_ACCEPTED` state removed (an `INTERRUPTED` turn resumes as
+  `TURN`); the code of the retired `attach_image` and `await_answer` removed (their specs, handlers, the listings that
+  added and filtered them, their `NOT_NOW` and instead lines, `outbound_media`'s `OFFER_NOTE` and
+  `attachment_for_speak`).
+- `3dbeb31b647d` (her word, agent line 0495): the group block for a line that may answer her
+  (`awaited_from_program`) keeps only its `note`, now 你上一句 @ 了他或是在回他；这句没 @ 你也没引用你，是不是在回你由你判断。
+  (`you_were_waiting_for` and the half-sentence about a retired way of waiting removed); the readers of
+  `await_answer.why`, which only the retired tool wrote, removed, with 这里任何人 (`waiting.ANYONE`).
+- `8c07e4e02cc2`: her old `attach_image` and `await_answer` calls keep their rows on the Web page (test).
+- Kept: the `await_answer` field. `speak`'s `wait` writes `off` into it; two readers read it, both only `off`
+  (`channels.awaited_answer`, `waiting`). The page's labels for the two retired tools (her old calls still draw), and
+  `reasons.py`'s 发了一张图 (old records).
+- Her tools 29 → 27; their definitions 671 characters shorter (1,171 bytes).
+- Before the install: 0 episodes in `SPEAK_ACCEPTED`; 5 `INTERRUPTED`, none carrying speech or parts.
+- The suite on the landing commit: Python 1047 passed, JS 328 passed, 0 skipped, 0 unchecked.
+- Installed 15:09 as `8c07e4e02cc2` (core package `a0aa2f33f88a`). Read by content in her profile's installed copy: no `SPEAK_ACCEPTED`
+  in the code and no `coordinator._publish` (`publish.py`'s own `_publish` is another, unchanged); no `attach_image` or `await_answer` spec; 27 tools; the `awaited_from_program`
+  note as above; `you_were_waiting_for` and 这里任何人 nowhere.
+
+**Found after (2026-11-14): ADR-131.** §10's reading counted refusals and hand-backs, not how turns ended. Three
+agent-line turns in its window (20:13, 20:21, 20:30) ran to the 25-call line, and on 11-14 five turns in one QQ group
+did: with `stay_silent` gone a turn ends only when the model calls nothing (D8), and her model writes its decision
+to stop as one more call. That class is [ADR-131](../ADR-131-a-turn-she-can-end/README.md)'s.

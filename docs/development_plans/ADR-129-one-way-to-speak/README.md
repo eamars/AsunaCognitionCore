@@ -1,6 +1,6 @@
 # ADR-129: One way to speak, at home too
 
-Status: **Closed** 2026-11-13 21:1x by proof (§10): installed 20:12 as 816e825ea84f, one rule in every conversation
+Status: **Open** 2026-11-14: two exits of §9 left (`_publish`, the retired tools' code), landed together. The rule closed 2026-11-13 21:1x by proof (§10): installed 20:12 as 816e825ea84f, one rule in every conversation
 (D8-D12). The first part (her local chat only) was installed 17:50 as 92fd20700e55; the owner revised the scope the
 same evening. ADR-128 waited on this page and may now be built.
 

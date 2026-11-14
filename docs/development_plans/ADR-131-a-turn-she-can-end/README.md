@@ -1,6 +1,8 @@
 # ADR-131: A turn she can end
 
-Status: **Proposed** 2026-11-14 by big sis (Claude Code), at the owner's direction (The ask). The owner made it
+Status: **Closed** 2026-11-14 19:0x by proof (§10): installed 18:45 as `2bed5ab29b7d`, read by content, and her
+first real turns after it ended by `end_turn`. Proposed 2026-11-14 by big sis (Claude Code), at the owner's
+direction (The ask). The owner made it
 today's one ADR, ADR-121 next, and asked for it to land as early as she can take it. Read by her 2026-11-14 15:07 at
 `1dc8e46cb41f` (agent line 0501): D2 and D4 agreed; D3's wording, D9's words, the time-up turn in D2, a row of §4 and
 §8's baseline are hers. Her window for the install: 16:45-18:45, any time before 19:30 (0502). Designed against `main` with ADR-129's exits on top (`8c07e4e02cc2`); every count in
@@ -205,3 +207,47 @@ condition: turns at the hard line per day and where, printed by `line_watch.py -
 Its baseline before the install (her 0501): 11-13 3 on agent lines (20:13, 20:21, 20:30); 11-14 5 in one QQ group
 (14:03, 14:04, 14:18, 14:20, 14:29; 8, 8, 3, 7 and 9 messages queued); before ADR-129, 1 in 1,175 turns
 (11-10 to 11-13 20:12).
+
+## 9. The build (2026-11-14)
+
+On `main` after ADR-129's close (`b029cd0d7a3e`): the page (`63f1568dd934`; she read it as `1dc8e46cb41f` before a
+rebase that changed only a context line of the index), her verdict 0501 on it (`736b8345898f`), the code
+(`80126a3f87b0`), her 0503 sentence on D3 (`ca61724cbd1b`), the project map (`17b844f41353`, generated) and her 0504
+asks (`2bed5ab29b7d`: tests that pin her result word for word and her guide's ending in the prompt a turn is sent,
+the consult refusal recorded as `NOT_NOW`; the page's call number and "no sample"). Her verdict: install, nothing in
+the way (0504 on the code; 0508 moved it to `2bed5ab29b7d`, whose changes after the code are docs and tests only).
+
+- The suite on `2bed5ab29b7d`: Python 1055 passed (1047 and `tests/test_end_turn.py`'s 8), JS 328, 0 skipped,
+  0 unchecked. `tests/test_cache_readout.py`, red in her sandbox (an ACL on temp files), passed outside it.
+- Her tool budget, counted by her too: 28 tools, 20,513 characters declared (+86), 33,800 bytes (+162).
+
+**Shown (2026-11-14 18:33-18:37, 造的).** An isolated profile and database (`asuna_v2_demo_adr131`, dropped after),
+the demo persona, one agent line, every route on a stub model, the Host started with no model key; installed from
+the build. Read from the demo's database and the stub's request log:
+- `think` → `speak` → `end_turn`: the message reached the line; the turn saved after three model requests, none after
+  `end_turn`; no hand-back.
+- `end_turn` alone, no thought, with an old `reason` field: saved, no hand-back.
+- 23 `think` calls, then `end_turn` as the 24th: not refused; the turn ended.
+- `think`, then `end_turn` with body text in the same response and no `speak`: saved, not handed back, nothing sent;
+  the next turn's prepared context carried 没发出去：「…」 once.
+- A `speak` refused for its shape, then `end_turn`: the turn ended with nothing sent (D5's accepted case).
+- Not shown: the page's row 结束回合 (the demo page stayed behind DSH's own preview notice). Unchecked, not passed.
+
+## 10. Installed and closed (2026-11-14)
+
+Installed 18:45 (`back_at` 18:45:56, about 50 s down) as `2bed5ab29b7d` at her word (0509; her window 16:45-19:30).
+`loaded.commit` `2bed5ab2`; the 169 installed files the same as the commit; the QQ adapter back by itself; core
+package `126a5f610a18`, hers unchanged (`f62358557927`). Read by content in her profile's installed copy: the
+description and result in her words, her guide's ending with both ends, `KEEP` and `NOT_DEEDS` with `end_turn`, the
+skip in `_run_turn`; 28 tools. From her side (0510) she read the launcher's block (`2bed5ab2`, the package
+ids) and `end_turn` in her own tool list.
+
+§8's readings, her first real turns after the install (counts and program words only):
+- Her agent line, 18:47: `think` → `speak` (2 parts) → `write_document` → `end_turn`; saved after one delivery, no
+  hand-back.
+- The QQ group of §1, 19:03: `think` → `speak` (1 part) → `end_turn`; three model steps, saved after one delivery in
+  20 s, no hand-back, no short thought to stop. The same group's turns earlier that day: 5 of 12 at the hard line.
+- Turns at the hard line from the install to 19:04: none (the sentinel's line has only the baseline's).
+
+Unchecked by both of us, said as such: the page's row (§9), and why `selections.xiaoman`'s candidate id changed at
+ADR-129's install. From here the sentinel is the reading; she reads her own use again 11-15 15:30.

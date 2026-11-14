@@ -8,7 +8,7 @@ from __future__ import annotations
 import traceback
 from types import SimpleNamespace
 from . import clock
-from .config import character_id, excerpt, redact_text
+from .config import excerpt, redact_text
 from . import errands as _errands, visibility
 from . import handover as _handover
 from .render import render_system, readable_sections, model_and_policy
@@ -21,7 +21,6 @@ from .familiarity import words as familiarity_words
 from . import attend, caught_up, notices, own_mute
 from .records import scenes as scene_records
 from .records import messages as message_records
-from .records import episodes as episode_records
 from .records import receipts as receipt_records
 from .records import plans as plan_records
 from .records import tasks as task_records
@@ -1185,13 +1184,9 @@ class ContextBuilder:
                 continuity['caught_up_from_program'] = ('这句是断线时漏收、恢复后补读进来的旧话，当时 @ 了你或回了你；'
                     '它是什么时候说的看行上的时间。答之前先看群里后来怎么样了，现在还用不用答。')
             elif group.get('wake_reason') == 'awaited_answer':
-                # The wait record of her last line here (speak's wait; `why` only on lines of the retired tool).
-                mine = message_records.spoken(self.store, scene['_id'], author=character_id(self.store.config)).first(
-                    newest_first=True, fields=['episode_id'])
-                waiting = ((episode_records.get(self.store,(mine or {}).get('episode_id'),fields=['await_answer']) or {})
-                           .get('await_answer') or {}).get('why')
-                continuity['awaited_from_program'] = {'you_were_waiting_for': excerpt(waiting, 200) if waiting else '',
-                    'note': '你上一句 @ 了他或是在回他（或你说了在等回话）；这句没 @ 你也没引用你，是不是在回你由你判断。'}
+                # Her last line here @-ed this person or answered them (channels.awaited_answer); her words, 0495.
+                continuity['awaited_from_program'] = {
+                    'note': '你上一句 @ 了他或是在回他；这句没 @ 你也没引用你，是不是在回你由你判断。'}
             context['group_continuity_from_program'] = continuity
 
     def _tools(self, f):

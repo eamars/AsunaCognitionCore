@@ -146,7 +146,7 @@ def addressees(store, scene, line):
 
 def awaited_answer(store, scene, person_id, mentions, reply):
     """Whether this unaddressed line may be the answer her last line here waits for: her newest delivered line in
-    this group was addressed to this person (or, on a line from before speak, she asked anyone here), it was under
+    this group was addressed to this person, it was under
     AWAIT_SECONDS ago, she did not turn the wait off, the line @s or quotes no one else, and hers has not had its
     look yet."""
     if mentions or reply:
@@ -163,13 +163,10 @@ def awaited_answer(store, scene, person_id, mentions, reply):
         return False
     choice = (episode_records.get(store, mine.get('episode_id'), fields=['await_answer']) or {}).get('await_answer')
     if (choice or {}).get('off'):
-        return False
+        return False                   # speak's wait turned it off
     asked = addressees(store, scene, mine)
-    if asked:
-        if People(store).person(person_id) not in asked:
-            return False
-    elif not choice:
-        return False                   # addressed to nobody and no wait asked for: a remark of hers
+    if not asked or People(store).person(person_id) not in asked:
+        return False                   # addressed to someone else, or to nobody: a remark of hers
     return not message_records.woken(store, scene['_id'], 'awaited_answer', after=mine.get('scene_seq', 0))
 
 

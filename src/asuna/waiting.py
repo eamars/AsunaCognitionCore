@@ -15,7 +15,6 @@ from .records import episodes as episode_records
 HORIZON = timedelta(hours=1)
 SHOWN_HOME = 5
 EXCERPT = 30
-ANYONE = '这里任何人'
 NOTE = '你点过名（@ 或 wait=yes）、到现在还没在那边开口的人，一小时以内的。对方一开口就不再列；过了一小时自己消失。'
 
 
@@ -51,16 +50,16 @@ def pending(store, scene_ids, moment, persona=None):
                 doc = by_handle.get(match.group('handle') or match.group('bare'))
                 if doc:
                     called[people.person(doc['person'])] = doc
-            if not called and not choice.get('why'):
+            if not called:
                 continue
-            for person, doc in (called.items() if called else [(None, None)]):
+            for person, doc in called.items():
                 if person in settled:
                     continue                    # a newer line to them is already listed, or they answered it
                 settled.add(person)
                 # a task result or a due plan answers nobody's wait
                 after = message_records.inbound(
                     store, scene_id, after=line.get('scene_seq') or 0, people_only=True,
-                    **({'authors': people.authors_of(person, [scene_id]) or [person]} if person is not None else {}),
+                    authors=people.authors_of(person, [scene_id]) or [person],
                     by=None)
                 if not after.first(fields=['_id']):
                     found.append({'scene_id': scene_id, 'person': person, 'doc': doc, 'at': line.get('receipt_at'),
@@ -77,7 +76,7 @@ def block(store, scene_ids, moment, persona=None, *, home=False):
         return None
     people, shown = People(store, persona), []
     for item in items[:SHOWN_HOME] if home else items:
-        row = {'who': people.label(item['doc']) if item['doc'] else ANYONE, 'waiting_since_at': item['at'],
+        row = {'who': people.label(item['doc']), 'waiting_since_at': item['at'],
                'waiting_on_you': True,
                'your_line': _excerpt(item['text'])}
         if home:

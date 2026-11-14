@@ -205,6 +205,10 @@ CALL_LAST = '这回合第 %d 次工具调用，到了硬线（%d）：这次不�
 CAP_SPEAKS = '用它 speak 把要说的说完。'
 CALLS_ENDED = '这回合的工具调用过了硬线（%d），回合到这里结束。'
 CALLS_OVER = 'CALLS_OVER'          # the code of a call past the hard line: it ran nothing
+# ADR-131: the one call that only ends her turn (her model writes its decision to stop as a call). Her words (D9, 0501).
+END_TURN = 'end_turn'
+END_TURN_WORDS = '结束这一回合。除此之外什么都不做：不发话、不查东西；要说的话先用 `speak` 说完再调它。'
+END_TURN_NOTE = '这一回合结束了。'
 TITLE_FROM_BRIEF = '没写 title：用了 brief 的第一句：%s'
 from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her words for a function not carried here
 # ADR-129 D9: a local conversation (every one whose channel kind declares no REPLY_PARTS: her local Web chat, the agent
@@ -299,6 +303,7 @@ TOOLS = {
             'patience': _s('wait=question 时等多久（不写是一会儿）', enum=['一会儿', '半天', '一天']),
             'force': _s('yes：text 里的 #数字照原样发', enum=['yes', 'no'])},
     },
+    END_TURN: {'description': END_TURN_WORDS, 'parameters': {}},
     'credential': {
         'description': ('保险箱，只在家里：有人给你密码、令牌、账号这类凭据，用 keep 收进去（name 起个短名；note 写它是干什么的；'
                          'env 是环境变量名到值）。收进去后值谁都看不到，你和行动脑也看不到；要用就交代行动脑在 sandbox_run 里写 credentials 这个名字。'
@@ -881,6 +886,7 @@ def _turn_rules(store, ep):
         return names + ['task.answer']
     if kind == TASK_TIME:
         return names + ['task.more', 'task.message', 'task.stop']
+    names.append(END_TURN)              # ADR-131: every turn but a consult or a time-up can end itself
     if her_pictures(store, ep):
         names.append('read_image')
     names.append('received_file')       # listed where files can be read; a ref nothing offers is answered as not found
@@ -973,7 +979,7 @@ def _turn_rules(store, ep):
 
 # Her tools by where the conversation is (visibility.place) and what its channel carries. Every turn of a conversation
 # lists the same ones; `exposed` picks which of them the turn may use.
-EVERYWHERE = ('think', 'recall', 'ideas.note', 'plan', 'private_words', 'understand_person')
+EVERYWHERE = ('think', 'recall', 'ideas.note', 'plan', 'private_words', 'understand_person', END_TURN)
 WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answer', 'task.more', 'task.settle')
 # Her home lines: the owner's own conversations and the trusted lines (his agents, her other self). Things about
 # herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
@@ -1538,6 +1544,8 @@ class RoleTools:
         if thinking is not None:
             ep = self.take_thought(ep, call_id, thinking)
         self.problems, self.collecting, self.flagged, self.repairs = [], False, set(), []
+        if name == END_TURN:
+            return self._end_turn(ep, call_id, args)
         called_as = None
         if name in RENAMED and isinstance(args, dict):          # an old name runs as its option (ADR-055)
             called_as, (name, args) = name, renamed(name, args)
@@ -1653,6 +1661,28 @@ class RoleTools:
                      parts=self.__dict__.pop('parts', None),
                      result=picture_receipt(result) if name == _READ_IMAGE['name'] else result)
         return self._local(ep, result), conclude
+
+    def _end_turn(self, ep, call_id, args):
+        """ADR-131 D3: end_turn ends the turn. It is under the gate of what this turn may use (NOT_NOW: a consult and
+        a time-up turn have their own end in task), and nothing else: no thought first, no call count, no call cap, no
+        schema, its fields ignored. A replay concludes again."""
+        done = (ep.get('tool_calls') or {}).get(call_id)
+        if done:
+            if done['tool'] != END_TURN:
+                raise Refused('这个调用编号已经用在另一次调用上了（不是你的错）；重新调用一次就行。', ['CALL_ID_REUSED'])
+            if done.get('refused'):
+                raise Refused(done['refused'], [done.get('code') or 'CALL_REPLAYED'])
+            return self._local(ep, done['result']), True
+        if END_TURN not in (ep.get('turn_tools') or ()):
+            refusal = not_now(self.store, ep, END_TURN)
+            self._record(ep['_id'], call_id, END_TURN, args, refused=refusal, code='NOT_NOW')
+            raise Refused(refusal, ['NOT_NOW'])
+        result, conclude = self.tool_end_turn(ep, call_id, args)
+        self._record(ep['_id'], call_id, END_TURN, args, result=result, conclude=conclude)
+        return self._local(ep, result), conclude
+
+    def tool_end_turn(self, ep, call_id, args):
+        return {'note': END_TURN_NOTE}, True
 
     # ── the problems a call has (ADR-108 D4b) ───────────────────────
     def _found(self, text, code, short=None):
@@ -3000,7 +3030,7 @@ class RoleTools:
             raise Refused('tools_off 的 value 是工具名的列表（比如 ["sticker", "delegate"]）；空列表就是全部恢复。', ['ARGS_TYPE'])
         unknown = [t for t in tools if t not in TOOLS or t in switches.KEEP]
         if unknown:
-            raise Refused('这些关不了：%s（不是工具，或是一回合离不了的 think、recall）。'
+            raise Refused('这些关不了：%s（不是工具，或是一回合离不了的 think、recall、end_turn）。'
                           % '、'.join(echoed(name) for name in unknown),
                           ['SWITCH_NOT_A_TOOL'])
         scene = scene_records.get(self.store, found[0]) or {'_id': found[0]}

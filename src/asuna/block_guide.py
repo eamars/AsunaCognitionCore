@@ -89,7 +89,7 @@ def strip(context):
 # How her words leave, said once for the conversation (turn.md's {words} and {ending}), the same in every
 # conversation: only speak speaks (ADR-129 D8, her words, agent line 0449).
 WORDS = '你用工具做事；只有 `speak` 发得出去。写在正文里的话不发出去、也不进消息库——页面上它会显示出来，但那不是你说出去的话。'
-ENDING = '结束：要说的话都用 `speak` 说；说完了，或者这回合不想说，就不再调用工具——这一回合到此为止，不算漏了什么。'
+ENDING = '结束：要说的话都用 `speak` 说；说完了、或者这回合不想说，就调用 `end_turn`，也可以什么都不调用——这一回合到此为止，不算漏了什么。'
 
 
 def guide(config, faces=True):

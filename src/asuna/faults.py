@@ -44,7 +44,7 @@ UNREADABLE = '出错类型未辨'
 # The plugin's mark on a turn whose broken step was requested again once (ADR-127 R1) and broke again.
 RETRIED_MARK = 'ASUNA_RETRIED_ONCE'
 # Tools whose doing is her speech or her thought: what went out is counted as lines, a thought is not a deed.
-NOT_DEEDS = {'speak', 'think'}
+NOT_DEEDS = {'speak', 'think', 'end_turn'}       # end_turn: ADR-131 D7
 # A due plan that did not run (ADR-119 F10), in her wording.
 PLAN_DEV_TEXT = '她的计划到点没排上（%s）：今天第一次，计划 %s，场景 %s。同一天同样的错再来只加计数（count）。'
 PLAN_LINE = '你安排的计划「%s」%s 到点了没排上：程序没把它交上去（%s），不是你做错了什么。%s'

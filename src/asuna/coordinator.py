@@ -361,7 +361,12 @@ class Coordinator:
                         if isinstance(text,str) and text.strip()]
                 speech='' if ep.get('reply') else '\n\n'.join(pieces)
                 issue=None
-                if qq and role_tools.asks_thought(ep) and not ep.get('turn_thought') and not ep.get('reply'):
+                # ADR-131 D4: a turn she ended with end_turn is not handed back; what it leaves is recorded below.
+                ended=any(call.get('tool')==role_tools.END_TURN and call.get('conclude')
+                          for call in (ep.get('tool_calls') or {}).values())
+                if ended:
+                    pass
+                elif qq and role_tools.asks_thought(ep) and not ep.get('turn_thought') and not ep.get('reply'):
                     issue,note='no_thought',REPLY_THINK_NOTE
                 elif speech and not attempt:
                     issue,note='unsent',UNSENT_NOTE%speech          # whole, as written: she may reply it as is

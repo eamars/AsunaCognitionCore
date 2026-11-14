@@ -95,7 +95,9 @@ for it. Never switched off (`switches.KEEP`, beside `think` and `recall`).
 **D3. No check on it but the gate.** `end_turn` is still under the gate of what this turn may use (`NOT_NOW`,
 D2); nothing else checks it: no thought needed first (`THINK_FIRST`), no call count, the 24th call is not refused
 when it is `end_turn` (`CALL_LAST`), no schema, its fields ignored. It is recorded as a call with `conclude`; a
-replay of it (a restart mid-turn) concludes again (the call path's replay, as today).
+replay of it (a restart mid-turn) concludes again (the call path's replay, as today). A turn ended with `end_turn`
+may have no thought in it: that is the design, not an omission (her 0503: otherwise stopping takes two calls, the
+shape this page cures). When something matters she writes a thought first herself; that is hers, not the code's.
 
 **D4. No hand-back after it.** A turn whose recorded calls include `end_turn` is not handed back by `_run_turn`: no
 `REPLY_THINK_NOTE`, no `UNSENT_NOTE`, no `CUT_SPEAK`. What stays, because they are records, not checks: body text

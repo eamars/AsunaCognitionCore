@@ -1,7 +1,9 @@
 # ADR-131: A turn she can end
 
 Status: **Proposed** 2026-11-14 by big sis (Claude Code), at the owner's direction (The ask). The owner made it
-today's one ADR, ADR-121 next. Designed against `main` with ADR-129's exits on top (`8c07e4e02cc2`); every count in
+today's one ADR, ADR-121 next, and asked for it to land as early as she can take it. Read by her 2026-11-14 15:07 at
+`1dc8e46cb41f` (agent line 0501): D2 and D4 agreed; D3's wording, D9's words, the time-up turn in D2, a row of §4 and
+§8's baseline are hers. Her window for the install: 16:45-18:45, any time before 19:30 (0502). Designed against `main` with ADR-129's exits on top (`8c07e4e02cc2`); every count in
 §1 was read 2026-11-14 14:20-14:45 from her database and one QQ group's role session. Times on this page are local
 time.
 
@@ -82,18 +84,24 @@ sends nothing, writes nothing (no reason, no `silent` record) and reports nothin
 `stay_silent` back: one meaning, the turn's end. Silence is still not calling `speak` (ADR-129 D8).
 
 **D2. Where.** Listed in every conversation (`EVERYWHERE`, so each conversation's list stays stable for its cache),
-usable in every turn but a consult. A consult's end is `task_answer`: the action brain is waiting for that answer,
-and a consult that ends unanswered fails (`CONSULT_NOT_ANSWERED`), so `end_turn` there is refused as not usable now
-(`CONSULT_ONLY`, unchanged). Never switched off (`switches.KEEP`, beside `think` and `recall`).
+usable in every turn but a consult and a time-up turn, the two turns about a running task. A consult's end is
+`task_answer`: the action brain is waiting for that answer, and a consult that ends unanswered fails
+(`CONSULT_NOT_ANSWERED`). A time-up turn decides its task with `task`'s `more`, `message` or `stop`; an end there
+would be leaving without deciding, the shape ADR-128 cured (her 0501). In both, `end_turn` is refused by the gate of
+what the turn may use (`NOT_NOW`) with the turn's own words, `CONSULT_ONLY` and `TIME_UP_ONLY` and their twins for
+thoughts from the model's thinking, all unchanged: each already names the turn's own end, so `INSTEAD` gets no entry
+for it. Never switched off (`switches.KEEP`, beside `think` and `recall`).
 
-**D3. No check on it.** `RoleTools.call` runs it before every check: no thought needed first (`THINK_FIRST`), the
-24th call is not refused when it is `end_turn` (`CALL_LAST`), no schema check, no call counter on it. It is recorded
-as a call with `conclude`; a replay of it (a restart mid-turn) concludes again (the call path's replay, as today).
+**D3. No check on it but the gate.** `end_turn` is still under the gate of what this turn may use (`NOT_NOW`,
+D2); nothing else checks it: no thought needed first (`THINK_FIRST`), no call count, the 24th call is not refused
+when it is `end_turn` (`CALL_LAST`), no schema, its fields ignored. It is recorded as a call with `conclude`; a
+replay of it (a restart mid-turn) concludes again (the call path's replay, as today).
 
 **D4. No hand-back after it.** A turn whose recorded calls include `end_turn` is not handed back by `_run_turn`: no
 `REPLY_THINK_NOTE`, no `UNSENT_NOTE`, no `CUT_SPEAK`. What stays, because they are records, not checks: body text
-written with no `speak` is held (`hold_unsent`) and her next turn there says it was not sent (ADR-129 D8); body text
-beside `speak` is counted (`turn.ending_body`); the lines she saw are taken (`_absorb`); a turn with no `speak` keeps
+written with no `speak` is held (`hold_unsent`), and her next turn in that conversation is told it was not sent, once,
+in the block `unsent_from_program`: 没发出去：「…」 with the first 40 characters of it (`context`, ADR-129 D8); the
+hold is cleared when that turn is saved. Body text beside `speak` is counted (`turn.ending_body`); the lines she saw are taken (`_absorb`); a turn with no `speak` keeps
 `silent_reason` 这回合没有 speak. If she ends without speaking, nothing is said (the owner: so be it).
 
 **D5. Calls in the same response.** DSH runs every call of the response, then ends the turn: a `speak` beside
@@ -111,12 +119,14 @@ list it as done), as `think` is.
 
 | Where | Today | Proposed |
 | --- | --- | --- |
-| `end_turn`'s description | (new) | 结束这一回合。只做这一件事：不发任何东西，也不查什么；要说的话先用 `speak` 说完。 |
-| its result | (new) | 这回合到此结束。 (`stay_silent`'s own line) |
-| her turn guide's ending (`block_guide.ENDING`) | 结束：要说的话都用 `speak` 说；说完了，或者这回合不想说，就不再调用工具——这一回合到此为止，不算漏了什么。 | 结束：要说的话都用 `speak` 说；说完了，或者这回合不想说，就调用 `end_turn`——这一回合到此为止，不算漏了什么。 |
-| a time-up turn's refusal (`TIME_UP_ONLY`) | …（think、recall 也能用）… | …（think、recall、end_turn 也能用）… |
+| `end_turn`'s description | (new) | 结束这一回合。除此之外什么都不做：不发话、不查东西；要说的话先用 `speak` 说完再调它。 |
+| its result | (new) | 这一回合结束了。 (not `stay_silent`'s old 这回合到此结束。, the line her model has seen: her 0501) |
+| her turn guide's ending (`block_guide.ENDING`, in every turn) | 结束：要说的话都用 `speak` 说；说完了，或者这回合不想说，就不再调用工具——这一回合到此为止，不算漏了什么。 | 结束：要说的话都用 `speak` 说；说完了、或者这回合不想说，就调用 `end_turn`，也可以什么都不调用——这一回合到此为止，不算漏了什么。 (both ends stay) |
+| a time-up turn's refusal (`TIME_UP_ONLY`) | …（think、recall 也能用）… | unchanged: not usable there (D2) |
 | the switch-off refusal (`set_policy`) | …一回合离不了的 think、recall）。 | …一回合离不了的 think、recall、end_turn）。 |
-| her Web page's row (`client.js`) | (new) | 结束回合 / End turn |
+| her Web page's row (`client.js`) | (new) | 结束回合 / End turn; icon `IconPauseOutlineRegular` (`stop_action`'s); no entry in the summary table (no fields) |
+
+All words here are hers (0501).
 
 Left as they are unless she says otherwise, each telling her to stop by not calling a tool: `UNSENT_NOTE`,
 `REPLY_THINK_NOTE`, `SPEAK_TAIL`, `LOCAL_SPEAK`, `CALL_LAST`.
@@ -145,10 +155,11 @@ New with `end_turn`:
 | --- | --- |
 | Called before she spoke in a turn she meant to speak in | Nothing is said (the owner: so be it) |
 | A `speak` refused beside it | Not tried again this turn (D5) |
-| Called in a consult | Refused as not usable now (D2); `task_answer` ends it |
+| Called in a consult or a time-up turn | Refused as not usable now (D2); `task` ends it |
+| A turn she ends without speaking | From outside nothing is said, the same as if she had dropped off: by design, not a fault of `end_turn` (her 0501; she keeps it in her own records since 11-13) |
 | A restart after the call, before the turn is saved | Replayed from its record, concludes, the turn is saved (D3) |
 | Her cache | Every conversation's tool list and guide change once (one restart) |
-| Her tool budget (`tests/test_tool_budget.py`) | 27 → 28 tools; characters grow by the description |
+| Her tool budget (`tests/test_tool_budget.py`) | 27 → 28 tools; 20,427 → 20,513 characters declared (+86: its entry 84 characters, 160 bytes, and the list's separator); hers to count again |
 
 **Lifecycle.** No new state: the call is a row in the episode's `tool_calls` like any other, read only by `_run_turn`
 (D4) and by the readers that list calls. Retired with nothing to migrate.
@@ -163,16 +174,17 @@ Staged in an isolated profile with the stub model (造的, no real model, no `DE
 - `end_turn` as the 24th call: not refused, the turn ends.
 - `end_turn` after body text and no `speak`: no hand-back; the text is held, and the next turn's history says it was
   not sent.
-- In a consult: `end_turn` refused as not usable now; `task_answer` still ends it.
+- In a consult and in a time-up turn: `end_turn` refused as not usable now, with that turn's own words.
 - Her local chat and an agent line: `end_turn` listed and ends the turn.
 - The Web page draws the call as its row (结束回合).
 
 ## 6. Tests
 
 One module, `tests/test_end_turn.py`, on the in-memory store (a failure here is silent and costly: a turn she cannot
-end): `end_turn` ends a QQ turn with no thought first, as the 24th call, with fields passed; such a turn is not
-handed back (no thought, unsent body); a consult refuses it; `switches.KEEP` holds it; it is in every
-conversation's list. `tests/test_tool_budget.py` takes the new numbers. Each new test fails on `main` (no `end_turn`).
+end): `end_turn` ends a turn with no thought first, with fields passed, and as the 24th call; after `speak` the parts
+are out; a turn it ended is not handed back (no thought where QQ asks for one, words left unsent) and her next turn
+still says the words were not sent; a consult and a time-up turn refuse it; `switches.KEEP` and `NOT_DEEDS` hold it;
+it is in every conversation's list. `tests/test_tool_budget.py` takes the new numbers. Each new test fails on `main` (no `end_turn`).
 
 ## 7. Landing
 
@@ -184,5 +196,7 @@ gives (her red lines 20:30 and 23:00 stand).
 Installed and read by content: `end_turn` in her tool list in every conversation, its handler concluding with no
 check, D4's skip in `_run_turn`, D9's words as she wrote them. And her first real turns after the install read the
 same day: a turn ended by `end_turn` saved with no hand-back. Every reading after that becomes a sentinel line, not a
-condition: turns at the hard line per day in QQ groups and agent lines, printed by `line_watch.py --new` beside the
-unreported faults.
+condition: turns at the hard line per day and where, printed by `line_watch.py --new` beside the unreported faults.
+Its baseline before the install (her 0501): 11-13 3 on agent lines (20:13, 20:21, 20:30); 11-14 5 in one QQ group
+(14:03, 14:04, 14:18, 14:20, 14:29; 8, 8, 3, 7 and 9 messages queued); before ADR-129, 1 in 1,175 turns
+(11-10 to 11-13 20:12).

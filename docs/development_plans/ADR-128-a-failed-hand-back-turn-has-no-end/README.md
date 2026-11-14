@@ -1,7 +1,7 @@
 # ADR-128: A turn that fails its check: a hand-back with no end, and no one told
 
-Status: **Built and shown** 2026-11-14 (§9), not yet installed; designed 2026-11-13, proposed 2026-11-12 by big sis
-(Claude Code). Designed against `main` at `c287d051eaba` (ADR-127 installed); read again 2026-11-14 against `main` at
+Status: **Closed** 2026-11-14 13:07 by proof (§10): installed 13:06 as `4e7e18b850ab`, checked by content; built and
+shown 2026-11-14 (§9), designed 2026-11-13, proposed 2026-11-12 by big sis (Claude Code). Designed against `main` at `c287d051eaba` (ADR-127 installed); read again 2026-11-14 against `main` at
 `8fd48818d844` (ADR-129 installed 2026-11-13 20:12 as `816e825ea84f`, and closed): every line number and count in
 §1-§8 is from that reading.
 The owner's decisions of 2026-11-12, relayed by the ADR-127 session: the whole class is in scope (D3), and this is a
@@ -346,3 +346,23 @@ contexts:
   `FAILED_PROTOCOL` (three deliveries); at the sweep after, given up: the task `UNDELIVERABLE` and the developer note
   「行动结果交不回给她：…原因 turn；全文和短版都试过了。报告还存在任务里。」. Six deliveries in all (the stub's log), no
   `resume:` operation, no `feedback.continued` row; 93 seconds from the message that sent the task to the give-up.
+
+## 10. Installed and closed (2026-11-14)
+
+Her verdict on the three commits (agent line 0490): install, no blocker; after the rebase onto her own publication she
+checked the range-diff herself (0493): the two code commits the same patch, the page commit with her §8 wording added.
+Landed as `cb4fe4404c0a`, `136533c02781`, `4e7e18b850ab`, on top of her `66f795b69e76` (pushed first, her land rule
+0444). The suite on `4e7e18b850ab`: Python 1034 passed, 13 skipped; JS 325 passed, 3 skipped; integration 132 passed.
+The 16 skipped need the DSH tools package or the checkout's Python, which the suite's throwaway worktree lacks; they
+were run on the same code where both exist, all passed.
+
+**Installed.** Her launcher stopped and started at 13:05:47, her Host back at 13:06:52 (`back_at`), `loaded.commit`
+`4e7e18b8`, its 169 installed files the same as the commit; core package `2b8e0727cad0` (was `fb91f54c0b0a`), the other
+packages unchanged, the worker and the adapter up.
+
+**Closed by §8's check, the installed files read** (`profiles/asuna-native/node_modules/@asuna/cognition-core/python`):
+`faults.CAUSES['INVALID_TURN_OUTPUT']` is 收尾的检查三次没过 and `faults.CAPPED` is 工具次数已经用完，收尾过不去;
+`coordinator._turn` catches `ProtocolFailure` and ends the turn (`_failed`); no `feedback.continued`, no re-queue of a
+failed hand-back and no `FAILED_PROTOCOL` among the resumable states in `handover`; `vision.py` has no 「原因不明」 and
+takes `NO_CAUSE` (原因没记下来); `role_tools` records a call past the hard line with `CALLS_OVER`. The demo (§9)
+showed each path end to end; her own check by content, and her run of both suites, follow on her side.

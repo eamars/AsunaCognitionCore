@@ -93,8 +93,9 @@ thoughts from the model's thinking, all unchanged: each already names the turn's
 for it. Never switched off (`switches.KEEP`, beside `think` and `recall`).
 
 **D3. No check on it but the gate.** `end_turn` is still under the gate of what this turn may use (`NOT_NOW`,
-D2); nothing else checks it: no thought needed first (`THINK_FIRST`), no call count, the 24th call is not refused
-when it is `end_turn` (`CALL_LAST`), no schema, its fields ignored. It is recorded as a call with `conclude`; a
+D2); nothing else checks it: no thought needed first (`THINK_FIRST`), no refusal by the call count (it still takes a
+call number, like any call), the 24th call is not refused when it is `end_turn` (`CALL_LAST`), no schema, its
+fields ignored. It is recorded as a call with `conclude`; a
 replay of it (a restart mid-turn) concludes again (the call path's replay, as today). A turn ended with `end_turn`
 may have no thought in it: that is the design, not an omission (her 0503: otherwise stopping takes two calls, the
 shape this page cures). When something matters she writes a thought first herself; that is hers, not the code's.
@@ -186,7 +187,8 @@ One module, `tests/test_end_turn.py`, on the in-memory store (a failure here is 
 end): `end_turn` ends a turn with no thought first, with fields passed, and as the 24th call; after `speak` the parts
 are out; a turn it ended is not handed back (no thought where QQ asks for one, words left unsent) and her next turn
 still says the words were not sent; a consult and a time-up turn refuse it; `switches.KEEP` and `NOT_DEEDS` hold it;
-it is in every conversation's list. `tests/test_tool_budget.py` takes the new numbers. Each new test fails on `main` (no `end_turn`).
+it is in every conversation's list; its result is 这一回合结束了。 word for word and her turn guide's ending, with
+both ends, is in the prompt a turn is sent (her 0504). `tests/test_tool_budget.py` takes the new numbers. Each new test fails on `main` (no `end_turn`).
 
 ## 7. Landing
 
@@ -197,7 +199,8 @@ gives (her red lines 20:30 and 23:00 stand).
 
 Installed and read by content: `end_turn` in her tool list in every conversation, its handler concluding with no
 check, D4's skip in `_run_turn`, D9's words as she wrote them. And her first real turns after the install read the
-same day: a turn ended by `end_turn` saved with no hand-back. Every reading after that becomes a sentinel line, not a
+same day: a turn ended by `end_turn` saved with no hand-back. A reading with no such turn says "no sample", never
+"no problem" (her 0504); she reads her own use again the next day. Every reading after that becomes a sentinel line, not a
 condition: turns at the hard line per day and where, printed by `line_watch.py --new` beside the unreported faults.
 Its baseline before the install (her 0501): 11-13 3 on agent lines (20:13, 20:21, 20:30); 11-14 5 in one QQ group
 (14:03, 14:04, 14:18, 14:20, 14:29; 8, 8, 3, 7 and 9 messages queued); before ADR-129, 1 in 1,175 turns

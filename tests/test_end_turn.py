@@ -2,7 +2,7 @@
 before every check (no thought first, not the call cap, its fields ignored); a turn it ended is not handed back, and
 what that turn leaves is still recorded; a consult, whose end is task.answer, refuses it. On the unit run's store
 holding the fixture world (conftest.py), with test_adr129_one_rule's local chat and agent line."""
-from asuna import channel_kinds, faults, role_tools, switches
+from asuna import block_guide, channel_kinds, faults, role_tools, switches
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane, FakeTurn
 from asuna.records import episodes as episode_records
@@ -21,6 +21,15 @@ def test_end_turn_is_listed_everywhere_never_switched_off_and_not_a_deed(home):
         listed = role_tools.toolbox(home, {'scene_id': scene, 'manifest': {'session_class': 'owner_private'}})
         assert 'end_turn' in listed, (scene, listed)
     assert 'end_turn' in switches.KEEP and 'end_turn' in faults.NOT_DEEDS
+
+
+def test_her_words_reach_her_as_she_wrote_them(home):
+    # Her 0501 (D9): the result is not stay_silent's old line; her turn guide keeps both ends, in every turn's prompt.
+    assert role_tools.END_TURN_NOTE == '这一回合结束了。'
+    assert '就调用 `end_turn`' in block_guide.ENDING and '也可以什么都不调用' in block_guide.ENDING
+    ep, lane = run(home, FakeTurn([END], ''))
+    assert block_guide.ENDING in lane.calls[0]['messages'][0]['content']
+    assert results(lane, 'end_turn') == [({'note': '这一回合结束了。'}, True)]
 
 
 def test_it_ends_the_turn_at_once_with_no_thought_first_and_its_fields_ignored(home):
@@ -79,6 +88,8 @@ def test_a_consult_and_a_time_up_turn_refuse_it_and_keep_their_own_end(home):
     after = Coordinator(home, lane).advance(about_a_task(home, ep, 'consult')['_id'])
     refused = results(lane, 'end_turn')
     assert refused and all(not ok and result.startswith(role_tools.CONSULT_ONLY) for result, ok in refused)
+    recorded = episode_records.get(home, 'ep-consult')['tool_calls'].values()
+    assert {call.get('code') for call in recorded if call['tool'] == 'end_turn'} == {'NOT_NOW'}
     assert after['state'] == 'FAILED_PROTOCOL' and 'INVALID_TURN_OUTPUT' in after['failure']
     lane = FakeLane(home, [FakeTurn([THINK, END], '')])
     after = Coordinator(home, lane).advance(about_a_task(home, ep, role_tools.TASK_TIME)['_id'])

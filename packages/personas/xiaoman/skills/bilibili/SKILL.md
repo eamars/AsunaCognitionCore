@@ -37,6 +37,8 @@ python3 bili_auto.py ensure            # 探活，死了才重登
 python3 bili_auto.py login             # 不管死活直接发码轮询
 python3 bili_auto.py view BVxxxx       # ensure → view
 python3 bili_auto.py arcs [--mid N]    # ensure → wbi 签名的投稿列表（默认自己）
+python3 bili_auto.py search KW --from D --to D [--order pubdate|click] [--limit 20]
+                       # ensure → wbi 签名的搜索；D＝本机钟面日期，脚本换算成 epoch 秒（见「搜索」一节）
 python3 bili_auto.py danmaku <cid>     # 弹幕 XML，raw deflate 解压后落盘
 python3 bili_auto.py download BVxxxx --out F.mp4   # view → playurl（带 Referer）→ 主镜像，失败走 backup_url
 python3 bili_auto.py hotcomment BVxxxx # 免登录热评链，不读 cookie
@@ -67,11 +69,15 @@ python3 bili_auto.py hotcomment BVxxxx # 免登录热评链，不读 cookie
 
 ## 搜索
 
-（本节三条为 11-13 夜里实测到的字面，照抄未补全。）
+（前半三条为 11-13 夜里实测到的接口字面，照抄未补全；`bili_auto.py` 的 `search` 子命令是 11-15 加进去的，做到哪一步、什么没跑到，写在下面那两条。）
 
 - 接口 `x/web-interface/wbi/search/type`，走 wbi 签名；`order=click` 是按播放量排。
 - 时间窗参数 `pubtime_begin_s`／`pubtime_end_s` **只吃 epoch 秒**：传日期串（`2025-11-13`、带时分秒、ISO）一律回 `code=-400 请求错误`（今晚连试三回都这样，换 epoch 秒才通）。
 - 实测这样一趟能拿到：标题、UP 主、duration 字符串、play、pubdate。
+- **脚本 `search` 子命令**（11-15 加，参数照实现写）：`search KW --from D --to D [--order pubdate|click] [--limit 20]`，`--order` 默认 `pubdate`、`--limit` 默认 20；会话与签名沿用文件里已有的 `ensure_login`→`wbi_keys`/`mixin_key`/`wbi_sign`，没另起一套。每条打 `bvid｜标题｜UP主｜时长｜播放｜pubdate`，标题里的高亮标记剔掉，pubdate 同一行打本机钟面与站点侧 UTC+8 两样。
+- **窗口口径写死**：`--from/--to` 收的是**本机钟面**日期，脚本用 `datetime.strptime(...).timestamp()` 按本机时区换算成 epoch 秒。**这台不在 UTC+8，且本机相对 UTC 的偏移随日期变**（同一趟实测：窗口起端本机比站点侧早 4 小时，止端早 5 小时），所以脚本里不背常数——它每次把窗口两端按本机钟面和站点侧 UTC+8 各打一行，用哪串自己看。想要「站点侧那两天」，得自己反推日期再传。
+- **实测跑过**（11-15，keyword=牧羊犬，窗口本机 07-17 00:00 ～ 11-14 23:59）：`order=pubdate` 默认 20 条（请求 1 页）；`order=click --limit 5`（请求 1 页，头两条播放量 2,629,894／1,952,980，降序对得上「按播放量排」）；`--limit 40`（站点一页就返满 40 条，所以只请求 1 页——`limit` ≤ 50 碰不到翻页）；`--limit 60`（请求 2 页、60 条、bvid 全不重复）。四次都 `HTTP 200 code=0`、退出码 0。
+- **实测没跑到**：`--from/--to` 带 `HH:MM` 只离线验了换算、没带它打过接口；`page_size` 上限 50 是照接口习惯取的数、没量过；搜索这一路的 `-509` 频控没测；`click` 只跑过 5 条这一档。
 
 ## 免登录调用链（热评）
 
@@ -89,6 +95,7 @@ python3 bili_auto.py hotcomment BVxxxx # 免登录热评链，不读 cookie
 - **主镜像可能回 HTTP 567**（urllib 报 `Unknown Status`）：改走 `durl.backup_url`，一次成功；主镜像一次、备用一次，**不硬试第三次**。下载后字节数应与接口 `size` 完全一致。
 - **抽帧用 PyAV 单遍解码**：`container.decode(video=0)` 顺序走一遍（6600 帧约 2 秒）；PyAV 18 里 `seek()` 之后 `stream.decode()` 是 0 帧。黑帧用平均亮度＋标准差门槛跳过。机器 PATH 上没有 ffmpeg。
 - **弹幕 XML 是 raw deflate**：`comment.bilibili.com/<cid>.xml` 回 `Content-Encoding: deflate`，urllib 不解压，要 `zlib.decompress(raw, -15)`。
+- **搜索翻页：`page_size` 跨页必须固定**：站点分页是 page × page_size 偏移。`--limit 60` 的早期写法第 2 页把 page_size 换成剩余条数，站点返的是第 11~20 条，整页重打——60 条里 10 条是重复 bvid。现行写法 `page_size` 固定 `min(50, limit)`，另加 bvid 去重与「整页无新条即停」，实测 60 条唯一、跳过重复 0。
 - **pubdate 用站点侧时钟 UTC+8**：接口给的是 UTC 秒，这枚偏移是**站点那侧的公历时钟**，不是这台部署的位置；本机钟面会跨日（同一刻本机已是次日）。对人说「站点侧 UTC+8」，脚本输出带「UTC+8」字样。
 - **cookie 值不落进别的文件**：下载/抓取产物里会带设备 id（`buvid3` 前缀）和公开 uid；落盘前自查一遍 SESSDATA／bili_jct／sid 有没有混进去。
 

@@ -439,9 +439,11 @@ def task_search(cookie, keyword, begin_s, end_s, order, limit):
     print("窗口 epoch 秒 %s..%s（本机换算：%s ～ %s）" % (begin_s, end_s, local_ts(begin_s), local_ts(end_s)))
     print("窗口站点侧：%s ～ %s" % (site_ts(begin_s), site_ts(end_s)))
     mk = mixin_key(*wbi_keys(cookie))
-    page, printed, fetched = 1, 0, 0
+    # 分页按 page × page_size 偏移，page_size 跨页必须固定：实测 limit=60 时，
+    # 第 2 页把 page_size 换成剩余 10 条，站点返的是第 11~20 条，整页重打（60 条里 10 条重复 bvid）。
+    ps = min(50, limit)
+    page, printed, fetched, skipped, seen = 1, 0, 0, 0, set()
     while printed < limit:
-        ps = min(50, limit - printed)
         params = {"search_type": "video", "keyword": keyword, "page": page, "page_size": ps,
                   "order": order, "pubtime_begin_s": begin_s, "pubtime_end_s": end_s}
         st, j = get_json(API + "/x/web-interface/wbi/search/type?" + wbi_sign(params, mk), cookie)
@@ -453,19 +455,29 @@ def task_search(cookie, keyword, begin_s, end_s, order, limit):
         if not rows:
             print("  第 %d 页空结果，停（不再翻页）" % page)
             break
+        fresh = 0
         for r in rows:
             if printed >= limit:
                 break
+            b = r.get("bvid") or "?"
+            if b in seen:
+                skipped += 1
+                continue
+            seen.add(b)
             pd = r.get("pubdate")
             when = "%s｜%s" % (local_ts(pd), site_ts(pd)) if pd else "pubdate 缺"
-            print("  %s｜%s｜%s｜%s｜%s｜%s" % (r.get("bvid"), strip_tags(r.get("title")),
+            print("  %s｜%s｜%s｜%s｜%s｜%s" % (b, strip_tags(r.get("title")),
                                              strip_tags(r.get("author")), r.get("duration"),
                                              r.get("play"), when))
             printed += 1
+            fresh += 1
+        if fresh == 0:
+            print("  第 %d 页没有新条（全是见过的 bvid），停（不再翻页）" % page)
+            break
         if len(rows) < ps:
             break
         page += 1
-    print("DONE search keyword=%r 打印=%d 实际请求了 %d 页" % (keyword, printed, fetched))
+    print("DONE search keyword=%r 打印=%d 跳过重复=%d 实际请求了 %d 页" % (keyword, printed, skipped, fetched))
     return 0
 
 

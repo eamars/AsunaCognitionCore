@@ -12,6 +12,9 @@
   view BVID               ensure → x/web-interface/view
   hotcomment BVID         免登录链：www 页 → view → reply?sort=2；每跳隔几秒；失败如实报不编
   arcs [--mid N]          ensure → wbi 签名的 x/space/wbi/arc/search（默认查 cookie 文件里自己的 uid）
+  search KW --from D --to D [--order pubdate|click] [--limit 20]
+                        ensure → wbi 签名的 x/web-interface/wbi/search/type；
+                        时间窗只吃 epoch 秒，--from/--to 收本地日期由脚本换算（D＝YYYY-MM-DD，可带 HH:MM）
   danmaku CID             弹幕 XML（raw deflate 解压后落盘 / 打印条数）
   download BVID --out F   ensure → view → playurl（带 Referer）→ 主镜像失败走 backup_url
 退出码：0 成功；2 要人扫码但没扫成（过期/超时/被拒）；3 探活无法判定（-412、网络等，字面已打印，不重登）；4 取数 HTTP/业务码失败。
@@ -327,6 +330,37 @@ def site_ts(ts):
     return datetime.fromtimestamp(ts, timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S UTC+8 站点侧")
 
 
+TAG_RE = re.compile(r"<[^>]+>")
+
+
+def strip_tags(s):
+    """搜索结果的标题带 <em class=...> 高亮标记，给人看之前剔掉。"""
+    return TAG_RE.sub("", s or "").strip()
+
+
+def local_ts(ts):
+    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S 本地钟面")
+
+
+def date_to_epoch(s, is_end=False):
+    """本地钟面日期 → epoch 秒。搜索接口的时间窗只吃 epoch 秒（实测：日期串回 code=-400）。
+    认 YYYY-MM-DD / YYYY-MM-DD HH:MM / YYYY-MM-DD HH:MM:SS（T 分隔也当空格）。
+    只给日期时：起点＝当天 00:00:00，止点＝当天 23:59:59（含当天）。返回 (epoch 秒, 那一刻的可读串)。"""
+    t = s.strip().replace("T", " ")
+    d = None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            d = datetime.strptime(t, fmt)
+            break
+        except ValueError:
+            continue
+    if d is None:
+        raise ValueError("认不出的日期: %r（要 YYYY-MM-DD，可带 HH:MM）" % s)
+    if len(t) == 10 and is_end:
+        d = d.replace(hour=23, minute=59, second=59)
+    return int(d.timestamp()), d.strftime("%Y-%m-%d %H:%M:%S 本地钟面")
+
+
 def task_view(bvid, cookie):
     st, j = get_json(API + "/x/web-interface/view?" + urllib.parse.urlencode({"bvid": bvid}), cookie)
     if st != 200 or j.get("code") != 0:
@@ -397,6 +431,44 @@ def task_arcs(cookie, doc, mid):
     return 0
 
 
+
+def task_search(cookie, keyword, begin_s, end_s, order, limit):
+    """wbi 签名的关键词搜视频。会话与签名一律沿用本文件已有的 wbi_keys/mixin_key/wbi_sign/get_json；
+    时间窗是 epoch 秒（由 date_to_epoch 从本地日期换算，接口不吃日期串）。"""
+    print("SEARCH 接口 x/web-interface/wbi/search/type order=%s 要 %d 条" % (order, limit))
+    print("窗口 epoch 秒 %s..%s（本机换算：%s ～ %s）" % (begin_s, end_s, local_ts(begin_s), local_ts(end_s)))
+    print("窗口站点侧：%s ～ %s" % (site_ts(begin_s), site_ts(end_s)))
+    mk = mixin_key(*wbi_keys(cookie))
+    page, printed, fetched = 1, 0, 0
+    while printed < limit:
+        ps = min(50, limit - printed)
+        params = {"search_type": "video", "keyword": keyword, "page": page, "page_size": ps,
+                  "order": order, "pubtime_begin_s": begin_s, "pubtime_end_s": end_s}
+        st, j = get_json(API + "/x/web-interface/wbi/search/type?" + wbi_sign(params, mk), cookie)
+        print("  第 %d 页 %s" % (page, code_text(j, st)))
+        if st != 200 or j.get("code") != 0:
+            return 4
+        fetched += 1
+        rows = (j.get("data") or {}).get("result") or []
+        if not rows:
+            print("  第 %d 页空结果，停（不再翻页）" % page)
+            break
+        for r in rows:
+            if printed >= limit:
+                break
+            pd = r.get("pubdate")
+            when = "%s｜%s" % (local_ts(pd), site_ts(pd)) if pd else "pubdate 缺"
+            print("  %s｜%s｜%s｜%s｜%s｜%s" % (r.get("bvid"), strip_tags(r.get("title")),
+                                             strip_tags(r.get("author")), r.get("duration"),
+                                             r.get("play"), when))
+            printed += 1
+        if len(rows) < ps:
+            break
+        page += 1
+    print("DONE search keyword=%r 打印=%d 实际请求了 %d 页" % (keyword, printed, fetched))
+    return 0
+
+
 def task_danmaku(cid):
     st, hd, raw = http_get("https://comment.bilibili.com/%s.xml" % cid, accept="*/*")
     if st != 200:
@@ -453,6 +525,12 @@ def main():
         sub.add_parser(n).add_argument("bvid")
     p = sub.add_parser("arcs")
     p.add_argument("--mid")
+    p = sub.add_parser("search")
+    p.add_argument("keyword")
+    p.add_argument("--from", dest="date_from", required=True, help="起：本地日期 YYYY-MM-DD（当天 00:00:00）")
+    p.add_argument("--to", dest="date_to", required=True, help="止：本地日期 YYYY-MM-DD（当天 23:59:59）")
+    p.add_argument("--order", choices=("pubdate", "click"), default="pubdate", help="pubdate 按最新发布／click 按播放量")
+    p.add_argument("--limit", type=int, default=20, help="最多几条，默认 20")
     sub.add_parser("danmaku").add_argument("cid")
     p = sub.add_parser("download")
     p.add_argument("bvid")
@@ -479,6 +557,17 @@ def main():
         return 0 if task_view(a.bvid, header) else 4
     if a.cmd == "arcs":
         return task_arcs(header, doc, a.mid)
+    if a.cmd == "search":
+        try:
+            begin_s, begin_txt = date_to_epoch(a.date_from)
+            end_s, end_txt = date_to_epoch(a.date_to, True)
+        except ValueError as e:
+            print("FAIL 时间窗: %s" % e)
+            return 4
+        if end_s <= begin_s:
+            print("FAIL 时间窗反向: %s ～ %s" % (begin_txt, end_txt))
+            return 4
+        return task_search(header, a.keyword, begin_s, end_s, a.order, max(1, a.limit))
     if a.cmd == "download":
         return task_download(a.bvid, a.out, header)
     return 0

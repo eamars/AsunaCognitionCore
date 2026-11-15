@@ -706,7 +706,11 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 
 - **先判提示词形状再选路**：`janku-illustrious`（Illustrious 系）吃 tag，日语自然语言长句基本不听（一枪实测厨房、睡裙、短发全丢，只剩 3:4）。自然语言场景走 `qwen-image-2.1-edit` 两段管线：先出 tag 标准人设图，再把人设图加场景描述喂 edit，场景全落（实测锅物蒸汽保住，硬伤是筷子读成三根）。
 - **`janku-illustrious` 对双人构图的方向词基本不听**：十张里座位只对三张，发色衣服听话。别指望「谁坐左谁坐右」；改描述策略（`facing`／`viewer-left` 类词），或点单时就把座位当抽奖预期写进去。
-- **`deepseek-whale-girl-anima-turbo` 这条路线 CFG=1**：negative 完全不生效（回执 `negative_prompt_inactive`），防崩防露点全靠正面提示词兜；别把负面词当保险，交图前必过 `read_image`。`qwen-image-2.1-edit` 同样 CFG 1：要求一律正着写进 prompt（实测自己写的一串反面清单一条都没进采样，真正管用的是正面那句「short black chin-length bob」）。
+- **CFG 1 那一族：negative 与参数面怎么判**（一层格四层写，逐条带来路，不是通用常识）
+  - **不吃 negative 的通路**：`anima-turbo-v1-1` 与角色 anima 那几条（`deepseek-whale-girl-anima-turbo` 实测）——negative 完全不生效，回执自己回 `negative_prompt_inactive`（11-05 回执原文：`At CFG 1 the sampler skips negative conditioning; negative_prompt has no effect at this setting.`）；`moody-anima-mix` 10-13 也回了同一句，那次「不要什么」全写进正向、两张成品干净（凭 `task-554c309c…`）。`qwen-image-2.1-edit` 同样 CFG 1：要求一律正着写进 prompt（实测自己写的一串反面清单一条都没进采样，真正管用的是正面那句「short black chin-length bob」）；11-15 两趟再撞一次——整栏 negative 静默无效，靠 negative 拦不住的那些项，最后都是正向逐句点名收掉的（凭 `task-47d25c9c…`、`task-feb41cdf…`）。
+  - **负面栏看着管用的通路**：`janku-v5-illustrious`——10-13 那次正向负面并写、成品没字没水印（凭 `task-9745755f…`）。**这是结果反推，不是机制实测**：服务端没正面说过它生效，别写成「实测 negative 生效」。
+  - **解法（要紧的半句）**：CFG 1 路线上「不要什么」必须写进正向提示词的**正文**，不能指望 negative 栏；交图前必过 `read_image`。11-15 实测可用：`task-47d25c9c…` 那句 `the only chest detail is one small solid dark plain crown-shaped mark, filled solid, nothing drawn inside it` 一枪收干净。同一件事在「步骤 1」末尾与「姿势（pose）与现行 prompt 口径」那节的 negative 一格也写着，三处口径一致。
+  - **参数进没进采样：分两层判——工具面看不出，不等于服务端没生效。**要判生效没，看服务端回执里的 `applied_parameters`／`effective_parameters`：10-25 一趟 `dry_run` 实测 `cfg=5`／`steps=30` 原样写进 KSampler、`ignored_parameters: []`、只回一条 `the requested value was retained` ⇒ 服务端这一层不吞值（凭 `task-babdac31…`）。而 `generate_image` 工具面的回执只有 `warnings`、没那两格（11-05 键表）⇒ 从工具面**看不出**有没有生效。工具回执既不能当「参数没生效」的证据，也不能当「生效了」的证据；要证就走长路读服务端那两格。
 - **想要「格数正好」的三视图／设定图，别在一张图里指望提示词压住人数**：`janku-illustrious` 连抽都出四格（两格重复，还会自己长乱码标签或金色边框），把格数写成权重标签、把多余的写进负面都压不住。可行路：三个视角各是一条单子各画一次，用 SVG 拼成横排（`render_svg`）；或先抽一张多格、再用 inpaint 把多余那格刷成背景（inpaint 从 `generate_image` 进不去，只能走长路）。两条代价写清：一条命令 vs 视角之间的一致性漂移。
 
 **改图路线（`qwen-image-2.1-edit`）**

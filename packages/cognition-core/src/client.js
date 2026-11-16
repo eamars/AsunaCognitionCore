@@ -1528,12 +1528,15 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const preset = props.useSessions(state => state.byId[props.sessionId]?.projectionValues?.agentPreset);
       const shipped = shippedModel();
       if (!shipped) return null;
-      return h(shipped.component, typeof preset === 'string' && presets.has(preset) ? { ...props, locked: true } : props);
+      const routed = typeof preset === 'string' && presets.has(preset);
+      return h(shipped.component, { ...props, renderSlot: modelLabel, ...(routed ? { locked: true } : {}) });
     }
+    // DSH gives `renderSlot` only to the entry that declares the seat's label child (its own entry; a second declaration
+    // stops this package from activating). The label renders DSH's own fallback, the model's name and badge: what DSH
+    // shows while that child seat has no occupant.
+    const modelLabel = (_name, _props, options) => options?.fallback ?? null;
     ctx.slots.inject('conversation.input.model', () => ctx.slots.register({
       name: 'conversation.input.model', priority: -1, locale: 'model',
-      // DSH's seat renders its label through this child seat (dsh-client-ui-model-selection), declared as DSH does.
-      children: { 'conversation.input.model.label': { kind: 'single', scope: 'session', inline: true } },
       inject: sessionId => shippedModel()?.inject?.(sessionId) ?? {},
     }, ModelSeat));
 

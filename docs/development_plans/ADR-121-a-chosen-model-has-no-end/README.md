@@ -97,3 +97,31 @@ in the plugin; DSH is untouched. How many pins: one (§1).
 2. Her profile after the install: the pinned session's first step after it carries the program's selection; the
    count of §1 run again (no session whose last selection is not the program's, beyond a recovery session); the seat
    read on her page by the owner or her.
+
+## 9. The build and the demo (2026-11-16)
+
+On `main` at `009a637ba502`: the page (`400831c28c88`), her 0518 on it (`8c5644ff245b`: the stray tail removed, the
+高 reading added to §6), the code (`66b31a3a83b4`), the project map (`045317599aa5`, generated) and the seat as it
+renders on the page (`d8e0f4694440`).
+
+- The suite on `d8e0f4694440`: Python 1055 passed, JS 328, 0 skipped, 0 unchecked. On `045317599aa5` one test was
+  red, `tests/test_personal_words.py`, from an entry added to the deployment's private list that day, not from this
+  change; the entry was removed at her word and the owner's, and the suite run again.
+- Found in the demo, fixed in `d8e0f4694440`: DSH hands `renderSlot` only to the entry that declares the seat's label
+  child. DSH's seat rendered from the wrapper threw, and DSH fell back to its own live seat, so the lock did not show;
+  declaring the child a second time stopped the package from activating. The wrapper gives DSH's seat a `renderSlot`
+  that renders DSH's own fallback label (the model's name and badge), on every session.
+
+**Shown (2026-11-16 18:04-18:18, 造的).** An isolated profile and database (`asuna_v2_demo_adr121`, dropped after),
+the demo persona, one agent line, every route on a stub model, the Host started with no model key; the plugin's
+`index.js`, `api.js` and `client.js` as in `d8e0f4694440` (compared by sha256). Read on the page and from the demo's
+session records:
+- Her session after a turn: the seat names `stub-char`, disabled; a click opens no menu.
+- `/model` in her session is still offered by DSH; `stub-act` picked there: the seat named `stub-act`, disabled. The
+  next turn's three requests went to `stub-char`. The session's selections: the program's `stub-char`, the one made in
+  DSH (`stub-act`), then the program's `stub-char` selected over it at that step. The seat named `stub-char` again.
+- A job sent to 高 (her 0518): its requests went to `stub-high`. Its own session's page (the job's, opened from the
+  running list) has no composer and no model seat and names no model: there is no button to read while it runs on
+  高. Her session's seat named `stub-char` meanwhile. No level is shown anywhere: the stub models offer none.
+- A session opened with DSH's Minimal mode preset: its seat live, a click opens DSH's menu.
+- Not shown: the existing pin's end, which is §6's second reading, on her profile after the install.

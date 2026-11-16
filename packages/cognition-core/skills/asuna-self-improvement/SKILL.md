@@ -130,7 +130,7 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 - `development_publish` 冻结候选，跑启动探针（JS 真正 import 一次插件入口，Python 能解析，人格包和通道包的结构能读），通过才选中。失败会原样返回诊断，候选保留，修了再发。
 - 不要在候选里自己跑打包工具（比如 `bundle_python`）：它会改动行尾和清单，把一次普通发布变成需要重启的发布。
 - 需要重启的改动：`package.json`、`cordis.patch.yml`、`pyproject.toml`、`uv.lock`、任何 `.js`，以及通道包的 `python/`。结果是 `HOST_RESTART_REQUIRED`：主人重启宿主后才生效，重启时启动器安装这个包；连续几次起不来，会自动改回上一个能用的版本（只改选哪个包，不回滚源码）。
-- 其余改动（技能、种子、persona-model、认知核的 Python、适配器的 `integration/`）是 `APPLIED`：之后新开的行动就用新版本；适配器要 `integration_stop` 再 `integration_start` 才换成新发布的版本。
+- 其余改动（技能、种子、persona-model、认知核的 Python、适配器的 `integration/`）是 `APPLIED`，**`APPLIED` 不等于生效**，两路分开（来路：2026-11-16 本机实测，一趟 core 发布拿发布回执与两处运行时文件对读）：人格包那一路发布当场带 `activated_at`、当场生效；core 那一路只到 `APPLIED`，运行时装的那份 `SKILL.md` 不换（新正文只在 frozen 快照里；selection 之后可能转 ACTIVE、补上 `activated_at`，那一格不是装包），要等下一次宿主启动装包才进运行时。判生效要从运行时那一份读回特征句或 sha，不许拿 `APPLIED` 当「改好了」。适配器要 `integration_stop` 再 `integration_start` 才换成新发布的版本。
 - **会挡别人落地的是 selection 还没回到 ACTIVE，不是 `candidate` 字段在不在**：一次发布从冻结到生效中间那一段（`APPLIED` 未生效），selection 带着 candidate，别人的落地脚本看到就不落。所以"发完等 selection 回到 ACTIVE 再让别人落地"是发布方那一拍该确认的事，不是落地方该等的。来路：2026-10-29 本机实测那发，加上 Claude 当天 10:34 的机制答复。
 
 ### 重启工具：参数名 when，quiet 满 30 分钟照停

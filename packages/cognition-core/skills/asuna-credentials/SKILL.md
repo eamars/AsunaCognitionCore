@@ -33,6 +33,15 @@ description: 凭据（密码、口令、令牌、别人的账号）怎么收、�
   - 别把值放进 URL 的查询串、命令行参数（命令行会被记录），用请求体或环境变量。
 - 登录只试一次。失败就停，把状态码和响应报回来，不改大小写重试——很多服务连错几次就锁号。
 
+## 本机沙箱这一层：低完整性令牌够不到 SMB／UNC（2026-11-16 本机实测）
+
+本机形状，报结论前先分清「本机这一层拒的」和「对端拒的」。
+
+- 这台机跑沙箱的进程在 `Mandatory Label\Low Mandatory Level`（S-1-16-4096）、privilege 只剩 `SeChangeNotifyPrivilege` 的**过滤令牌**上。这一层里 Windows 的 SMB 重定向器和 SSPI 一律被拒：`net use` 带凭据 `error 5`、`net view` `error 5`、盘符和 UNC 读它是 `PermissionError [WinError 5]`、`WNetAddConnection2W` 返回 85。**这不是共享的问题也不是凭据错**——TCP 445 每次 0.016 秒连得上。
+- 可行做法：走**纯用户态 SMB**（`smbprotocol` 一类，装到任务目录里：`pip install --target <cwd 下的 pylibs>` 再 `sys.path.insert(0, ...)`），并且**把 pyspnego 的 options 强制点上内置 NTLM**——默认那路走系统 SSPI，这一层拿不到凭据句柄。
+- **每个新进程都得自己带凭据，没有可继承的会话**：不带凭据时盘符、UNC、匿名 session setup 三条路全被拒。凭据一律从保险箱的环境变量读，值不写死进脚本、不进报告。
+- 顺带一格：沙箱里任务目录那个名字**只在 argv 上**被映射成真实目录；脚本正文里把它当字符串字面用，会落到任务目录以外按根算的那个位置并炸 `WinError 5`。脚本内部一律用 `os.getcwd()` 拼路径或相对路径（cwd 就是任务目录）。
+
 ## 用别人给的账号：只看授权的那一份
 
 账号能看到的，常常比你被授权看的多。尤其是员工、管理员、安装商账号：它们能看到别的客户、别的站点、内部后台。

@@ -1,0 +1,124 @@
+# ADR-132: Every refusal names every problem, for every tool
+
+Status: **Proposed** 2026-11-16 by big sis (Claude Code), at the owner's ask (The ask). Drafted for the owner and for
+her reading; not built. Every count in §3 covers 2026-11-02 18:55 to 2026-11-16 18:55 and was read 2026-11-16 18:30-18:57 from her profile, read-only (session files
+through their structure only; audit rows by tool name and code only). Times on this page are local time.
+
+## The ask
+
+The owner, 2026-11-16, after a turn of hers on the vault tool (保险箱, `credential`): "If you could recall, one of the
+ADR was to mandate the population of all errors if she called one tool wrong. For example, if she called a tool wrong
+while without think first, then all errors will be populated. However this is not the case for 保险箱 ... I would
+like you to identify this error, look back on the last ADR on the same matter and perform RCA on why this one is
+missed. If this is a legit error then let's draft an ADR to properly fix this failure mode, as well as other possible
+failure modes."
+
+What he saw, in program words: a `credential` call without `do` was refused with 「credential 的参数不对：缺 do（做什么
+（只能是：keep、drop））。照 credential 的说明改好再调用一次。」; the next call, with `do`, was refused with 「先用 think 写下
+这回合的心里话，再做别的……」. One refusal could have named both.
+
+## 1. The rule and how it was built
+
+ADR-108 D4b (the owner's recommendation, binding): one refusal names every problem the program can find, best
+effort. A call is checked in layers 0-5; a layer's problems are collected, a later layer runs on what the earlier ones
+left valid, and a refusal names every problem of every layer that ran (`role_tools.py` `RoleTools.call`).
+
+It was built as two opt-ins, and a tool that is not listed keeps the old behaviour, stopping at its first problem:
+
+- **Layer 0, the declared schema.** What DSH registers and validates, and what the plugin's guard checks first
+  (`index.js` `attachPreset`, `tool-args.js` `argsRefusal`), is derived from the strict schema by
+  `tool_schema.declared`: every enum is dropped, but a required field stays required unless it is listed in
+  `tool_schema.REQUIRED_FILLED` (three fields: `write_document` `doc` and `do`, `delegate` `title`). A call missing any
+  other required field is refused by the guard before it reaches the worker, alone: THINK_FIRST, the call cap and the
+  handler's checks never run. 34 required fields in 20 of her 37 tools are on this path, `credential` `do` among them.
+- **The handler's own checks.** They collect only for the 10 handlers in `RoleTools.SPLIT` (each split into a check
+  part and an effect part). For the other 27, `call()` runs `checkpoint()` before the handler, so a general problem
+  (THINK_FIRST, a schema problem) refuses alone and the handler's checks are not reached.
+
+## 2. Why this one was missed (root cause)
+
+- **The rule was written for every tool and built for some.** ADR-108's window (UTC days 10-18 to 10-28) counted
+  which tools produced a second refusal, and the build converted those. `credential` (2026-10-07) and `private_words`
+  (2026-10-11) existed then and were left out; every tool added since inherits the default. Joining the rule needs a
+  list entry, so leaving it needs nothing.
+- **It was accepted by an aggregate rate.** ADR-108 named this exact residue: "What still stops alone at layer 0 is
+  what the declared schema keeps (a wrong type, a missing field the program cannot infer); it hides the later layers'
+  problems behind it", and counted it as the floor of B4's gate, per 1,000 calls. This case is 3 in 14 days (0.19 per
+  1,000), inside that floor, so no reading flagged it.
+- **The residue had no exit.** Neither the 27 handlers nor the un-inferable required fields had an item that closes.
+- **One reason was wrong for one case.** Layer 0 "stops alone: nothing else is defined". That holds for an unknown tool
+  or arguments that are not an object. It does not hold for a missing field: THINK_FIRST and the call cap do not
+  depend on the arguments at all.
+
+The broken invariant: "a refusal names every problem the program can find" holds only where a per-tool list opts in.
+The rule has to be the default, and stopping at the first problem the exception that needs its reason.
+
+## 3. What is known (counts)
+
+Her character brain, 2026-11-02 18:55 to 2026-11-16 18:55: 15,448 tool calls in her character sessions; 12,406
+`role_tool` audit rows (the worker's), 1,180 of them refused. The guard's refusals have no audit row (ADR-108: it is
+synchronous and cannot ask the worker); they are counted from the session files by their wording.
+
+- Layer 0 (the guard): 40 refusals, 39 a missing field and 1 a wrong type. By tool: `think` 21, `note` 6,
+  `private_words` 5, `credential` 3, and `plan`, `understand_person`, `sticker`, `delegate`, `write_document` 1 each.
+  Followed in the same turn by a refusal of another class on the same tool: 3, all `credential`, all THINK_FIRST
+  (the owner's case among them).
+- Unsplit handlers: on the same tool in the same turn, a refusal that named only general codes followed by one that
+  named a handler code: `credential` THINK_FIRST then CREDENTIAL_NOTE_INVALID 2, `sticker` 2, `understand_person` 1,
+  `note` 1. The second call's arguments were not read, so a changed argument may explain some of these: an upper
+  bound on the hidden problems, not a count of them.
+- Her action brain, the same window: 17,827 tool calls; 126 refused with DSH's own English argument refusal (`invalid arguments: …`,
+  no fix sentence). The guard checks only her character brain's tools (`attachPreset`: `spec` is defined for the
+  character lane only).
+
+## 4. Failure modes of the class (a refusal that leaves out a problem the program could name)
+
+| # | Failure | Here |
+| --- | --- | --- |
+| F1 | A missing required field stops at layer 0 and hides the turn's checks and the handler's | D1 |
+| F2 | A handler outside `SPLIT` stops at the first problem; a general problem hides all of its checks | D2 |
+| F3 | A tool added later falls back to F1 and F2, as `credential` and `private_words` did | D3 |
+| F4 | A wrong type stops at layer 0 (1 in 14 days) | kept: DSH validates types against the declared schema before our code runs; its count is the sentinel |
+| F5 | Layer 2 (NOT_NOW, not usable in this turn) stops alone | kept, ADR-108 D4c: the fix is another tool or turn, and argument problems listed beside it lead to a corrected call that is refused again |
+| F6 | A layer-4 problem that needs a field fixed first (a section in a document not yet named) | kept: best effort by nature; it cannot be named before the field it depends on |
+| F7 | The action brain's argument refusals are DSH's English line with no fix | not this ADR: a separate decision for the owner (§7) |
+
+## 5. Decisions (proposed)
+
+**D1. The declared schema requires nothing.** `tool_schema.declared` drops `required` from every field, as it already
+drops every enum. The strict schema keeps it, and the worker's layer 3 names a missing field together with THINK_FIRST,
+the call cap and the handler's problems. Layer 0 then refuses only a call that cannot be read (an unknown tool,
+arguments that are not an object, a reused call id) and a wrong type (F4). The model still needs to know which fields
+are required: each required field's description says so in words, derived in `declared()` the way enum values are
+listed today. That one literal is hers to word (F8). Cost: every tool spec with a required field changes, which means
+one cold request per open conversation at the install, and about 34 short marks in her tool budget (counted at build).
+
+**D2. Every handler collects.** `SPLIT` goes. Every handler gets a check part that ends with `self.checkpoint()` before
+its first effect, and `_found` always collects. The dispatcher no longer refuses before a handler runs. The 27 handlers
+are read one by one; most have one or two checks and then one write.
+
+**D3. The default is the rule.** Two tests, because a regression here is silent:
+- every tool's declared parameters contain no `required` and no `enum`, over `all_specs()`;
+- every handler, called with no thought first and an argument its own checks refuse, on the in-memory store, is
+  refused with both THINK_FIRST and its own code, and writes nothing. That second part covers D2's real risk: an effect
+  run while a problem is still pending.
+
+**D4. Nothing else she reads changes.** The refusal texts are the ones she has (`combined()` already numbers several
+problems); only the required mark in each description is new.
+
+## 6. Closes when
+
+- In an isolated profile on a stub model (造的): a `credential` call with no `do` and no thought gets one refusal
+  naming both; a `credential` call with a bad `note` and no thought gets one refusal naming THINK_FIRST and
+  CREDENTIAL_NOTE_INVALID; D3's tests pass for every handler.
+- Installed, and read 7 days after the install against §3: layer-0 refusals for a missing field are 0 (they are layer-3
+  problems now, with an audit row); the missing-field rate per 1,000 calls is no higher than §3's (D1 takes `required`
+  out of what the model reads); F4's count is written down as the sentinel.
+
+## 7. For the owner
+
+- **F7** is a separate ADR if he wants it: the guard would check the action brain's tools too and refuse in Chinese
+  with a fix, as ADR-076 R3 did for her character brain. DSH's English line already lists every schema problem at once,
+  so the gap there is the wording and the missing fix, not completeness.
+- The order: today's ADR is ADR-121, and five ADRs are open (120, 121, 122, 123, 125). This page waits for his word on
+  where it goes.

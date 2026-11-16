@@ -1516,7 +1516,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     // ── DSH's model seat, shown and locked where the program routes (ADR-121) ─────────
     // Every request of her routed sessions takes the program's route (index.js requestRoute), so a model chosen there
     // would last one step. Their seat is DSH's own with DSH's own lock: it names the model and level of the session's
-    // selection and does not open. Every other session renders DSH's seat unchanged, with DSH's injection and locale.
+    // selection and does not open. Every other session renders DSH's seat live, with DSH's injection and locale.
     const routedPresets = { value: new Set(), listeners: new Set() };
     rpc('routedPresets').then(list => {
       routedPresets.value = new Set(list); for (const listener of routedPresets.listeners) listener();

@@ -49,8 +49,10 @@ recovery session keeps its rule (the owner's choice for one repair; its session 
 **D2. The seat stays and shows; it does not open.** On those sessions the client renders DSH's own model seat with
 DSH's own `locked` flag set: the button shows the model and level of the session's selection (the program's, from
 D1), disabled. That is her read-only "which model this session runs". Every other session (recovery, scheduler, any
-non-Asuna session) renders DSH's seat unchanged. The same wrapper as DSH's permission picker in her two brains'
-sessions (`client.js`, since 2026-10-05): DSH's component, DSH's injection, DSH's locale; no new UI and no new words.
+non-Asuna session) renders DSH's seat through the same wrapper, live, not locked. In every session the seat's label
+is DSH's own fallback label, the model's name and badge (§9: DSH hands its label seat only to its own entry). The
+same wrapper as DSH's permission picker in her two brains' sessions (`client.js`, since 2026-10-05): DSH's
+component, DSH's injection, DSH's locale; no new UI and no new words.
 The seat shows the selection, so between a change on the settings card and the session's next step it shows the
 model of the last step.
 
@@ -71,7 +73,7 @@ in the plugin; DSH is untouched. How many pins: one (§1).
 | --- | --- |
 | Someone picks a model by `/model` in her session and expects it to hold | It holds until the next step; the seat shows the program's model again after it. Her sessions have one route, the card's |
 | The owner needs another model for her when the route's is down | The settings card's route, for every session at once (as for any other change of model); the recovery session keeps its own picker |
-| A session not hers loses its picker | The lock applies only to sessions opened with her presets; every other session renders DSH's seat unchanged, as the permission wrapper does |
+| A session not hers loses its picker | The lock applies only to sessions opened with her presets; every other session renders DSH's seat live through the same wrapper (shown in §9) |
 | The seat shows a model that is not the one the next request takes | Only between a card change and the next step (the seat shows the selection). The next step selects the new route and the seat follows |
 | The preset list on the client is not loaded yet | The seat renders DSH's own until the list arrives (one call at page load), as the permission wrapper does |
 | A future DSH changes the seat's `locked` prop | The wrapper passes DSH's own prop; if DSH drops it, the seat is DSH's live picker again and D1 still holds every pin to one step |

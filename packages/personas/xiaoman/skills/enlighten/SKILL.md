@@ -1,6 +1,6 @@
 ---
 name: enlighten
-description: 账号自治站点技能：Enlighten（Enphase 云端光伏报表，员工号只读）。通路全照字面写死，月度对账直接打、不再翻 4.9 MB 的 manager_assets JS 包。登录＝POST /login/login.json（form user[email]／user[password]，Accept: application/json），成功判据两条一起看：HTTP 200 且 message 逐字 success，并且响应体带 session_id（实测 32 位）；凭据只从保险箱名字 enlighten 的 ENLIGHTEN_EMAIL／ENLIGHTEN_PASSWORD 读，正文只写 env 名。只读能打的三条 GET＝表计 rollup 逐日表（HTML 分页）、/systems/{SITE}/energy 单日或区间合计、/systems/{SITE}/inverter_data_x/energy.json 逐台区间合计，参数与 tz 写法照抄。死路清单五枚（/reports/system_daily_international.json 等四枚加 /report/chart）全 404，别再试。日报告册的真取数口是 POST /systems/{SITE}/generate_rpt（带 CSRF、算状态变化）＝只读趟红线。单位字面是 Wh（表头 Energy Produced ( Wh ) 与 JS unit:'Wh'），跟标 kWh 那本对账前先统一刻度。站点 id 与表计 id 命中本机私密词，正文只有 {SITE}／{METER} 占位符。要读 Enlighten 日发电量、做月度对账、或判某条路径存在不存在时读这一份。
+description: 账号自治站点技能：Enlighten（Enphase 云端光伏报表，员工号只读）。通路全照字面写死，月度对账直接打、不再翻 4.9 MB 的 manager_assets JS 包。登录＝POST /login/login.json（form user[email]／user[password]，Accept：application/json），成功判据两条一起看：HTTP 200 且 message 逐字 success，并且响应体带 session_id（实测 32 位）；凭据只从保险箱名字 enlighten 的 ENLIGHTEN_EMAIL／ENLIGHTEN_PASSWORD 读，正文只写 env 名。只读能打的三条 GET＝表计 rollup 逐日表（HTML 分页）、/systems/{SITE}/energy 单日或区间合计、/systems/{SITE}/inverter_data_x/energy.json 逐台区间合计，参数与 tz 写法照抄。死路清单五枚（/reports/system_daily_international.json 等四枚加 /report/chart）全 404，别再试。日报告册的真取数口是 POST /systems/{SITE}/generate_rpt（带 CSRF、算状态变化）＝只读趟红线。单位字面是 Wh（表头 Energy Produced ( Wh ) 与 JS unit:'Wh'），跟标 kWh 那本对账前先统一刻度。站点 id 与表计 id 命中本机私密词，正文只有 {SITE}／{METER} 占位符。要读 Enlighten 日发电量、做月度对账、或判某条路径存在不存在时读这一份。
 scene_kinds: [home]
 ---
 

@@ -1,6 +1,7 @@
 # ADR-121: A model chosen for one session has no end
 
-Status: **Proposed** 2026-11-09 (laid down); designed 2026-11-16 by big sis (Claude Code). The owner's idea of
+Status: **Closed** 2026-11-16 19:3x by proof (§10): installed 19:18 as `9d86c0743d9e`, read by content, and the
+seat on her page read by her. Proposed 2026-11-09 (laid down); designed 2026-11-16 by big sis (Claude Code). The owner's idea of
 2026-11-07; he chose it as the next ADR on 2026-11-14. Her ask on it (agent line 0496, 2026-11-14): keep a read-only
 "which model this session runs" on the page, as one of her ways to check an install and a route; no interaction for
 it. Designed against `main` at `009a637ba502`; every count in §1 was read 2026-11-16 17:42-17:48, read-only, from
@@ -127,3 +128,27 @@ session records:
   高. Her session's seat named `stub-char` meanwhile. No level is shown anywhere: the stub models offer none.
 - A session opened with DSH's Minimal mode preset: its seat live, a click opens DSH's menu.
 - Not shown: the existing pin's end, which is §6's second reading, on her profile after the install.
+
+## 10. Installed and closed (2026-11-16)
+
+Her verdict: install `9d86c0743d9e`, the branch's tip (agent line 0523-0525: she signed the tip after `267b891a41e5`
+moved to it, on the condition that the suite on it gave her four numbers). Her 8 unpushed publications on `main` were
+pushed first, at 18:24 through the push gate (0 hits), as her land rule says, so `main` = `origin/main` = `009a637ba502`
+before the landing.
+
+- `land.py`: the suite on `9d86c0743d9e`, Python 1055 passed, JS 328, 0 skipped, 0 unchecked; landed and pushed;
+  stopped and started 19:17:34, `back_at` 19:18:25, `loaded.commit` `9d86c074`; the 169 installed files the same as
+  the commit; the worker and the QQ adapter back by themselves. Core package `a2616738662a` (was `a0aee3d53f2f`), hers
+  unchanged.
+- Read by content in her profile's installed copy: `requestRoute` reads a selection made in DSH only for the recovery
+  lane (`index.js:605`); `routedPresets` in `api.js`, `client.js` and `index.js`; the seat's wrapper with DSH's fallback
+  label and the lock on her routed sessions.
+- Her page (her reading, 0526, 19:23): the seat on her session names the model and the level her turn ran on, her
+  route's, and does not open.
+- The one pin of §1: at the install its session had had no step since 2026-11-15 23:42:58, so its record still names
+  the model chosen in DSH. Nothing reads it now: that session's next request takes her route, and at that step the
+  program's selection replaces the record (shown in §9's demo). Unchecked on her profile, said as such: the record's
+  change at that step. A read-only script reads that one session until it changes; she reads it too.
+
+Found after, outside this ADR: `land.py`'s report leaves out the suite's Python line (the run's own output has it); a
+tool fix, not an ADR.

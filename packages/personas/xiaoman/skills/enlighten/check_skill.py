@@ -6,6 +6,8 @@
 脚本不硬编码绝对用户目录、脚本里没有一枚 generate_rpt 请求、私密词名单扫过（没配上就 SKIP 并明说：skip 不等于干净）。
 本机时钟也不写死：正文与脚本里不许出现具体区名（时区按 AGENTS 算个人数据，不进仓），脚本必须从部署配置现取——
 换个区名它要跟着变，它算出来的那枚要和部署配置里那枚对得上（本机没配上时钟就 SKIP 并明说：skip 不等于干净）。
+依赖：frontmatter 那一格要 PyYAML——装载侧（DSH dsh-skill-filesystem）用真 YAML 解析器读头，宽容正则不算解析；
+库不在那一格就红、不 SKIP（依赖缺席不许长得像「过了」）。
 
 用法：python3 check_skill.py
 退出码 0＝无 FAIL（SKIP 不算绿，会在末行单列）；否则最后一行写「N/M 通过（SKIP K），失败：...」
@@ -80,8 +82,28 @@ skill = open(os.path.join(HERE, "SKILL.md"), "rb").read()
 check("skill_lf_only", skill.count(b"\r") == 0, "SKILL.md 有 CR")
 text = skill.decode("utf-8")
 m = re.match(r"---\n(.*?)\n---\n", text, re.S)
-check("frontmatter_parses", m, "开头没有 --- 包着的头")
 head = m.group(1) if m else ""
+# frontmatter_parses 原来只查「有没有 --- 包着」＝宽容尺：装载侧（DSH dsh-skill-filesystem）拿真 YAML
+# 解析器读这一段，值里出现 ASCII「冒号＋空格」就抛 YAMLParseError，整本技能静默消失，而这格照样绿。
+# 现在这条真解析一遍；YAML 库不在就红（依赖缺席不许长得像「过了」）。
+if not m:
+    check("frontmatter_parses", False, "开头没有 --- 包着的头")
+else:
+    try:
+        import yaml
+    except Exception as exc:                                    # noqa: BLE001 缺席就红，不 SKIP
+        check("frontmatter_parses", False,
+              "没有可用的 YAML 库（%s: %s）——没真查，不算过" % (type(exc).__name__, exc))
+    else:
+        try:
+            parsed_head = yaml.safe_load(head)
+        except Exception as exc:                                # noqa: BLE001 抛错就是装载侧收不下
+            check("frontmatter_parses", False,
+                  "真 YAML 解析抛错（装载侧为此整本忽略这一本）：%s"
+                  % " ｜ ".join(str(exc).strip().splitlines())[:300])
+        else:
+            check("frontmatter_parses", isinstance(parsed_head, dict) and bool(parsed_head),
+                  "头解析出来不是映射（是 %s）——装载侧整本忽略" % type(parsed_head).__name__)
 check("name_matches_dir", re.search(r"^name: %s$" % re.escape(NAME), head, re.M), "name 与目录名不一致")
 check("has_description", re.search(r"^description: .{200,}", head, re.M), "description 缺或太短")
 check("home_only", re.search(r"^scene_kinds: \[home\]$", head, re.M), "应只在 home 可用")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """pre_publish_scan.py：人格包／通道包发布前的一条命令，并掉原来手敲的几条。只读，不写任何东西。
 
-四件事（前三件是规格，第四件是顺手并进来的「各份 check_skill 全绿」）：
+五件事（前三件是规格，第四件是顺手并进来的「各份 check_skill 全绿」，第五件护「我这侧全绿、装载侧全空」那一格）：
   1. 候选 vs ACTIVE 冻结快照：逐文件 sha256 比，列 changed（内容不同）／added（只在候选）／
      missing（只在 ACTIVE、候选里没有＝缺失，防吞）。`--expect <路径前缀>` 可重复：给了就要求
      changed／added 全落在这些前缀里，落到预期之外的算停；missing 默认算停，确实要删的用
@@ -21,15 +21,24 @@
      名单读不到或 0 条 → 没真查，算停（退出码 2），不许长得像「过了」。
   4. 对有改动的技能目录跑它自己的 check_skill.py（子进程，sys.executable），报 rc 和最后一行；
      `--no-checks` 可跳过。
+  5. 候选根下每份 `SKILL.md` 的头拿真 YAML 解析器解析一遍（`yaml.safe_load`，与 DSH 装载侧
+     dsh-skill-filesystem 的 parseFrontmatter 同族：取第一个 `---` 到下一个 `---` 之间那一段）。
+     红＝装载侧收不下＝整本技能从行动侧清单里静默消失（它只 warn 一行就 continue）。判据：解析抛错；
+     解析出来不是映射；`name`／`description` 缺或不是非空字符串；`name` 不合装载侧的 SKILL_NAME；
+     装载侧会抛错的废弃／非布尔 invocation 字段；以及解析器**不抛错**的那道静默——值里「空格＋#」
+     被 YAML 当注释、后半截丢掉（只对 plain scalar 判，引号／块标量／流式放过）。
+     没有可用的 YAML 库＝这一格没真查，退出码 2，不退化成正则。
+     `--skill-heads <根>`（可重复）只跑这一格、不跑其余四件，用来现扫 ACTIVE 那几根。
 
 用法：
     python3 skills/asuna-offline-selfchecks/pre_publish_scan.py [--expect skills/<名字>]... \\
         [--expect-entries N] [--candidate <候选根>] [--project xiaoman] [--data <数据根>]
+    python3 skills/asuna-offline-selfchecks/pre_publish_scan.py --skill-heads <根> [--skill-heads <根2>]...   # 只跑第 5 件事
 默认候选根＝本脚本往上两级（skills/<技能>/ 的上上级）；项目名读候选 package.json 的 name 末段；
 ACTIVE 快照＝<数据根>/adr008/activation.json 的 active.<项目>.packageRoot。
 把当前 ACTIVE 当候选对拍：`--candidate <ACTIVE 的 packageRoot>`（应当 changed／added／missing 全 0）。
 退出码：0 = 通过，可发（最后一行写「通过」，②没判会写进括号）；1 = 停（最后一行列出是哪几条）；
-2 = 没法判（候选根／ACTIVE／名单找不到）。
+2 = 没法判（候选根／ACTIVE／名单找不到／这台机没有可用的 YAML 库）。
 """
 import argparse
 import fnmatch
@@ -39,6 +48,14 @@ import os
 import re
 import subprocess
 import sys
+
+try:                                                            # 第 5 件事的尺子：真解析器，不是正则
+    import yaml
+except Exception as _yaml_exc:                                  # noqa: BLE001 库不在＝没真查，不降级
+    yaml = None
+    YAML_IMPORT_ERROR = "%s: %s" % (type(_yaml_exc).__name__, _yaml_exc)
+else:
+    YAML_IMPORT_ERROR = ""
 
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
@@ -50,6 +67,14 @@ ENVOY = "integration/envoy_meters_read.py"
 CATEGORIES = {"person", "group", "account", "site", "host", "email", "other"}
 TEXT_EXT = {".py", ".md", ".json", ".js", ".yml", ".yaml", ".txt", ".html", ".css", ".csv", ".toml", ".cmd", ".sh", ""}
 SHOW = 40
+SKILL_HEAD = "SKILL.md"
+# 装载侧的硬要求（读码依据：deepseek-harness 的 packages/skill/skill/src/index.ts 的 SKILL_NAME，
+# 与 packages/skill/skill-filesystem/src/index.ts 的 parseSkillFile／parseFrontmatter，按名字找不抄行号）
+SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+LEGACY_INVOCATION = {"disableModelInvocation": "disable-model-invocation",
+                     "modelInvocable": "disable-model-invocation",
+                     "userInvocable": "user-invocable"}
+NON_PLAIN_START = "\"'|>&*?{[@"                # 这些起首不是 plain scalar：截断那一格放过
 
 
 def sha256(path):
@@ -166,6 +191,107 @@ def under(path, prefixes):
     return any(path == p.rstrip("/") or path.startswith(p.rstrip("/") + "/") for p in prefixes)
 
 
+def split_head(text):
+    """照装载侧 parseFrontmatter／findClosingFrontmatter 的形状取 `---` 之间那一段。返回 (段, 问题列表)。"""
+    lines = text.split("\n")
+    if not lines or lines[0].rstrip("\r") != "---":
+        return None, ["头的第一行不是逐字的 ---（装载侧判 missing YAML frontmatter，整本忽略）"]
+    for i in range(1, len(lines)):
+        if lines[i].rstrip("\r") == "---":
+            return "\n".join(lines[1:i]), []
+    return None, ["头没有闭合的 ---（装载侧判 missing YAML frontmatter，整本忽略）"]
+
+
+def plain_value_cut(value):
+    """plain scalar 里 YAML 真会起注释的那个 #：行首的，或前面是空白／制表的。返回 (留下的, 丢掉的) 或 None。"""
+    for i, ch in enumerate(value):
+        if ch == "#" and (i == 0 or value[i - 1] in " \t"):
+            kept, lost = value[:i].rstrip(), value[i + 1:].strip()
+            return (kept, lost) if (kept != value.strip() or lost) else None
+    return None
+
+
+def head_truncations(head, data):
+    """解析器不抛错的第二种静默：值被 # 吃掉后半截。只有拿原文对才看得见，所以这里成对判。"""
+    out = []
+    if not isinstance(data, dict):
+        return out
+    for offset, line in enumerate(head.split("\n")):
+        raw = line.rstrip("\r")
+        if not raw or raw[0] in " \t#" or ":" not in raw:
+            continue                                            # 只判顶层「key: 值」那一行
+        key, _, value = raw.partition(":")
+        key, value = key.strip(), value.strip()
+        if not re.match(r"^[A-Za-z0-9_][A-Za-z0-9_.\-]*$", key):
+            continue
+        if not value or value[0] in NON_PLAIN_START:
+            continue                                            # 空值／引号／块标量／流式：不判
+        cut = plain_value_cut(value)
+        if cut is None:
+            continue
+        kept, lost = cut
+        out.append("第%d行 %s 的值被 YAML 当注释截断：装载侧只拿到「%s」，丢掉「%s」"
+                   % (offset + 2, key, kept[:60], lost[:60]))
+    return out
+
+
+def check_skill_head(path):
+    """真 YAML 解析一份 SKILL.md 的头。返回问题列表：空＝装载侧收得下这一本。"""
+    if yaml is None:
+        return ["这台机没有可用的 YAML 库（%s）——这一格没真查，不许长得像「过了」" % YAML_IMPORT_ERROR]
+    try:
+        with open(path, "rb") as handle:
+            text = handle.read().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return ["读不到或不是 UTF-8（%s）" % exc]
+    head, problems = split_head(text)
+    if problems:
+        return problems
+    try:
+        data = yaml.safe_load(head)
+    except yaml.YAMLError as exc:
+        return ["真 YAML 解析抛错（装载侧同一件事：warn 一行就 continue，整本静默消失）：%s"
+                % " ｜ ".join(str(exc).strip().splitlines())[:300]]
+    if not isinstance(data, dict):
+        return ["头解析出来不是映射（是 %s）——装载侧判 missing YAML frontmatter，整本忽略" % type(data).__name__]
+    name, desc = data.get("name"), data.get("description")
+    if not isinstance(name, str) or not name:
+        problems.append("name 缺或不是非空字符串——装载侧：frontmatter requires name and description，整本忽略")
+    elif not SKILL_NAME_RE.match(name):
+        problems.append("name「%s」不合装载侧的 SKILL_NAME（小写字母数字加连字符），整本忽略" % name)
+    if not isinstance(desc, str) or not desc:
+        problems.append("description 缺或不是非空字符串——装载侧：frontmatter requires name and description，整本忽略")
+    for legacy, canonical in sorted(LEGACY_INVOCATION.items()):
+        if legacy in data:
+            problems.append("frontmatter 字段「%s」装载侧不收（用「%s」），整本忽略" % (legacy, canonical))
+    for key in ("disable-model-invocation", "user-invocable"):
+        if key in data and not isinstance(data[key], bool) and data[key] not in (1, 0, "1", "0"):
+            problems.append("frontmatter 字段「%s」装载侧要求布尔，现在是 %r，整本忽略" % (key, data[key]))
+    problems.extend(head_truncations(head, data))
+    return problems
+
+
+def find_skill_heads(root):
+    """根下字面存在的全部 SKILL.md（skills/<名字>/、<名字>/ 两种形状都算），按相对路径排。"""
+    return [(rel, full) for rel, full in sorted(walk(root).items()) if os.path.basename(rel) == SKILL_HEAD]
+
+
+def report_skill_heads(roots):
+    """跑第 5 件事。返回 (份数, [(相对路径, [问题])])；每份的红当场打印。"""
+    total, bad = 0, []
+    for root in roots:
+        found = find_skill_heads(root)
+        total += len(found)
+        print("  根 %s：%d 份" % (root, len(found)))
+        for rel, full in found:
+            problems = check_skill_head(full)
+            if problems:
+                bad.append((rel, problems))
+                for p in problems:
+                    print("     WARNING %s：%s" % (rel, p))
+    return total, bad
+
+
 def main():
     parser = argparse.ArgumentParser(description="发布前扫描（只读）")
     parser.add_argument("--candidate", help="候选根（默认本脚本往上两级）")
@@ -175,7 +301,29 @@ def main():
     parser.add_argument("--allow-missing", action="append", default=[], help="确实要删的路径，可重复")
     parser.add_argument("--expect-entries", type=int, help="上一份报告里的私密名单条数")
     parser.add_argument("--no-checks", action="store_true", help="不跑各份 check_skill.py")
+    parser.add_argument("--skill-heads", action="append", default=[],
+                        help="只跑第 5 件事（SKILL.md 头真 YAML 解析）于这些根，可重复；其余四件不跑")
     args = parser.parse_args()
+
+    if args.skill_heads:
+        print("只跑第 5 件事：SKILL.md 头拿真 YAML 解析器解析一遍（装载侧同族）")
+        if yaml is None:
+            print("  这台机没有可用的 YAML 库（%s）——这一格没真查，不退化成正则。" % YAML_IMPORT_ERROR)
+            return 2
+        print("  YAML 库：PyYAML %s（%s）" % (getattr(yaml, "__version__", "?"), yaml.__file__))
+        missing = [r for r in args.skill_heads if not os.path.isdir(r)]
+        if missing:
+            print("  根读不到：%s" % "、".join(missing))
+            return 2
+        total, bad = report_skill_heads([os.path.abspath(r) for r in args.skill_heads])
+        print("\n扫了 %d 份 SKILL.md，红 %d 份" % (total, len(bad)))
+        if not total:
+            print("NOTE 这些根下一份 SKILL.md 都没有——这一格没东西可查，不是干净。")
+        if bad:
+            print("停：%d 份的头装载侧收不下：%s" % (len(bad), "、".join(rel for rel, _ in bad)))
+            return 1
+        print("通过，头全解析得动。")
+        return 0
 
     candidate = os.path.abspath(args.candidate or os.path.dirname(os.path.dirname(HERE)))
     pkg_path = os.path.join(candidate, "package.json")
@@ -339,6 +487,20 @@ def main():
             print("  %s：rc=%d  %s" % (d, done.returncode, lines[-1] if lines else (done.stderr or "").strip()[-200:]))
             if done.returncode != 0:
                 stops.append("%s 的 check_skill.py rc=%d" % (d, done.returncode))
+
+    # ---- 5. SKILL.md 头：真 YAML 解析（装载侧那把尺）
+    print("\n== 5. SKILL.md 头：真 YAML 解析（与 DSH 装载侧同族；解析不动＝整本静默消失） ==")
+    if yaml is None:
+        print("  这台机没有可用的 YAML 库（%s）——这一格没真查，不是干净。" % YAML_IMPORT_ERROR)
+        print("\n停：第 5 件事没真查（没有 YAML 库）；不退化成正则。")
+        return 2
+    print("  YAML 库：PyYAML %s（%s）" % (getattr(yaml, "__version__", "?"), yaml.__file__))
+    head_total, head_bad = report_skill_heads([candidate])
+    print("  扫了 %d 份 SKILL.md，红 %d 份" % (head_total, len(head_bad)))
+    if not head_total:
+        print("  NOTE 候选根下一份 SKILL.md 都没有——这一格没东西可查（不因此判干净）")
+    if head_bad:
+        stops.append("⑤ %d 份 SKILL.md 的头装载侧收不下：%s" % (len(head_bad), "、".join(rel for rel, _ in head_bad)))
 
     print()
     if stops:

@@ -97,7 +97,7 @@ program infers (`write_document` `doc` and `do`, `delegate` `title`, the `do` of
 program's inference does not change: those fields are filled exactly as today (`tool_schema.REQUIRED_FILLED`,
 `infer_op`); D1 changes only the layer that names a missing field and what it is named with (her 0528). Cost: every
 tool spec with a required field changes, which means one cold request per open conversation at the install. Her tool
-budget, computed 2026-11-16 19:35 on today's specs with D1's rule applied (the budget test's own count,
+budget, computed 2026-11-16 19:31 on today's specs with D1's rule applied (the budget test's own count,
 `tests/test_tool_budget.py`): 34 marks; 20,513 -> 20,668 characters (+155: her mark adds 748, the `required` flags it
 replaces take 593 off), 33,800 -> 35,451 bytes (+1,651). Measured again at the build and given to her (her 0528). The schema this changes is her character brain's only: it is built by
 `role_tool_specs` for her role sessions (`native_worker.py`, `attachRole`); the action brain's tools are DSH's own,

@@ -132,7 +132,8 @@ problems); only her required mark in each such description is new.
   thought was not yet written at that call (no accepted `think` before it in the audit rows), also names THINK_FIRST
   (§3: 3 calls where they came apart); (b) missing-field refusals number at most 10 (twice §3's rate
   of 2.5 per 1,000: D1 takes `required` out of what the model reads); (c) layer-0 refusals for a missing field are 0.
-  Read before 2,000 calls, it is reported as not enough, never as a pass. F4's count is written down as the
+  Read before 2,000 calls, it is reported as not enough, never as a pass, and the count is never moved later. At
+  2,000 calls the reading closes it, pass or fail: no new decision then (her 0531). F4's count is written down as the
   sentinel.
 
 ## 7. For the owner

@@ -93,9 +93,13 @@ are required: each required field's description says so in words, derived in `de
 listed today. Her words (agent line 0526, F8), the same string on every such field:
 「（必填。不写＝这次不执行；缺哪几项一次全说）」. Her three conditions: at the end of the description, in its brackets, never a
 heading of its own; no English `required`; and only on a field the program cannot fill in: a field with a default the
-program infers (`write_document` `doc` and `do`, `delegate` `title`, the `do` of an op tool) does not carry it. Cost:
-every tool spec with a required field changes, which means one cold request per open conversation at the install, and
-34 marks in her tool budget (counted at build). The schema this changes is her character brain's only: it is built by
+program infers (`write_document` `doc` and `do`, `delegate` `title`, the `do` of an op tool) does not carry it. The
+program's inference does not change: those fields are filled exactly as today (`tool_schema.REQUIRED_FILLED`,
+`infer_op`); D1 changes only the layer that names a missing field and what it is named with (her 0528). Cost: every
+tool spec with a required field changes, which means one cold request per open conversation at the install. Her tool
+budget, computed 2026-11-16 19:35 on today's specs with D1's rule applied (the budget test's own count,
+`tests/test_tool_budget.py`): 34 marks; 20,513 -> 20,668 characters (+155: her mark adds 748, the `required` flags it
+replaces take 593 off), 33,800 -> 35,451 bytes (+1,651). Measured again at the build and given to her (her 0528). The schema this changes is her character brain's only: it is built by
 `role_tool_specs` for her role sessions (`native_worker.py`, `attachRole`); the action brain's tools are DSH's own,
 registered for its task, and `tool_schema` never declares them (her 0526 question).
 
@@ -122,9 +126,14 @@ problems); only her required mark in each such description is new.
 - In an isolated profile on a stub model (造的): a `credential` call with no `do` and no thought gets one refusal
   naming both; a `credential` call with a bad `note` and no thought gets one refusal naming THINK_FIRST and
   CREDENTIAL_NOTE_INVALID; D3's tests pass for every handler.
-- Installed, and read 7 days after the install against §3: layer-0 refusals for a missing field are 0 (they are layer-3
-  problems now, with an audit row); the missing-field rate per 1,000 calls is no higher than §3's (D1 takes `required`
-  out of what the model reads); F4's count is written down as the sentinel.
+- Installed and read by content: no declared field requires anything, so a missing field cannot be refused at layer 0.
+- Real traffic, by count and not by date (her 0528; the owner's rule of 2026-11-09): read once her character brain
+  has made 2,000 calls after the install. Passes when (a) every refusal that names a missing field, in a turn whose
+  thought was not yet written at that call (no accepted `think` before it in the audit rows), also names THINK_FIRST
+  (§3: 3 calls where they came apart); (b) missing-field refusals number at most 10 (twice §3's rate
+  of 2.5 per 1,000: D1 takes `required` out of what the model reads); (c) layer-0 refusals for a missing field are 0.
+  Read before 2,000 calls, it is reported as not enough, never as a pass. F4's count is written down as the
+  sentinel.
 
 ## 7. For the owner
 

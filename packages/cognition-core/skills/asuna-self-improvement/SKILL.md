@@ -130,7 +130,12 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 - `development_publish` 冻结候选，跑启动探针（JS 真正 import 一次插件入口，Python 能解析，人格包和通道包的结构能读），通过才选中。失败会原样返回诊断，候选保留，修了再发。
 - 不要在候选里自己跑打包工具（比如 `bundle_python`）：它会改动行尾和清单，把一次普通发布变成需要重启的发布。
 - 需要重启的改动：`package.json`、`cordis.patch.yml`、`pyproject.toml`、`uv.lock`、任何 `.js`，以及通道包的 `python/`。结果是 `HOST_RESTART_REQUIRED`：主人重启宿主后才生效，重启时启动器安装这个包；连续几次起不来，会自动改回上一个能用的版本（只改选哪个包，不回滚源码）。
-- 其余改动（技能、种子、persona-model、认知核的 Python、适配器的 `integration/`）是 `APPLIED`，**`APPLIED` 不等于生效**，两路分开（来路：2026-11-16 本机实测，一趟 core 发布拿发布回执与两处运行时文件对读）：人格包那一路发布当场带 `activated_at`、当场生效；core 那一路只到 `APPLIED`，运行时装的那份 `SKILL.md` 不换（新正文只在 frozen 快照里；selection 之后可能转 ACTIVE、补上 `activated_at`，那一格不是装包），要等下一次宿主启动装包才进运行时。判生效要从运行时那一份读回特征句或 sha，不许拿 `APPLIED` 当「改好了」。适配器要 `integration_stop` 再 `integration_start` 才换成新发布的版本。
+- 其余改动（技能、种子、persona-model、认知核的 Python、适配器的 `integration/`）是 `APPLIED`。判生效之前先说清「运行时」指的是哪一份——这个词在这台机上盖着三个不同的东西（来路：2026-11-16 本机实测，一趟 core 发布拿发布回执与盘上落件对读）：
+  - **人格包那一路**：发布当场带 `activated_at`、当场生效。
+  - **core 那一路**：`development_publish` 返回的 `state=APPLIED`／`activated:false` 只是那一次调用的**临时返回**，落盘正本是 `.runtime\adr008\activation.json`。worker 会为发布自己重启（`.runtime\worker-restarts.jsonl` 里 `reason` 字面 `worker asked: published-worker`），起来后把 selection 写成 `ACTIVE` 并补上 `activated_at`——**这一格不需要宿主启动**。判生效不许拿 `APPLIED` 当结论，也不许拿 `activated:false` 当「没生效」。
+  - **三份各判各的**：**A** — ACTIVE selection 指向的 frozen 快照，**原生 `skill` 工具实读的就是这一份**；判「技能对新回合生效没有」读它，从那份读回特征句或 sha，或直接调 `skill` 工具看正文。**B** — `node_modules\@asuna\cognition-core` 是 junction 指回工作区检出，发布顺手把改动 copy 回 source，**它跟 A 相等不代表装包**。**C** — 启动器装的 tgz（`launch.json` 的 `installed["@asuna/cognition-core"]`），**只有完整宿主启动才换，技能正文不走这一档**；判「这台机的包换没换」查它。
+  - **判「有没有为发布重启」要分清两本记录**：宿主那一本 `.runtime\restart\history.jsonl`，worker 那一本 `.runtime\worker-restarts.jsonl`。只查一本会得出相反结论（11-16 实测：宿主那本最新还是 11-14，worker 那本有 14:36:37 那一条）。
+  - 适配器要 `integration_stop` 再 `integration_start` 才换成新发布的版本。
 - **会挡别人落地的是 selection 还没回到 ACTIVE，不是 `candidate` 字段在不在**：一次发布从冻结到生效中间那一段（`APPLIED` 未生效），selection 带着 candidate，别人的落地脚本看到就不落。所以"发完等 selection 回到 ACTIVE 再让别人落地"是发布方那一拍该确认的事，不是落地方该等的。来路：2026-10-29 本机实测那发，加上 Claude 当天 10:34 的机制答复。
 
 ### 重启工具：参数名 when，quiet 满 30 分钟照停
@@ -201,6 +206,8 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 来路：2026-10-20 12:13 那笔 `ede4e2b0` 是发布自动提交，父提交 `f9bc5f20`（`git merge-base --is-ancestor f9bc5f20 ede4e2b0` → rc=0），`--stat` 显示这一笔改的是 `packages/personas/<name>/persona-model.json`（1 增 1 删），而它自己的提交正文说它没动那个人格包目录的镜像（这一节两处 `<name>` 都是泛化写法：正文原句带的是具体那个人格包的路径，不是逐字照抄，所以这里不放引号）——正文与 `--stat` 打架的就是这一格。发布任务：`task-2a3c346e608f1837268c9a1421d9b66d`。
 
 ## 版本
+
+v10（2026-11-16）：「发布」一节把 core 那一路的生效判据由「两路」改准成「三档」：`APPLIED`／`activated:false` 只是那一次调用的临时返回（落盘正本是 `activation.json`；worker 会为发布自己重启，起来后 selection 转 `ACTIVE` 并补 `activated_at`，这一格不需要宿主启动）；「运行时」三份分开判——A ACTIVE selection 的 frozen 快照＝原生 `skill` 工具实读那一份、B `node_modules\@asuna\cognition-core` 是 junction 指回检出（与 A 相等不代表装包）、C 启动器装的 tgz（只有完整宿主启动才换，技能正文不走这一档）；另补一格：判「有没有为发布重启」要分清宿主与 worker 两本记录，只查一本会得出相反结论。旧内容一条没删。来路：2026-11-16 本机实测（腿 `task-5084d3ed914b99c2e916fe32b6d7a700` 第 1、2 页）。
 
 v9（2026-11-16）：记想法（`ideas` 的 note）之前先扫同族，同族用 `review` 更新那一条、不另起一枚（并进「想法本」第一条 bullet，行动脑那侧按它没有 read／search 写成分工）。旧内容一条没删。
 v8（2026-11-04，v8.2 合批）：“推 GitHub”一节重写（推前闸、直推为首选、临时提交点和 bundle 降为备用、候选号≠commit sha、判尖只认 `ls-remote`），删掉“主检出写不进 ref → 不能推”的旧推断；加“写盘交代模板（固定段）”；发布节加“发布前先对 frozen 快照”一步；账号事实（推送用谁的账号、谁的钥匙）从正文拿掉；写死的“每份约多少 MB”改成现读句式。旧内容其余一条没删。

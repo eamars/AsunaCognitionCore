@@ -91,10 +91,9 @@ in the plugin; DSH is untouched. How many pins: one (§1).
 
 1. An isolated profile on a stub model (造的): a character session given a selection through DSH's session API; its
    next turn's request on the program's route and level, the pin replaced by the program's selection; the seat on
-   her session disabled with the model's name, the seat on a non-Asuna session live. The page row is read on the page
-   itself this time (ADR-131's demo page stayed behind DSH's preview notice).
-2. Her profile after the install: the pinned QQ session's first step after it carries the program's selection; the
+   her session disabled with the model's name, the seat on a non-Asuna session live; and an action-brain job sent to 高:
+   the model and level its session's button shows while the job runs on 高, written as read, or "not read" (her
+   0518). The page row is read on the page itself this time (ADR-131's demo page stayed behind DSH's preview notice).
+2. Her profile after the install: the pinned session's first step after it carries the program's selection; the
    count of §1 run again (no session whose last selection is not the program's, beyond a recovery session); the seat
    read on her page by the owner or her.
-</content>
-</invoke>

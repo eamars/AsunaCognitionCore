@@ -596,16 +596,16 @@ export class CognitionCore {
     return high;
   }
 
-  /** The provider, model, level and output limit the next request of this conversation takes (before nativeRoute): a
-   * deliberate native model selection stays authoritative for its session; otherwise 高 for a job she sent there, else
-   * the lane's route, at the stage's own effort when it has one. One decision for a turn's request and for its
-   * summary request (ADR-094 §10.2). */
+  /** The provider, model, level and output limit the next request of this conversation takes (before nativeRoute):
+   * 高 for a job she sent there, else the lane's route, at the stage's own effort when it has one. A model selected
+   * in DSH for one of her sessions lasts until its next step, when this route is selected over it (ADR-121); only the
+   * recovery session, the owner's repair, keeps a selection made in DSH. One decision for a turn's request and for
+   * its summary request (ADR-094 §10.2). */
   requestRoute(agent, lane, stage, { quiet = false } = {}) {
-    const selected = deliberate(agent.session);
-    if (lane === 'recovery') return selected ?? this.ctx.asunaFloor?.config?.route;
-    const route = selected ?? (lane === 'executor' ? this.tierRoute(agent, stage, { quiet }) : undefined)
+    if (lane === 'recovery') return deliberate(agent.session) ?? this.ctx.asunaFloor?.config?.route;
+    const route = (lane === 'executor' ? this.tierRoute(agent, stage, { quiet }) : undefined)
       ?? this.routeFor(routeOf(lane));
-    const effort = selected ? undefined : this.effortFor(lane, stage);
+    const effort = this.effortFor(lane, stage);
     return { ...route, reasoningEffort: effort ?? route?.reasoningEffort };
   }
 
@@ -614,6 +614,13 @@ export class CognitionCore {
    * a step's route when it prepares the step). */
   selectRoute(agent, lane, stage) {
     selectFor(agent, nativeRoute(this.requestRoute(agent, lane, stage, { quiet: true })));
+  }
+
+  /** The presets of her routed sessions (every lane but recovery): their requests take the program's route. */
+  routedPresets() {
+    const personas = [...this.personas.values()].map(persona => persona.preset)
+      .filter(preset => typeof preset === 'string' && preset);
+    return [...new Set([...personas, ...Object.values(PRESETS)])];
   }
 
   /** The lane of one of her sessions, by the preset it was opened with; undefined for a session not hers. */

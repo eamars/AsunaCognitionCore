@@ -146,6 +146,11 @@ export class AsunaApi extends TypertRemoteService {
       .filter(preset => typeof preset === 'string' && preset)), 'asuna-action'];
   }
 
+  /** The presets whose sessions run on the program's route (ADR-121): the client shows their model seat locked. */
+  async routedPresets() {
+    return this.core.routedPresets();
+  }
+
   /** ADR-129 D5(b): what one speak call of hers sent, for its node on the page: the parts as they left. */
   async speakParts(request) {
     const call = await this.speakCall(request);
@@ -208,7 +213,7 @@ export class AsunaApi extends TypertRemoteService {
 
 // Standard Remote decorators, applied without requiring a TS build at install.
 // The native Gateway's source mode owns discovery, auth, request scope and RPC.
-for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'brainPresets', 'sessionKinds', 'workspaceTitles', 'uiLanguage', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport', 'speakParts', 'speakPicture']) {
+for (const name of ['status', 'memory', 'inputPolicies', 'brainContext', 'brainPresets', 'routedPresets', 'sessionKinds', 'workspaceTitles', 'uiLanguage', 'applySettings', 'saveSettings', 'personaSources', 'personaJob', 'personaExport', 'speakParts', 'speakPicture']) {
   Remote(AsunaApi.prototype[name], { name, kind: 'method', static: false, private: false,
     addInitializer: initialize => initializers.push(initialize) });
 }

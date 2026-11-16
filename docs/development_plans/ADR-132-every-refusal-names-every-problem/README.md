@@ -90,21 +90,32 @@ drops every enum. The strict schema keeps it, and the worker's layer 3 names a m
 the call cap and the handler's problems. Layer 0 then refuses only a call that cannot be read (an unknown tool,
 arguments that are not an object, a reused call id) and a wrong type (F4). The model still needs to know which fields
 are required: each required field's description says so in words, derived in `declared()` the way enum values are
-listed today. That one literal is hers to word (F8). Cost: every tool spec with a required field changes, which means
-one cold request per open conversation at the install, and about 34 short marks in her tool budget (counted at build).
+listed today. Her words (agent line 0526, F8), the same string on every such field:
+「（必填。不写＝这次不执行；缺哪几项一次全说）」. Her three conditions: at the end of the description, in its brackets, never a
+heading of its own; no English `required`; and only on a field the program cannot fill in: a field with a default the
+program infers (`write_document` `doc` and `do`, `delegate` `title`, the `do` of an op tool) does not carry it. Cost:
+every tool spec with a required field changes, which means one cold request per open conversation at the install, and
+34 marks in her tool budget (counted at build). The schema this changes is her character brain's only: it is built by
+`role_tool_specs` for her role sessions (`native_worker.py`, `attachRole`); the action brain's tools are DSH's own,
+registered for its task, and `tool_schema` never declares them (her 0526 question).
 
 **D2. Every handler collects.** `SPLIT` goes. Every handler gets a check part that ends with `self.checkpoint()` before
 its first effect, and `_found` always collects. The dispatcher no longer refuses before a handler runs. The 27 handlers
-are read one by one; most have one or two checks and then one write.
+are read one by one; most have one or two checks and then one write. What goes is the list, not the behaviour: the 10
+handlers that collect today keep doing so unchanged (her 0526).
 
-**D3. The default is the rule.** Two tests, because a regression here is silent:
-- every tool's declared parameters contain no `required` and no `enum`, over `all_specs()`;
+**D3. The default is the rule.** Three tests, because a regression here is silent:
+- over `all_specs()`: no declared field has `required` or `enum`; every field the strict schema requires and the
+  program cannot fill in carries her string once, at the end of its description; a field the program fills carries it
+  0 times (her 0526: the test counts the string);
+- one refusal names a missing field and THINK_FIRST together (`credential` without `do` and with no thought: the
+  owner's case);
 - every handler, called with no thought first and an argument its own checks refuse, on the in-memory store, is
-  refused with both THINK_FIRST and its own code, and writes nothing. That second part covers D2's real risk: an effect
+  refused with both THINK_FIRST and its own code, and writes nothing. Its last part covers D2's real risk: an effect
   run while a problem is still pending.
 
 **D4. Nothing else she reads changes.** The refusal texts are the ones she has (`combined()` already numbers several
-problems); only the required mark in each description is new.
+problems); only her required mark in each such description is new.
 
 ## 6. Closes when
 

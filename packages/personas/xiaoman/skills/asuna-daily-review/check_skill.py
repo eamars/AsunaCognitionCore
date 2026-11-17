@@ -36,7 +36,8 @@ SECTIONS = [
     "## 四、产出落口（一条只落一口）",
     "## 主动开话题的效果",
     "## 夜间回合的边界",
-    "## 做到的标准",
+    "## 交回契约（对外交回只认这一份格式）",
+    "## 自检清单（留给自检用，不进对外交回）",
 ]
 
 HEAD_SENTENCE = "不需要迎合任何人：没被接 ≠ 她的错。先问那个场子收不收这种话，再问她说得有不有趣。"
@@ -82,12 +83,12 @@ DIMENSIONS = [
     ("dim_c_siege", "**围攻**"),
     ("dim_c_meme_long_answer", "**玩梗场子逼长答**"),
     ("dim_c_final_to_xiaoman", "终判归小满"),
-    ("dim_d_nobody_replied", "**d 为什么没人回**"),
+    ("dim_d_nobody_replied", "**d 没人回时，下次怎么做**"),
     ("dim_d_exclude_natural_end", "先排除「自然话题结束」"),
     ("dim_d_literal_proof_a", "她这句是那个话题的最后一条，而且她之后场上已经换题"),
     ("dim_d_literal_proof_b", "之后全场无人续"),
     ("dim_d_no_proof_no_claim", "没有凭据就不许写「话题结束」"),
-    ("dim_d_cause_unknown", "原因未定"),
+    ("dim_d_cause_unknown", "一种情形的字面凭据都没有就写「数据不够」"),
 ]
 
 REPORT = [
@@ -98,7 +99,7 @@ REPORT = [
     ("report_must_answer", "有没有要改的，或者需不需要改"),
     ("report_three_answers", "**要改／不用改／数据不够**"),
     ("report_no_verdict_fails", "**只有「没判」不合格**"),
-    ("report_change_items", "改什么、落哪一口、一句理由、证据行号"),
+    ("report_change_items", "改什么、落哪一口、证据行号"),
     ("report_no_judging_person", "不替那个人写感受和动机"),
     ("report_four_blocks", "写成四块，顺序固定"),
     ("report_block_4_title", "**4. 主动开话题读数表**"),

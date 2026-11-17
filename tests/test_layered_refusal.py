@@ -134,19 +134,29 @@ def test_filled_fields_are_not_required_by_the_declared_schema_and_no_field_decl
     for (tool, field), words in tool_schema.REQUIRED_FILLED.items():
         assert not declared[tool][field].get('required') and declared[tool][field]['description'].endswith(words)
         assert strict[tool]['parameters'][field].get('required'), 'strict still asks for it'
-    assert declared['speak']['parts']['type'] == 'json' and declared['speak']['parts'].get('required')
+    assert declared['speak']['parts']['type'] == 'json'
     for tool, field in tool_schema.JSON_FIELDS:
         assert 'kind' in declared[tool][field]['description']
     # An enum's values are in its field's description, so the model still reads them.
     assert 'visibility' in declared['write_document'] and 'owner_private' in declared['write_document']['visibility']['description']
-    assert declared['note']['to'].get('required') and declared['note']['text'].get('required'), 'what the program cannot infer stays required'
+    # ADR-132 D1: nothing is required where DSH and the guard check; what the program cannot infer says so in words.
+    assert declared['note']['to']['description'].endswith(tool_schema.REQUIRED_MARK)
 
 
-def test_every_collecting_handler_ends_its_check_part_before_its_first_effect():
-    """The structural guard: a handler in SPLIT calls checkpoint(), or none of its problems could stop it."""
-    for name in sorted(RoleTools.SPLIT):
+def test_every_handler_ends_its_check_part_before_its_first_effect():
+    """The structural guard (ADR-132 D2: every handler collects): a handler calls checkpoint() or hands it to the module
+    that writes (`ready=self.checkpoint`), or none of its problems could stop it. A read writes nothing but its own
+    turn's notes, and the dispatcher's checkpoint after it refuses it with what was found."""
+    from asuna import reasons
+    reads = {'tool_' + name.replace('.', '_') for name in reasons.READS}
+    def ends(source):
+        return 'self.checkpoint()' in source or 'ready=self.checkpoint' in source or 'raise self.combined(' in source
+    for name in sorted(n for n in vars(RoleTools) if n.startswith('tool_') and n != 'tool_end_turn'):
         source = inspect.getsource(getattr(RoleTools, name))
-        assert 'self.checkpoint()' in source or 'raise self.combined(' in source, name + ' never ends its check part'
+        helpers = re.findall(r'self\.(_[a-z_]+)\(', source)            # a helper of its own that ends it (_note)
+        source += ''.join(inspect.getsource(getattr(RoleTools, h)) for h in helpers if callable(getattr(RoleTools, h, None))
+                          and ends(inspect.getsource(getattr(RoleTools, h))))
+        assert ends(source) or name in reads, name + ' never ends its check part'
 
 
 def test_a_long_refusal_cuts_each_candidate_list_and_drops_no_problem(world):

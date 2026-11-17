@@ -104,26 +104,41 @@ def listing():
             for item in _cache['listing']]
 
 
-def keep(name, note, env):
-    """File a credential (a new one, or new values for a name already filed)."""
+def problems(name, note, env):
+    """(every problem of a credential to file, as [(code, words)], and the name, note and variables as filed). Each
+    field is checked on its own, so one call names all of them (ADR-132 D2)."""
+    found = []
     name = str(name or '').strip()
     if not NAME.fullmatch(name):
-        raise Denied('CREDENTIAL_NAME_INVALID: ' + ('没写 name' if not name else 'name %d 个字符，不合规则' % len(name)))
+        found.append(('CREDENTIAL_NAME_INVALID', '没写 name' if not name else 'name %d 个字符，不合规则' % len(name)))
     note = ' '.join(str(note or '').split())
     if not 1 <= len(note) <= NOTE_CHARS:
-        raise Denied('CREDENTIAL_NOTE_INVALID: ' + ('没写 note' if not note else 'note %d 字' % len(note)))
-    if not isinstance(env, dict) or not 1 <= len(env) <= MAX_VARIABLES:
-        raise Denied('CREDENTIAL_ENV_INVALID: ' + ('env 有 %d 个变量' % len(env) if isinstance(env, dict)
-                                                   else 'env 要是一个对象：{"变量名": "值"}'))
+        found.append(('CREDENTIAL_NOTE_INVALID', '没写 note' if not note else 'note %d 字' % len(note)))
     clean = {}
+    if not isinstance(env, dict) or not 1 <= len(env) <= MAX_VARIABLES:
+        found.append(('CREDENTIAL_ENV_INVALID', 'env 有 %d 个变量' % len(env) if isinstance(env, dict)
+                      else 'env 要是一个对象：{"变量名": "值"}'))
+        env = {}
     for key, value in env.items():
         key = str(key).strip()
         if not ENV_NAME.fullmatch(key) or key in RESERVED or key.startswith('PYTHON'):
-            raise Denied('CREDENTIAL_ENV_INVALID: 变量名「%s」%s' % (echoed(key), '是系统要用的，换一个名字'
-                         if key in RESERVED or key.startswith('PYTHON') else '要大写字母开头，只含大写字母、数字、下划线，2–48 个'))
-        if not isinstance(value, str) or not value or len(value) > VALUE_CHARS:
-            raise Denied('CREDENTIAL_ENV_INVALID: %s 的值要是 1–%d 字的字符串' % (echoed(key), VALUE_CHARS))
-        clean[key] = value
+            found.append(('CREDENTIAL_ENV_INVALID', '变量名「%s」%s' % (echoed(key), '是系统要用的，换一个名字'
+                          if key in RESERVED or key.startswith('PYTHON') else '要大写字母开头，只含大写字母、数字、下划线，2–48 个')))
+        elif not isinstance(value, str) or not value or len(value) > VALUE_CHARS:
+            found.append(('CREDENTIAL_ENV_INVALID', '%s 的值要是 1–%d 字的字符串' % (echoed(key), VALUE_CHARS)))
+        else:
+            clean[key] = value
+    return found, name, note, clean
+
+
+def keep(name, note, env, ready=None):
+    """File a credential (a new one, or new values for a name already filed). Refused at its first problem;
+    `ready`, when given, runs after the checks and before the vault is written (a caller's own checkpoint)."""
+    found, name, note, clean = problems(name, note, env)
+    if found:
+        raise Denied('%s: %s' % found[0])
+    if ready:
+        ready()
     _call(op='write', name=name, note=note, env=clean)
     _refresh(force=True)
     return {'kept': name, 'env': sorted(clean), 'note': '收进保险箱了。值不会再出现在任何地方；用的时候只写名字。'}
@@ -134,11 +149,14 @@ def _names_hint(names):
     return '有的是：%s，照抄其中一个' % '、'.join(names) if names else '保险箱是空的'
 
 
-def drop(name):
+def drop(name, ready=None):
+    """Remove a credential; `ready` as in `keep`."""
     name = str(name or '').strip()
     names = sorted(item['name'] for item in listing())
     if name not in names:
         raise Denied('CREDENTIAL_NOT_FOUND: 保险箱里没有「%s」；%s' % (echoed(name), _names_hint(names)))
+    if ready:
+        ready()
     _call(op='delete', name=name)
     _refresh(force=True)
     return {'dropped': name}

@@ -303,7 +303,7 @@ Her switches (ADR-052): mute a group, turn tools off in a conversation, block a 
 - def `save` — The revisioned write of a switch (`Store.put`: `expected`, `stream`).
 - def `hours_of` — The hours a switch lasts: DEFAULT_HOURS when not given, else a whole number 1..MAX_HOURS.
 - def `set_switch` — One switch per kind and target; setting it again replaces it (a new end, new tools).
-- def `clear`
+- def `clear` — End a switch early; `ready` as in `set_switch`.
 - def `muted`
 - def `tools_off` — tool name -> the switch that turned it off in this conversation.
 - def `blocked`

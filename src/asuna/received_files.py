@@ -604,14 +604,17 @@ def _life(store, row, scene_id):
     return LIFE % (gone, KEEP_DAYS, _stamp(store, (sent + timedelta(days=REF_DAYS)).isoformat(), scene_id))
 
 
-def run(store, where, config, args, *, persona, session_class, moment=None, task_dir=None):
+def run(store, where, config, args, *, persona, session_class, moment=None, task_dir=None, ready=None):
     """The `received_file` tool, for both halves: `where` is her turn's scene or the task's binding; only the action
-    brain, which has a task folder, copies (`task_dir`)."""
+    brain, which has a task folder, copies (`task_dir`). `ready`, when given, runs before what writes (a caller's
+    checkpoint, ADR-132 D2)."""
     args = args or {}
     op = args.get('op') or 'read'
     if op == 'kept':
         return kept(store, reach(store, where, config, session_class), where.get('scene_id'))
     if op == 'read':
+        if ready:
+            ready()
         return read(store, where, config, args, persona=persona, session_class=session_class, moment=moment)
     if op == 'copy' and task_dir:
         return copy(store, where, config, args, task_dir=task_dir, session_class=session_class)
@@ -621,6 +624,8 @@ def run(store, where, config, args, *, persona, session_class, moment=None, task
     _, row, scopes = found(store, where, config, ref, session_class)
     if not row:
         raise Denied(NOT_READ_YET % echoed(op))
+    if ready:
+        ready()
     if op == 'keep':
         return {'ref': ref, **keep(store, row['_id'], args.get('why'), scopes, where.get('scene_id'), moment)}
     return {'ref': ref, **let_go(store, row['_id'], scopes, where.get('scene_id'), moment)}

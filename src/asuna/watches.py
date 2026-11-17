@@ -121,8 +121,9 @@ def _why(row, cls, store=None):
 
 
 # ── adding and stopping ─────────────────────────────────────────────
-def add(store, ep, persona, cls, args):
-    """Watch someone she can see in this conversation (a label, #number or name that names exactly one person)."""
+def add(store, ep, persona, cls, args, ready=None):
+    """Watch someone she can see in this conversation (a label, #number or name that names exactly one person).
+    `ready`, when given, runs after the checks and before the write (a caller's checkpoint, ADR-132 D2)."""
     from .people import People
     given = args.get('hours')
     try:
@@ -153,15 +154,19 @@ def add(store, ep, persona, cls, args):
            'set_in': scene['_id'], 'set_class': cls, 'why': why, 'mode': mode, 'state': 'on',
            'created_at': now(), 'until': (moment + timedelta(hours=hours)).isoformat(),
            'appeared': 0, 'last_seen_at': None}
+    if ready:
+        ready()
     # A new watch on the same person replaces the old one and counts its sightings from nothing.
     save(store, doc, expected=current and current['revision'], stream='watches:' + persona, reset_counters=True)
     return {'watching': doc['name'], 'id': _id, 'how': MODE_WORDS[mode], 'for': '%d 小时' % hours}
 
 
-def stop(store, persona, watch_id):
+def stop(store, persona, watch_id, ready=None):
     row = get(store, str(watch_id or '').strip(), persona=persona, state='on')
     if not row:
         raise Denied('WATCH_NOT_FOUND: ' + ('没写 id' if not watch_id else 'id「%s」不在名单上（可能已经到期停了）' % echoed(watch_id)))
+    if ready:
+        ready()
     save(store, {**row, 'state': 'ended', 'ended_at': now()}, expected=row['revision'], stream='watches:' + persona)
     return {'stopped': row['name']}
 

@@ -1527,12 +1527,11 @@ class RoleTools:
     #      field checks (lengths, enums, empty fields, pairs)
     #   4  state, collected for the fields layer 3 passed (section, ref, plan id, label), then the checks on the write
     #   5  the effect. A failure here is one refusal.
-    # A handler collects only once it is split into a check part and an effect part (SPLIT): its checks append to
-    # `self.problems` while `self.collecting` is set, and it ends the check part with `self.checkpoint()`. Any other
-    # handler refuses at its first failure, as before, once the general layers have passed.
-    SPLIT = frozenset({'tool_think', 'tool_delegate', 'tool_task_answer', 'tool_task_message', 'tool_task_stop',
-                       'tool_ideas_note', 'tool_feel', 'tool_plan', 'tool_write_document', 'tool_speak'})
-    collecting, flagged, tool = False, frozenset(), None       # per call (see `call`); these are the values outside one
+    # ADR-132 D2: every handler collects. It runs with the general layers' problems pending; its checks append to
+    # `self.problems` (`_found`) and it ends its check part with `self.checkpoint()` before its first effect. A check
+    # that still stops (a raise in the handler or in a module it checks with) before that point is one problem among
+    # the pending ones, and a field the strict schema named that a check could not read leaves the refusal to them.
+    collecting, flagged, tool, checked = False, frozenset(), None, False   # per call (see `call`): values outside one
     # When a refusal is longer than this, each candidate list in it keeps its first three; no problem is dropped.
     REFUSAL_LONG = 1500
     SHORT_LIST = 3
@@ -1543,7 +1542,7 @@ class RoleTools:
         ep = episode_records.get(self.store, ep_id)
         if thinking is not None:
             ep = self.take_thought(ep, call_id, thinking)
-        self.problems, self.collecting, self.flagged, self.repairs = [], False, set(), []
+        self.problems, self.collecting, self.flagged, self.repairs, self.checked = [], False, set(), [], False
         if name == END_TURN:
             return self._end_turn(ep, call_id, args)
         called_as = None
@@ -1608,12 +1607,10 @@ class RoleTools:
                 self.over = {}                        # one note per field, however often the field is checked
                 self.__dict__.pop('report', None)
                 self.__dict__.pop('parts', None)
-                self.collecting = 'tool_' + can.replace('.', '_') in self.SPLIT
-                if not self.collecting:
-                    self.checkpoint()                 # a handler that is not split runs on what the general layers passed
-                result, conclude = getattr(self, 'tool_' + can.replace('.', '_'))(ep, call_id, args)
+                self.collecting = True
+                result, conclude = self._handle(getattr(self, 'tool_' + can.replace('.', '_')), ep, call_id, args)
                 self.collecting = False
-                self.checkpoint()                     # a split handler that reached its end with problems found says so
+                self.checkpoint()                     # a handler that reached its end with problems found says so
                 if made > CALLS_HARD:
                     conclude = True
                     if isinstance(result, dict):
@@ -1697,6 +1694,30 @@ class RoleTools:
         """End of a handler's check part: refuses with everything found, or lets the effect begin."""
         if self.problems:
             raise self.combined()
+        self.checked = True
+
+    def _handle(self, handler, ep, call_id, args):
+        """Runs a handler (ADR-132 D2). Before its check part has ended, with problems pending: a check that stops is
+        named with them, and a failure reading a field already found wrong is theirs to say. After it, or
+        with nothing pending, a failure is as it was."""
+        try:
+            return handler(ep, call_id, args)
+        except Refused as exc:
+            if self.checked or not self.problems or getattr(exc, 'whole', False):
+                raise
+            code = (exc.codes or ['REFUSED'])[0]
+            if not (code.startswith('ARGS_') and self.flagged):   # else the strict schema has said it
+                self.problems.append((code, str(exc)))
+            raise self.combined() from None
+        except (Denied, Conflict, DocumentError, ValueError) as exc:
+            if self.checked or not self.problems:
+                raise
+            self.problems.append((code_of(exc), words(exc)))
+            raise self.combined() from None
+        except (KeyError, TypeError, AttributeError, IndexError):
+            if self.checked or not self.problems:     # a field already named wrong, or a check that found a problem
+                raise                                 # and returned None, read by a later check: theirs to say
+            raise self.combined() from None
 
     def combined(self, sent=None, tail=''):
         """The one refusal for a call: its problems numbered, the call's own first thought first, her words in none of
@@ -1709,10 +1730,13 @@ class RoleTools:
         codes = [code for code, _, _ in found]
         if len(found) == 1:
             text = found[0][1] if not sent else '%s：%s。改好再调用一次 speak。' % (sent, found[0][1].rstrip('。'))
-            return Refused(text + tail, codes)
-        return Refused('这次调用有 %d 处要改%s，改好一起再调用一次：\n%s' % (
-            len(found), '，' + sent if sent else '',
-            '\n'.join('%d. %s' % (number, text) for number, (_, text, _) in enumerate(found, 1))) + tail, codes)
+            refused = Refused(text + tail, codes)
+        else:
+            refused = Refused('这次调用有 %d 处要改%s，改好一起再调用一次：\n%s' % (
+                len(found), '，' + sent if sent else '',
+                '\n'.join('%d. %s' % (number, text) for number, (_, text, _) in enumerate(found, 1))) + tail, codes)
+        refused.whole = True                        # every problem of the call is in it: `_handle` adds none
+        return refused
 
     def _local(self, ep, result):
         """What she reads back is on the local clock; the record keeps UTC (local_time.py)."""
@@ -1975,6 +1999,7 @@ class RoleTools:
                 crossed = crossing.elsewhere(self.store, ep['persona'], here, query, zone)
             with part('before'):
                 before = crossing.before(self.store, ep['persona'], here, self._cls(ep), query, zone)
+        self.checkpoint()
         ep = self._fresh(ep)
         c._update(ep, recall_count=count + 1,
                   recalled=[*(ep.get('recalled') or []), *[m.get('_id') for m in recalled.get('memories') or []],
@@ -2044,9 +2069,12 @@ class RoleTools:
     def tool_credential(self, ep, call_id, args):
         from . import credentials
         if args.get('op') == 'keep':
+            for code, text in credentials.problems(args.get('name'), args.get('note'), args.get('env'))[0]:
+                self._found(words(Denied('%s: %s' % (code, text))), code)   # as her words when it stopped alone
+            self.checkpoint()
             return credentials.keep(args.get('name'), args.get('note'), args.get('env')), False
         if args.get('op') == 'drop':
-            return credentials.drop(args.get('name')), False
+            return credentials.drop(args.get('name'), ready=self.checkpoint), False
         raise Refused('do 是 keep 或 drop%s。' % _given(args, 'op'), ['ARGS_ENUM'])
 
     def _recall_person(self, ep, count, value):
@@ -2073,6 +2101,7 @@ class RoleTools:
         except _understanding.Unknown as exc:
             raise Refused(str(exc), ['PERSON_UNKNOWN'])
         view, shown = _understanding.read(self.store, scene, person_id)
+        self.checkpoint()
         ep = self._fresh(ep)
         c._update(ep, recall_count=count + 1,
                   understanding_seen={**(ep.get('understanding_seen') or {}), person_id: shown})
@@ -2088,9 +2117,9 @@ class RoleTools:
         if op == 'on':
             if (scene_records.get(self.store, ep['scene_id'], fields=['kind']) or {}).get('kind') not in ('group', 'dm'):
                 raise Refused('这里不是群或私聊，盯不了人：到看得到他的群或私聊里再用 on。', ['WATCH_NOT_A_CHAT'])
-            return watches.add(self.store, ep, ep['persona'], self._place(ep), args), False
+            return watches.add(self.store, ep, ep['persona'], self._place(ep), args, ready=self.checkpoint), False
         if op == 'off':
-            return watches.stop(self.store, ep['persona'], args.get('id')), False
+            return watches.stop(self.store, ep['persona'], args.get('id'), ready=self.checkpoint), False
         raise Refused('do 是 on、off 或 block%s。' % _given(args, 'op'), ['ARGS_ENUM'])
 
     def tool_speak(self, ep, call_id, args):
@@ -2552,6 +2581,7 @@ class RoleTools:
         result = read_image_for_task(self.store, BlobStore(self.store), scene, self.store.config, args,
                                      route='character', offered=offered_pictures(self._fresh(ep)),
                                      session_class=self._cls(ep))        # 按路径读盘只在家里放行；这一轮没有任务目录
+        self.checkpoint()
         ref = str((args or {}).get('ref') or '')
         if ref:                                       # what she looked at this turn (a candidate is kept only after)
             fresh = self._fresh(ep)
@@ -2564,24 +2594,28 @@ class RoleTools:
         from . import received_files
         scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
         return received_files.run(self.store, scene, self.store.config, args, persona=ep['persona'],
-                                  session_class=self._cls(ep)), False
+                                  session_class=self._cls(ep), ready=self.checkpoint), False
 
     def tool_sticker(self, ep, call_id, args):
         from . import stickers
         from .blobs import BlobStore
         op = args.get('op')
         if op == 'keep' and args.get('candidate'):
-            return stickers.keep_candidate(self.store, self._fresh(ep), ep['persona'], args), False
+            return stickers.keep_candidate(self.store, self._fresh(ep), ep['persona'], args, ready=self.checkpoint), False
         if op == 'keep':
-            return stickers.keep(self.store, BlobStore(self.store), ep, ep['persona'], args, self.store.config), False
+            return stickers.keep(self.store, BlobStore(self.store), ep, ep['persona'], args, self.store.config,
+                                 ready=self.checkpoint), False
         if op == 'drop':
-            return stickers.drop(self.store, ep['persona'], args.get('name')), False
+            return stickers.drop(self.store, ep['persona'], args.get('name'), ready=self.checkpoint), False
         if op == 'rename':
-            return stickers.rename(self.store, ep['persona'], args.get('name'), args.get('new_name'), args.get('when')), False
+            return stickers.rename(self.store, ep['persona'], args.get('name'), args.get('new_name'), args.get('when'),
+                                   ready=self.checkpoint), False
         if op == 'remember':
-            return stickers.remember(self.store, self._fresh(ep), ep['persona'], args, self.store.config), False
+            return stickers.remember(self.store, self._fresh(ep), ep['persona'], args, self.store.config,
+                                     ready=self.checkpoint), False
         if op == 'pool':
             listing = stickers.pool_listing(self.store, clock.now())
+            self.checkpoint()
             fresh = self._fresh(ep)
             self.coordinator._update(fresh, pool_listed=[*dict.fromkeys([*(fresh.get('pool_listed') or []),
                                                                          *(item['candidate'] for item in listing['items'])])])
@@ -2591,6 +2625,7 @@ class RoleTools:
             listed = stickers.block(self.store, ep['persona'],
                                     scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']},
                                     at_home=self._place(ep) == visibility.OWNER_PRIVATE)
+            self.checkpoint()
             if not listed:
                 return {'items': [], 'note': '架子是空的。'}, False
             # What it lists she may look at with read_image, as what pool lists (stickers.candidate_ids).
@@ -2927,6 +2962,7 @@ class RoleTools:
             if not ((ep.get('context') or {}).get('understanding_update_from_program') or {}).get('available'):
                 raise Denied('UNDERSTANDING_UPDATE_NOT_AVAILABLE')
             base = None
+        self.checkpoint()
         mutation = ep['_id'] + (':understanding' if layer == 'here' else ':understanding:person') + ('' if own else ':' + person_id)
         from .records import heads as head_records
         saved = head_records.by_mutation(self.store, mutation, ['_id'])
@@ -2967,14 +3003,15 @@ class RoleTools:
             raise Refused('你在这个群是管理员，它一直常驻（管理员要看得见群里的事），静音不了。', ['GROUP_ADMIN_ALWAYS_ON'])
         label = People(self.store, ep.get('persona')).scene_title(scene)
         if on:
-            row = switches.set_switch(self.store, ep, 'mute', label=label, scene_id=scene['_id'], hours=hours)
+            row = switches.set_switch(self.store, ep, 'mute', label=label, scene_id=scene['_id'], hours=hours,
+                                      ready=self.checkpoint)
             result = {'done': '%s静音了：只有叫到你才会醒，你不先开口、不去；到点自己结束' % label,
                       'until_at': row['until'], 'id': row['_id']}
         else:
             row = switches.muted(self.store, scene['_id'])
             if not row:
                 return {'unchanged': '%s本来就没静音。' % label}
-            switches.clear(self.store, ep, row['_id'])
+            switches.clear(self.store, ep, row['_id'], ready=self.checkpoint)
             result = {'done': '%s不再静音，回到%s' % (label, '常驻' if focus.active(self.store, scene, ep.get('persona'))
                                                        else '歇着')}
         if focus._changed:
@@ -3011,14 +3048,14 @@ class RoleTools:
             target, label = ep['person_id'], people.speaker(scene, ep['person_id'])
         if people.person(target) == people.owner:
             raise Refused('家里的人屏蔽不了：主人在哪个对话里都不屏蔽。', ['BLOCK_HOME'])
-        row = switches.set_switch(self.store, ep, 'block', label=label, person_id=target, hours=hours)
+        row = switches.set_switch(self.store, ep, 'block', label=label, person_id=target, hours=hours, ready=self.checkpoint)
         return {'done': '屏蔽了%s：他的话照存，但哪儿都不叫你' % label, 'until_at': row['until'], 'id': row['_id']}
 
     def _switch_policy(self, ep, key, args, reason):
         """ADR-052: tools off in one conversation, or an early end to any switch."""
         from . import places, switches
         if key == 'switch_off':
-            row = switches.clear(self.store, ep, args.get('value'))
+            row = switches.clear(self.store, ep, args.get('value'), ready=self.checkpoint)
             return {'done': '这个开关关了：%s' % switches.WORDS[row['kind']] + '：' + row['label']}
         place = self._text(args, 'place', 40)
         found = places.find(self.store.config, place)
@@ -3038,11 +3075,12 @@ class RoleTools:
         label = People(self.store, ep.get('persona')).scene_title(scene)
         current = switches.on(self.store, kind='tools_off', scene_id=found[0])
         if not tools:
+            self.checkpoint()
             for row in current:
                 switches.clear(self.store, ep, row['_id'])
             return {'done': '%s的工具都恢复了' % label}
         row = switches.set_switch(self.store, ep, 'tools_off', label=label, scene_id=found[0], tools=tools,
-                                  hours=args.get('hours'), why=cut(reason, 200))
+                                  hours=args.get('hours'), why=cut(reason, 200), ready=self.checkpoint)
         return {'done': '%s里关了：%s' % (label, '、'.join(row['tools'])), 'until_at': row['until'], 'id': row['_id']}
 
     def tool_set_policy(self, ep, call_id, args):
@@ -3067,6 +3105,7 @@ class RoleTools:
         model, _ = model_and_policy(self.store, ep['persona'])
         policy = PolicyStore(self.store, ep['persona'], model)
         spec_what = policy.validate([{'key': key, 'value': args['value'], 'what': cut(reason, 300)}])
+        self.checkpoint()
         if args['value'] is None and key not in policy.params():
             now_value, source = source_of(model, key, policy.params())
             return {'key': key, 'done': POLICY_NOT_SET, 'now': now_value, 'from': source}, False
@@ -3321,8 +3360,8 @@ class RoleTools:
             from . import notices
             if ep['scene_id'] != (self.store.config.get('chat') or {}).get('scene_id'):
                 raise Denied('GROUP_ACTION_ANSWER_AT_HOME: accept 和 decline 只在家里回列出的请求；群里用 mute、unmute、recall、kick')
-            return notices.answer(self.store, ep, item, key='group_action:' + call_id), False
-        return group_admin.queue(self.store, ep, 0, item, key='group_action:' + call_id), False
+            return notices.answer(self.store, ep, item, key='group_action:' + call_id, ready=self.checkpoint), False
+        return group_admin.queue(self.store, ep, 0, item, key='group_action:' + call_id, ready=self.checkpoint), False
 
     def tool_visit(self, ep, call_id, args):
         from . import places
@@ -3345,6 +3384,7 @@ class RoleTools:
             raise Refused('只有 intent=share_picture 才带 artifact_id。', ['VISIT_ARTIFACT_NOT_NEEDED'])
         if not self.coordinator.scheduler:
             raise Refused('现在没有定时服务，出不了门（不是你的错）；重试也一样。', ['SCHEDULER_UNAVAILABLE'])
+        self.checkpoint()
         return self.coordinator.scheduler.visit(ep, place, intent, topic, artifact), False
 
     def tool_errand(self, ep, call_id, args):
@@ -3358,14 +3398,22 @@ class RoleTools:
         artifact = self._text(args, 'artifact_id', 200, required=False)
         if not self.coordinator.scheduler:
             raise Refused('现在没有定时服务，办不了（不是你的错）；重试也一样，跟托你的人说一声。', ['SCHEDULER_UNAVAILABLE'])
+        self.checkpoint()
         return self.coordinator.scheduler.errand(ep, call_id, place, request, bool(args.get('exactly')), artifact), False
 
     # ── notes between her conversations (ADR-018) ───────────────────
     def _note(self, ep, call_id, args, cls):
         from . import notes
+        args = {**args, 'text': self._scrubbed(str(args.get('text') or ''))}     # never a credential value
+        try:                                          # the note's own checks, with the rest (ADR-132 D2)
+            notes.prepare(self.store, ep, cls, args, call_id)
+        except notes.NoteRefused as exc:
+            self.store.audit(ep['_id'], 'note.refused', {'code': exc.code, 'to': str(args.get('to') or '')[:40]},
+                             ep['scope_key'])
+            self._found(str(exc), exc.code)
         if not self.coordinator.scheduler:
             raise Refused('现在没有定时服务，便条送不出去（不是你的错）；重试也一样。', ['SCHEDULER_UNAVAILABLE'])
-        args = {**args, 'text': self._scrubbed(str(args.get('text') or ''))}     # never a credential value
+        self.checkpoint()
         try:
             return self.coordinator.scheduler.note(ep, cls, args, call_id), False
         except notes.NoteRefused as exc:
@@ -3408,6 +3456,7 @@ class RoleTools:
         if op == 'preview':
             return desk.preview(), False
         if op == 'cancel':
+            self.checkpoint()
             had = desk.cancel()
             return {'cancelled': bool(had), 'note': '撤回了。' if had else '没有在等的重启请求。'}, False
         if op not in ('request', 'drill'):
@@ -3415,6 +3464,7 @@ class RoleTools:
         why = self._text(args, 'why', 200)
         from .people import People
         where = People(self.store, ep['persona']).scene_title(scene_records.get(self.store, ep['scene_id']))
+        self.checkpoint()
         try:
             pending = desk.request(why, args.get('when') or 'quiet', drill=op == 'drill', where=where)
         except PermissionError as exc:
@@ -3444,6 +3494,7 @@ class RoleTools:
             raise Refused('关的时候要选 close_for：%s%s。' % ('、'.join(lines.CLOSE_FOR), _given(args, 'close_for')),
                           ['ARGS_ENUM'])
         zone = her_zone(self.store.config)['name']
+        self.checkpoint()
         lines.set_line(self.store, line['scene_id'], closed=op == 'close', choice=args.get('close_for'), zone=zone,
                        by='character:' + ep['_id'])
         return {'line': line['label'], 'state': lines.describe(lines.closed_until(self.store, line['scene_id']), zone)}, False
@@ -3465,6 +3516,12 @@ class RoleTools:
 
     def tool_private_words(self, ep, call_id, args):
         from . import private_words
+        if args.get('op') == 'add':
+            issue = private_words.problem(*(str(args.get(field) or '').strip() for field in ('category', 'word', 'why')))
+            if issue:
+                self._found(issue, 'PRIVATE_WORDS_REFUSED')
+        if args.get('op') in ('add', 'remove'):
+            self.checkpoint()                         # the list is written next
         try:
             return private_words.run(args, home=self._cls(ep) == visibility.OWNER_PRIVATE), False
         except private_words.PrivateWordsError as exc:
@@ -3501,6 +3558,7 @@ class RoleTools:
             from . import condense
             if scene.get('kind') != 'group':
                 raise Refused('只有群的对话能这样压。', ['CONDENSE_NOT_GROUP'])
+            self.checkpoint()
             if op == 'keep':
                 return condense.unmark(self.store, scene, ep), False
             answer = condense.mark(self.store, scene, ep)
@@ -3510,6 +3568,7 @@ class RoleTools:
             return answer, False
         if op in ('mute', 'unmute'):
             return self._mute(ep, scene, op == 'mute', args.get('hours')), False
+        self.checkpoint()
         try:
             return focus.set_focus(self.store, ep, scene, op == 'active', ep['persona']), False
         except ValueError as exc:
@@ -3570,6 +3629,7 @@ class RoleTools:
         from . import local_roots
         toward = self._toward_action(ep, text) if any(s['kind'] == 'action' for s in sources) else None
         text = local_roots.contract(text)
+        self.checkpoint()
         qid = questions.question_id([ep['_id'], call_id])
         row = questions.get(self.store, qid)
         if not row:
@@ -3622,7 +3682,9 @@ class RoleTools:
         from .questions import TOOK_CHARS
         qid = self._text(args, 'id', 40)
         took = self._text(args, 'took', TOOK_CHARS)
-        row, words = questions.close(self.store, ep['persona'], qid, took)
+        if qid is None:                               # no question to look up: what was found is the refusal
+            self.checkpoint()
+        row, words = questions.close(self.store, ep['persona'], qid, took, ready=self.checkpoint)
         if not row:
             raise Refused(ASK_UNKNOWN % echoed(qid) + refs_usable(self._listed_questions(ep)), ['ASK_QUESTION_UNKNOWN'])
         return {'id': qid, 'closed': words}, False
@@ -3694,11 +3756,12 @@ class RoleTools:
         why = self._text(args, 'why', IDEA_CHARS)
         if decision not in ('adopt', 'defer', 'drop'):
             raise Refused('decision 是 adopt、defer 或 drop%s。' % _given(args, 'decision'), ['ARGS_ENUM'])
-        row = idea_records.get(self.store, idea_id, persona=ep['persona'])
-        if not row or row.get('state') not in ('open', 'deferred'):
+        row = idea_records.get(self.store, idea_id, persona=ep['persona']) if idea_id is not None else None
+        if idea_id is not None and (not row or row.get('state') not in ('open', 'deferred')):
             raise Refused('「%s」不是想法本里还没处理完的一条；照 ideas_from_program 或 ideas 的 read 里的原样抄 _id。%s'
                           % (echoed(idea_id), refs_usable(row['_id'] for row in idea_rows(self.store, ep['persona'], None))),
                           ['IDEA_UNKNOWN'])
+        self.checkpoint()
         state = {'adopt': 'adopted', 'defer': 'deferred', 'drop': 'dropped'}[decision]
         from .state import now
         idea_records.save(self.store, {**row, 'state': state, 'decisions': [*(row.get('decisions') or []),
@@ -3719,7 +3782,7 @@ class RoleTools:
         if not isinstance(item.get('source_ids'), list) or not item['source_ids'] or not all(
                 isinstance(x, str) for x in item['source_ids']):
             raise Refused('source_ids 是来源 id 的列表（至少一条，都是文字）：照抄 promotion_candidates 里的 id。', ['ARGS_TYPE'])
-        return promote(self.store, ep, item, key='promote:' + call_id), False
+        return promote(self.store, ep, item, key='promote:' + call_id, ready=self.checkpoint), False
 
 
 def note_idea(store, persona, idea, why, *, key, source):
@@ -3854,8 +3917,9 @@ def _from_home(store, persona, source_ids, episodes):
     return False
 
 
-def promote(store, ep, item, *, key):
-    """Settlement only: quota, ≥ min_roots different turns and ≥ min_dates local dates behind the sources."""
+def promote(store, ep, item, *, key, ready=None):
+    """Settlement only: quota, ≥ min_roots different turns and ≥ min_dates local dates behind the sources. `ready`,
+    when given, runs after the checks and before the first write (the handler's checkpoint, ADR-132 D2)."""
     from .config import character_id
     from .persona_model import effective
     from .render import model_and_policy
@@ -3894,6 +3958,8 @@ def promote(store, ep, item, *, key):
         # A public memory shows in every conversation; one built on anything said at home stays at home (ADR-050).
         raise Denied('PROMOTION_NOT_PUBLIC: 这条的来源里有家里的对话，置公开会把家里的话带到每个群和私聊里；'
                      '要提升就把 visibility 写成 owner_private，留在家里')
+    if ready:
+        ready()
     landed_note = None
     if item.get('about'):
         landed, landed_note = memory_tiers.land(store, ep, item, episodes)

@@ -317,8 +317,9 @@ def settled(store, action, state):
                   stream='requests')
 
 
-def answer(store, ep, item, key):
-    """group_action accept/decline at home: queue the answer to one listed request for the adapter."""
+def answer(store, ep, item, key, ready=None):
+    """group_action accept/decline at home: queue the answer to one listed request for the adapter.
+    `ready`, when given, runs after the checks and before the first write (a caller's checkpoint, ADR-132 D2)."""
     from .evidence import canonical, sha
     found = pending(store)
     who = ''.join(str(item.get('who') or '').split())
@@ -327,6 +328,8 @@ def answer(store, ep, item, key):
     if not request:
         raise Denied('GROUP_ACTION_REQUEST_NOT_FOUND: 「%s」不是等你回的请求；%s' % (
             echoed(item.get('who')), '现在等你回的是 ' + '、'.join(sorted(found)) if found else '现在没有等你回的请求，重试也一样'))
+    if ready:
+        ready()
     scene = scene_records.get(store, ep['scene_id']) or {}
     row_id = 'ga-' + sha(canonical([ep['_id'], 'group_action', key]))[:24]
     if not artifact_records.get(store, row_id):

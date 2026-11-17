@@ -88,8 +88,9 @@ def hours_of(value):
 
 
 def set_switch(store, ep, kind, *, label, scene_id=None, person_id=None, tools=None, hours=None, why=None,
-               moment=None):
-    """One switch per kind and target; setting it again replaces it (a new end, new tools)."""
+               moment=None, ready=None):
+    """One switch per kind and target; setting it again replaces it (a new end, new tools). `ready`, when given, runs
+    after the checks and before the write (a caller's checkpoint, ADR-132 D2)."""
     moment = _moment(moment)
     target = scene_id if kind != 'block' else person_id
     _id = 'switch-' + sha('|'.join([ep['persona'], kind, target]).encode())[:16]
@@ -99,15 +100,20 @@ def set_switch(store, ep, kind, *, label, scene_id=None, person_id=None, tools=N
            **({'tools': sorted(set(tools))} if tools is not None else {}),
            'until': (moment + timedelta(hours=hours_of(hours))).isoformat(), 'state': 'on', 'set_at': now(),
            'set_in': ep['_id'], **({'why': why} if why else {})}
+    if ready:
+        ready()
     save(store, doc, expected=current and current['revision'], stream='switches:' + ep['persona'])
     store.audit(ep['_id'], 'switch.set', {k: v for k, v in doc.items() if k != 'revision'}, ep['scope_key'])
     return doc
 
 
-def clear(store, ep, switch_id):
+def clear(store, ep, switch_id, ready=None):
+    """End a switch early; `ready` as in `set_switch`."""
     row = get(store, str(switch_id or '').strip(), persona=ep['persona'], state='on')
     if not row:
         raise Denied('SWITCH_NOT_FOUND: ' + ('没写是哪个开关' if not switch_id else '「%s」不是开着的开关（可能已经到期了）' % echoed(switch_id)))
+    if ready:
+        ready()
     save(store, {**row, 'state': 'cleared', 'cleared_at': now()}, expected=row['revision'],
          stream='switches:' + ep['persona'])
     store.audit(ep['_id'], 'switch.cleared', {'switch': row['_id'], 'kind': row['kind']}, ep['scope_key'])

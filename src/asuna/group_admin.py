@@ -71,7 +71,7 @@ def _mute_seconds(value):
     return value * MINUTE_SECONDS
 
 
-def queue(store, ep, index, item, key=None):
+def queue(store, ep, index, item, key=None, ready=None):
     """Check one group_action and put it in the outbox; returns the result she reads. Raises Denied.
 
     ``key`` names which action this is (her tool call's id). The queued row's id derives from it, so a
@@ -130,6 +130,8 @@ def queue(store, ep, index, item, key=None):
                     '，给的是「%s」' % echoed(item['duration']) if item.get('duration') is not None else ''))
             mute_minutes = item['duration']
             admin['seconds'] = _mute_seconds(mute_minutes)
+    if ready:
+        ready()
     route = _route(store.config, scene)
     row_id = 'ga-' + sha(canonical([ep['_id'], 'group_action', key if key is not None else index]))[:24]
     made = artifact_records.get(store, row_id)

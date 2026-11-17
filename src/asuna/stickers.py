@@ -270,7 +270,7 @@ def fullness(count):
 
 
 # ── keeping, dropping, renaming ─────────────────────────────────────
-def keep(store, blobs, ep, persona, args, config):
+def keep(store, blobs, ep, persona, args, config, ready=None):
     """Put a sticker on her shelf: an att- ref of a sticker in this conversation, or a blob- id of a picture
     she made herself."""
     from .outbound_media import produced, sniff_media_type
@@ -308,6 +308,8 @@ def keep(store, blobs, ep, persona, args, config):
         else:
             if not entry.get('pullable'):
                 raise Denied('STICKER_NOT_REACHABLE: %s；重试也一样' % (entry.get('not_pullable_because') or '「%s」' % echoed(ref)))
+            if ready:
+                ready()
             data, media_type, _, _ = pull_bytes({**entry, **media_source(store, scene, config, entry)}, config)
             stored = blobs.put_once(data, SCOPE, 'image', source_ids=[SOURCE + entry['source_message_id']])
             doc.update(kind='custom', artifact_id=stored['artifact_id'], sha256=stored['sha256'], size=stored['size'],
@@ -316,6 +318,8 @@ def keep(store, blobs, ep, persona, args, config):
     same = holding(store, doc['identity'], persona=persona, picture=doc.get('picture'))
     if same:
         raise Denied(ALREADY_KEPT % same['name'])
+    if ready:
+        ready()
     doc['_id'] = 'stk-' + sha((persona + '|' + doc['identity']).encode())[:20]
     save(store, doc, stream='stickers:' + persona)
     _kept(store, persona, doc)
@@ -324,16 +328,18 @@ def keep(store, blobs, ep, persona, args, config):
     return {'kept': name, 'shelf': '%d 个，%s' % (count, fullness(count))}
 
 
-def drop(store, persona, name):
+def drop(store, persona, name, ready=None):
     row = find(store, persona, _name(name))
     if not row:
         raise Denied('STICKER_NOT_ON_SHELF: 「%s」' % echoed(name))
+    if ready:
+        ready()
     drop_sticker(store, row['_id'], row['revision'])
     store.audit('stickers:' + persona, 'sticker.dropped', {'name': row['name'], 'identity': row['identity']})
     return {'dropped': row['name']}
 
 
-def rename(store, persona, name, new_name=None, when=None):
+def rename(store, persona, name, new_name=None, when=None, ready=None):
     row = find(store, persona, _name(name))
     if not row:
         raise Denied('STICKER_NOT_ON_SHELF: 「%s」' % echoed(name))
@@ -347,6 +353,8 @@ def rename(store, persona, name, new_name=None, when=None):
         changes['when'] = _when(when)
     if not changes:
         raise Denied('STICKER_NOTHING_TO_CHANGE')
+    if ready:
+        ready()
     save(store, {**row, **changes}, expected=row['revision'], stream='stickers:' + persona)
     _kept(store, persona, {**row, **changes})
     return {'renamed': row['name'], **changes}
@@ -643,7 +651,7 @@ def candidate_ids(context, listed=()):
     return tuple(item['candidate'] for item in items if isinstance(item, dict) and item.get('candidate'))         + tuple(item['ref'] for item in shelf if isinstance(item, dict) and item.get('ref')) + tuple(listed or ())
 
 
-def keep_candidate(store, ep, persona, args):
+def keep_candidate(store, ep, persona, args, ready=None):
     """A candidate from the pool goes on her shelf -- only one she looked at in this turn (read_image)."""
     name, when = _name(args.get('name')), _when(args.get('when'))
     candidate = str(args.get('candidate') or '').strip()
@@ -668,6 +676,8 @@ def keep_candidate(store, ep, persona, args):
         doc.update(artifact_id=row['artifact_id'], sha256=row['sha256'], size=row['size'], media_type=row.get('media_type'),
                    md5=row.get('md5') or _md5_of(store, row['artifact_id']),
                    picture=row.get('picture') or _picture_of(store, row['artifact_id']))
+    if ready:
+        ready()
     save(store, doc, stream='stickers:' + persona)
     _kept(store, persona, doc)
     drop_candidate(store, row['_id'])
@@ -854,7 +864,7 @@ def recognized(store, persona, entries):
     return out
 
 
-def remember(store, ep, persona, args, config):
+def remember(store, ep, persona, args, config, ready=None):
     """She looked at a posted sticker or a candidate this turn and names it, without keeping it."""
     from .vision import attachment_by_ref
     name, when = _name(args.get('name')), _when(args.get('when'))
@@ -883,6 +893,8 @@ def remember(store, ep, persona, args, config):
     if not key:
         raise Denied('STICKER_NO_FINGERPRINT')
     seen = pooled_as(store, key)
+    if ready:
+        ready()
     _know(store, persona, key, name, when, 'looked', picture=(seen or {}).get('picture'))
     drop_pooled(store, key=key)
     return {'remembered': name}

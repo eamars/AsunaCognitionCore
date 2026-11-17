@@ -585,11 +585,14 @@ def history(store, persona, scene_id, name, moment=None):
     return {'items': items, 'searched': '这 %d 天问过「%s」的，新的在前，最多 %d 个' % (READ_DAYS, name, READ_SHOWN)}
 
 
-def close(store, persona, qid, took, moment=None):
-    """She closes a question with what she took from it. Returns (row, words)."""
+def close(store, persona, qid, took, moment=None, ready=None):
+    """She closes a question with what she took from it. Returns (row, words), (None, None) for no such question.
+    `ready`, when given, runs after the checks and before the first write (a caller's checkpoint, ADR-132 D2)."""
     row = get(store, qid, persona=persona)
     if not row:
         return None, None
+    if ready:
+        ready()
     row = refresh(store, row, moment)
     if row.get('state') == 'closed':
         # What she took can change after it closed (an answer that came late, a first take that was wrong): the new

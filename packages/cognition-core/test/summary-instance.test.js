@@ -107,7 +107,7 @@ test('her conversation\'s own engine asks the Host too: the instance\'s level, a
       async *stream(options) {
         sent = options;
         yield { type: 'text-delta', index: 0, text: ['## 对话脉络', '## 未了的话头', '## 答应过的事', '## 更正与分歧',
-          '## 对方此刻', '## 委托中的事'].join('\n- （无）\n') + '\n- （无）' };
+          '## 对方此刻', '## 委托中的事', '## 我这边没说出口的'].join('\n- （无）\n') + '\n- （无）' };
         yield { type: 'finish', reason: { kind: 'stop' } };
       } } };
   const agent = { session: { id: 's', requestHeader: () => ({ config: { provider: 'old', model: 'gone' } }), toolHistory: () => [] },

@@ -26,6 +26,8 @@ SHORT_ID = 12                 # event ids as she reads and quotes them; a unique
 
 SECONDS_PER_HOUR = 3600.0
 COLLECTIONS = ('affect_events', 'affect_amendments', 'affect_proposals')
+# ADR-133 D3: outside home, an unsettled feeling is named by its name and this mark, never by its words (her 0564).
+HELD_MARK = '（还挂着）'
 EVENT_FIELDS = ('kind', 'val', 'arl', 'who', 'ref', 'why', 'cost', 'open', 'half', 'half_arl')
 CORE = {'close_mode': 'from_close', 'require_cost': False, 'allow_untyped': True,
         'max_delta': {'val': 100, 'arl': 100}, 'proposal_ttl_h': 24, 'kind_floor': 0,
@@ -291,13 +293,21 @@ def paragraph(model, state, cls, scope=None):
     scale = model.get('scale') or CORE['scale']
     face = band.get('face') or ('你现在' + (band.get('label') or '') + '。')
     rows = [row for row in state['contributions'] if row.get('why')]
-    shown = [row for row in rows if readable_here(row, cls, scope)][:2]
+    readable = [row for row in rows if readable_here(row, cls, scope)]
+    if cls == visibility.OWNER_PRIVATE:
+        shown = readable[:2]
+    else:
+        # ADR-133 D3: outside home every unsettled feeling readable here is named, by its name only, then the others.
+        held = [row for row in readable if row.get('held')]
+        shown = held + [row for row in readable if not row.get('held')][:max(2 - len(held), 0)]
     causes = []
     for row in shown:
         if cls == visibility.OWNER_PRIVATE:
             # Home names the cause by feeling, strength and age; its words are in the reasons list beside it (once).
             causes.append('%s（%s，%s）' % (kind_label(model, row['kind']), _word(scale['val'], abs(row['val'])),
                                           rough_ago(row['age_h'])))
+        elif row.get('held'):
+            causes.append(kind_label(model, row['kind']) + HELD_MARK)
         else:
             causes.append(row['why'] + ('（这里记的）' if row.get('source_scope') == scope else ''))
     text = face.rstrip('。') + '。'

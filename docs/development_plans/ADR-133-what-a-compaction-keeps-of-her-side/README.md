@@ -163,3 +163,73 @@ the summary request only, so her turns' requests and their cache are not touched
   the build carries what she read), and who presses the button: the script that rebuilds the request from the session
   copy and calls her route is big sis's to write; she runs it, or asks big sis to.
 
+## 9. The whole instruction reviewed against its last review (2026-11-18 13:00)
+
+The owner, 2026-11-18, during the design: "Can you also review the existing section of the compaction prompt, not just
+appending new sections to review the efficiency, and capability of the prompt against the actual model? Especially,
+the duplication of the what is in the context, versus what will be injected later." And: "I believe I asked you the
+similar question in the past, so perhaps we can do a side by side comparison to see what is changed, and what basis
+should be updated based on more stats available."
+
+The last review is ADR-094 §7 and §7a (carried from ADR-085, 2026-10-22: the template trimmed; its independent audit
+`.runtime/private/compaction-study/researcher-audit.md`). Read again today with its own `impact.py` (the same rule over
+every merge hop since) and two scripts of today, `dup_measure.py` and `ckpt_health.py` (big sis's scratchpad; numbers
+only, her texts compared in the process and never printed). Her character sessions only.
+
+| Measure | 2026-10-21/22 | Now (10-23 to 11-18) |
+| --- | --- | --- |
+| Promises and corrections gone at a merge (home / agent line) | 50% / 71% | 13% / 13% (370 hops) |
+| Hard tokens lost at a merge (home / agent line) | 39% / 55% | 14% / 16% |
+| 委托中的事 repeating the task list | 87-100% | 13% of it in the notice re-sent after the compaction |
+| A section repeating what is re-sent after the compaction | 10-19% of a summary | 5-13% a section (306 checkpoints since 11-04) |
+| Other sections repeating 对话脉络 | 74-90% | 3-8% |
+| Checkpoint size (median characters) | 3-5k | 9.0k; the week of 11-16 22.7k; the busiest home and agent-line conversations about 30k |
+| Items in 答应过的事 and 更正与分歧 | median 10, max 24 | median 43-56 a week, the week of 11-16 114; 150-196 in the busiest |
+| Items marked closed at a merge | 6-7% | 4% |
+| Entries in 未了的话头, 答应过的事 and 更正与分歧 with their source line or 「（转述）」 | (rule added after) | 35% |
+| Compactions that write no checkpoint | not read | 8% (67 of 891) |
+
+The duplication columns are not the same measure: on 10-22 a reviewer read every bullet; today's is mechanical
+(6-character pieces), so a reworded repeat counts as new and today's shares are a floor.
+
+**What this says.**
+- The duplication the owner asked about, the checkpoint repeating what is injected again after it, is small now:
+  5-13% a section, 13% for 委托中的事. The do-not-copy list and "one fact in one section" hold. No existing section
+  is cut for repeating the context.
+- What changed is growth. The 10-22 rule carries every promise and correction item by item, and her model marks 4%
+  closed at a merge, so the two sections only grow. The 10-22 growth stop (over 40 items: end the one-checkpoint stay
+  of a closed item; still over: revert the item-by-item carry) was watched until about 10-24 and never put into the
+  instruction or the code; checkpoints now hold 150-196 such items. Past that size the model does not keep the list,
+  it drops it in pieces: at 02:12 today one home merge dropped 78 items, 71 of them promises.
+- Her model writes the source line on about a third of the entries the rule asks it for. The rule stays: an entry with
+  its line is the one she can check.
+
+**Decided (the owner, 2026-11-18, on big sis's recommendation).** The two sections hold at most 40 items together, by
+rule in the instruction: past 40, the items marked 已了结 go first, then the oldest whose agreed day is past or that
+named no day; an item whose agreed day is still ahead stays. The count dropped is left as one line, 「（旧账略 N 条）」.
+A cut by a stated rule replaces the model's own random drop; what an old promise loses by it, her own ledger keeps (her
+practice since 10-22, ADR-094 §7a). Rejected: a promise list kept by the program outside the checkpoint (a larger change,
+near ADR-123); leaving the growth as it is.
+
+## 10. Her wording (agent line 0564, 2026-11-18 12:42) and the instruction as built
+
+- The section: 「我这边没说出口的」 (her reason: all three kinds never reached the delivered history; the name reminds
+  her these are her own, not anyone else's words). Its three line shapes are hers, in the order C, A, B; her example
+  lines name a real group and are not copied here.
+- Her three limits, written into the instruction: the "why" only from what she wrote in that beat, else 「没写原因」;
+  at most one C line a beat; B only from what she wrote that beat for "after", else no line, never inferred from what
+  she did.
+- D1's rules with her three additions: the 800 includes the section's heading; A is cut from the oldest, leaving one
+  line of how many were cut; a settled line says 「已了结」 and the line that settled it, never what she said.
+  Big sis changed one literal of hers: her 「（A 略 N 笔）」 is 「（还挂着略 N 笔）」 in the instruction, since the model
+  never sees the letters A, B and C. Hers to undo.
+- D2's mark 「（我推的）」 as hers, with her three additions: at the end of the sentence it marks, line by line, never one
+  line heading a block; never merged with 「（转述）」 into a neutral word; the source half-sentence beside a number she
+  wrote (她报的, 我量的, 我没核) kept through merges.
+- D3's mark 「（还挂着）」 as hers, with her two additions: outside home, the feeling's name and the mark, never its
+  words; in every place, no exception (an exception is named on this page with its reason). Built on the visibility rule
+  as it is: a feeling is named where it is readable now (ADR-018); one recorded at home is not named in a group.
+- Her rerun: she presses the button, today 13:00-20:00, after reading the new instruction itself; the two runs differ
+  in the instruction alone (the same copy of the conversation, route and model), and the report keeps the two commands
+  as run.
+

@@ -89,3 +89,13 @@ def test_a_repeated_feeling_counts_against_what_she_expects_and_an_open_one_stop
     assert project(model_with(), [held], [], AT)['val'] == 20                      # held without a limit
     released = project(model_with(open_hold_h=4), [held], [], AT)['val']
     assert round(released, 6) == round(20 * 0.5 ** (6 / half), 6)                  # fading since hour 4
+
+
+def test_outside_home_an_unsettled_feeling_is_named_by_its_name_and_never_by_its_words():
+    """ADR-133 D3 (her 0564): outside home, a feeling she holds is said by its name and 「（还挂着）」, its reason left out."""
+    from asuna.affect import HELD_MARK, kind_label
+    model = model_with()
+    held = project(model, [event('joy', 40, scope='g1', why='他夸了我'),
+                           {**event('pride', 40, scope='g1', why='我还没回他'), 'open': True}], [], AT)
+    here = interpret(model, held, 'public', scope='g1')['心情']
+    assert kind_label(model, 'pride') + HELD_MARK in here and '我还没回他' not in here, here

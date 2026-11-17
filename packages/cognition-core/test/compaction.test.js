@@ -220,7 +220,8 @@ test('the summary request names the conversation\'s thinking level, else the con
     await assert.rejects(engine.summarize(input, agent), /lacks sections/);
   }
   assert.ok(hasSections(CHECKPOINT));
-  assert.equal(ROLE_SECTIONS.length, 6);
+  assert.equal(ROLE_SECTIONS.length, 7);
+  assert.equal(ROLE_SECTIONS.at(-1), '## 我这边没说出口的');            // ADR-133 D1: hers, last
 });
 
 // ADR-094: her conversation is compacted at the end of its turn, from the live end, once it is large enough; the

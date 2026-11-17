@@ -109,7 +109,7 @@ def _head(field):
     clause = clause if len(clause) <= HEAD_CHARS else clause[:HEAD_CHARS] + '…'
     values = (field or {}).get('enum')
     if values:
-        clause += '（只能是：%s）' % '、'.join(str(value) for value in values)
+        clause += ('；' if clause else '') + '只能是：%s' % '、'.join(str(value) for value in values)
     return '（%s）' % clause if clause else ''
 
 

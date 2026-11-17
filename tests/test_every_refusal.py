@@ -83,7 +83,7 @@ def test_a_missing_field_is_named_with_think_first(world):
     """The owner's case (2026-11-16): credential without do and with no thought."""
     outcome, said, codes = call(world, turn(world, thought=False), 'credential', {'name': 'x'})
     assert outcome == 'refused' and codes[0] == 'THINK_FIRST' and 'ARGS_MISSING' in codes, said
-    assert said.startswith('这次调用有 2 处要改') and '缺 do（做什么（只能是：keep、drop））' in said, said
+    assert said.startswith('这次调用有 2 处要改') and '缺 do（做什么；只能是：keep、drop）' in said, said
 
 
 def test_a_handlers_own_check_is_named_with_think_first(world, monkeypatch):

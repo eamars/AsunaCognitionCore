@@ -82,6 +82,7 @@ synchronous and cannot ask the worker); they are counted from the session files 
 | F5 | Layer 2 (NOT_NOW, not usable in this turn) stops alone | kept, ADR-108 D4c: the fix is another tool or turn, and argument problems listed beside it lead to a corrected call that is refused again |
 | F6 | A layer-4 problem that needs a field fixed first (a section in a document not yet named) | kept: best effort by nature; it cannot be named before the field it depends on |
 | F7 | The action brain's argument refusals are DSH's English line with no fix | not this ADR: a separate decision for the owner (§7) |
+| F8 | `task`, `ideas` or `ask` with a `do` that cannot be read stops alone (found at the build, §8) | kept, the named exception: each has a read option, so whether a thought is needed is not known; not a regression |
 
 ## 5. Decisions (proposed)
 
@@ -152,8 +153,8 @@ Built on this branch after the signed page (`b392f0390d5c`). Times are local.
   required too (`recall`'s `sections[].doc`, `plan`'s `clock.time`). Her tools as sent: 20,513 -> 20,676 characters
   (+163; §5 computed +155) and 33,800 -> 35,547 bytes (+1,747; computed +1,651). `tests/test_tool_budget.py` is
   raised to 20,676. A missing field's refusal now comes from the worker. It says the field's values when it has a
-  list of them, as the guard's refusal did: 「缺 do（做什么（只能是：keep、drop））」 (added after the staging below;
-  the unit tests hold it).
+  list of them, as the guard's refusal did, in one bracket (her 0551): 「缺 do（做什么；只能是：keep、drop）」 (added after
+  the staging below; the unit tests hold it).
 - **D2, how.** `SPLIT` is gone. Every handler runs with the general problems pending (`RoleTools._handle`).
   - A check that stops before the handler's checkpoint is one problem, named with the pending ones. A missing-field
     code that the strict schema has already named is not named twice.
@@ -165,9 +166,10 @@ Built on this branch after the signed page (`b392f0390d5c`). Times are local.
   - Still after the checkpoint, best effort as F6: the checks inside the scheduler's visit, errand and note send,
     `restart`'s `when`, `group_focus`'s focus change, a sticker found already kept after its bytes are fetched, and
     `read_image`'s and `received_file`'s reads. They stop alone only when nothing else is pending.
-- **F8, found at the build, kept.** An option tool (`task`, `ideas`, `ask`) whose `do` cannot be read stops alone.
-  Each of them has a read option, so whether a thought is needed is not known, and its other checks depend on the
-  option.
+- **F8, found at the build, kept: the named exception.** `task`, `ideas` and `ask`, called with a `do` that cannot be
+  read (missing and not inferable, or not one of its options), are refused for that alone. Each of them has a read
+  option, so whether a thought is needed is not known, and its other checks depend on the option. **Such a refusal
+  standing alone is not a regression** of ADR-108 or of this ADR (her 0551).
 - **D3.** `tests/test_every_refusal.py`:
   - the declared schema walked at every depth;
   - the owner's case;

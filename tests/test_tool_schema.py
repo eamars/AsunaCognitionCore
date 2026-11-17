@@ -33,7 +33,7 @@ def test_the_root_is_open_an_optional_null_is_not_written_and_yes_no_takes_true_
 def test_a_part_is_named_by_its_place_and_its_undeclared_key_is_a_problem():
     found = said('speak', PARTS, {'parts': [{'kind': 'text', 'text': 'a'}, {'kind': 'text', 'text': 3, 'odd': 1}, {'text': 'b'}]})
     assert ('ARGS_TYPE', 'parts 第 2 条的 text 要是一段文字') in found
-    assert ('ARGS_MISSING', '缺 parts 第 3 条的 kind（哪一种（只能是：text、sticker、picture、file、poke、react、recall））') in found
+    assert ('ARGS_MISSING', '缺 parts 第 3 条的 kind（哪一种；只能是：text、sticker、picture、file、poke、react、recall）') in found
     assert any(code == 'ARGS_UNDECLARED' and '第 2 条' in text and 'odd' in text for code, text in found), found
     assert said('speak', PARTS, {'parts': 'not a list'}) == [('ARGS_TYPE', 'parts 要是一个列表')]
     assert [top for _, _, top in tool_schema.violations('speak', PARTS, {'parts': [{'text': 'b'}]})] == ['parts']
@@ -43,7 +43,7 @@ def test_an_old_name_that_still_works_is_read_as_the_new_one_for_the_check():
     # `op` is the old name of `do`, `reason` of `why`, `body` of `content`: taken for a week, so not missing.
     assert said('write_document', WRITE, {'doc': 'd', 'op': 'set_tags', 'reason': 'y'}) == []
     assert said('write_document', WRITE, {'doc': 'd', 'reason': 'y'}) == [
-        ('ARGS_MISSING', '缺 do（操作（只能是：replace_section、append_section、set_tags、adopt_seed、let_go））')]
+        ('ARGS_MISSING', '缺 do（操作；只能是：replace_section、append_section、set_tags、adopt_seed、let_go）')]
 
 
 def test_fields_the_program_fills_in_later_are_not_missing_at_layer_three():

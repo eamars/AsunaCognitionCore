@@ -206,8 +206,9 @@ The duplication columns are not the same measure: on 10-22 a reviewer read every
 
 **Decided (the owner, 2026-11-18, on big sis's recommendation).** The two sections hold at most 40 items together, by
 rule in the instruction: past 40, the items marked 已了结 go first, then the oldest whose agreed day is past or that
-named no day; an item whose agreed day is still ahead stays. The count dropped is left as one line, 「（旧账略 N 条）」.
-A cut by a stated rule replaces the model's own random drop; what an old promise loses by it, her own ledger keeps (her
+named no day; an item whose agreed day is still ahead stays. When only items with an agreed day still ahead are left and they are still over 40, they stay and nothing more is
+cut (her 0566); the readings report the count. The count dropped is left as one line with the merge's time,
+「（旧账略 N 条｜[这次合并的时刻]）」, so she knows where to look. A cut by a stated rule replaces the model's own random drop; what an old promise loses by it, her own ledger keeps (her
 practice since 10-22, ADR-094 §7a). The owner's reasons, his words (2026-11-18): "she will keep important stuff
 elsewhere, so if the promises are lost in the context then that's not important. And human will forget, this is not
 her fault and she don't need to carry all burdens." Rejected: a promise list kept by the program outside the checkpoint (a larger change,
@@ -223,8 +224,9 @@ near ADR-123); leaving the growth as it is.
   she did.
 - D1's rules with her three additions: the 800 includes the section's heading; A is cut from the oldest, leaving one
   line of how many were cut; a settled line says 「已了结」 and the line that settled it, never what she said.
-  Big sis changed one literal of hers: her 「（A 略 N 笔）」 is 「（还挂着略 N 笔）」 in the instruction, since the model
-  never sees the letters A, B and C. Hers to undo.
+  Big sis changed one literal of hers, 「（A 略 N 笔）」, since the model never sees the letters A, B and C; her 0566 then
+  named the line 「挂着没说｜」 and its count 「（挂着没说略 N 笔）」, so 「（还挂着）」 is D3's mark alone and one word means one
+  thing.
 - D2's mark 「（我推的）」 as hers, with her three additions: at the end of the sentence it marks, line by line, never one
   line heading a block; never merged with 「（转述）」 into a neutral word; the source half-sentence beside a number she
   wrote (她报的, 我量的, 我没核) kept through merges.
@@ -239,4 +241,9 @@ near ADR-123); leaving the growth as it is.
   structure (turns ended by `end_turn`, `speak` results), the five home compactions of 2026-11-18 00:00-09:10:
   00:45 1 silent turn of 18; 02:12 12 of 19; 02:48 1 of 21; 04:10 4 of 23; 08:58 9 of 11; no turn whose `speak` was
   refused in any of them, so 「没说成」 is shown on the stub (§7.2) and not by the rerun.
+- Her 0566 on the rerun: no copy of her profile (the script writes nothing to it, which she accepts as lighter); every
+  file the rerun writes says on its first line that it is a rerun product and not the checkpoint that ran, with its
+  instruction and the compaction it reran (the copy of the original says it is a copy). **Everything in
+  `.runtime/private/compaction-rerun-133/` is a rerun product of this ADR, never her history.** Big sis presses the
+  button, telling her first.
 

@@ -1,5 +1,6 @@
 """Her tools' declared schemas (tool_schema.declared) as DSH takes them: every spec the worker ships registers with DSH's own
-`defineTool`, and a call in each shape the program repairs passes DSH's `validateArgs` while one it cannot read is refused.
+`defineTool`, and a call in each shape the program repairs, or with a field missing (ADR-132 D1: the worker names it with the
+rest), passes DSH's `validateArgs`, while a value of the wrong type is refused.
 tool-args.test.js holds the same shapes on hand-written specs; this holds that the specs the worker really ships are the ones
 those shapes were written for."""
 import json
@@ -14,20 +15,21 @@ from asuna import role_tools
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = Path(__file__).with_name('declared_specs.mjs')
 
-# (tool, arguments, does DSH accept it): the shapes of design.md §4. `why` is a field the program cannot fill in.
+# (tool, arguments, does DSH accept it): the shapes of design.md §4. `why` is a field the program cannot fill in; missing, it
+# passes DSH and is named by the worker (ADR-132 D1).
 CALLS = [
     ('speak', {'parts': [{'kind': 'text', 'text': '好'}]}, True),
     ('speak', {'parts': '[{"text": "好"}]'}, True),
     ('speak', {'parts': [{'text': '好', 'quote': '〔3〕'}], 'wait': 'no'}, True),
-    ('speak', {}, False),
+    ('speak', {}, True),
     ('write_document', {'section': 'x', 'content': 'y', 'why': 'z'}, True),
     ('write_document', {'heading': 'x', 'content': 'y', 'why': 'z', 'from': '别人说的', 'line': '〔3〕'}, True),
     ('write_document', {'doc': 'persona', 'do': 'append_section', 'heading': 'x', 'content': 'y', 'why': 'z',
                         'from': '一个没有列出的来源'}, True),
-    ('write_document', {'section': 'x', 'content': 'y'}, False),
+    ('write_document', {'section': 'x', 'content': 'y'}, True),
     ('delegate', {'brief': '先看这个。再做那个。'}, True),
     ('think', {'thought': '想法'}, True),
-    ('think', {}, False),
+    ('think', {}, True),
     ('think', {'thought': 5}, False),
 ]
 

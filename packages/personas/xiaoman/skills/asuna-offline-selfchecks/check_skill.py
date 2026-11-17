@@ -17,8 +17,16 @@
 5. 补遗的钉：「判据补遗」一节里各条各一个 pin_* 检查，只认本节范围内的字面。
 6. 内容级私密词扫描（同日补）：leak_scan_ran／no_listed_words／no_listed_words_outside_envoy 三格。
    名单配不上或 0 条＝红 leak_scan_ran（没真查，不是干净）；本技能目录里的文件零命中；
-   找得到包根时再扫整个包根，命中只许落在 integration/envoy_meters_read.py（既有基线：名单 125 条、
-   12 处，漂了只打 NOTE，不变红）。命中只报 文件:行号:类别，绝不回显词本身。
+   找得到包根时再扫整个包根，命中只许落在 integration/envoy_meters_read.py（既有基线：命中 12 处，
+   全在那个文件里；漂了只打 NOTE，不变红）。命中只报 文件:行号:类别，绝不回显词本身。
+   名单条目数 11-17 起不再钉基线：这个数随我加词长大，钉死一个会长大的数＝每加一个词白响一次。现在
+   每次现读＋按类别打印（好和 private_words summary 一眼对照），差值只在带 --expect-entries 时算，
+   且只报差、不算失败；对不上的处置写在 SKILL.md「判据补遗」(d)。
+7. 第 5 件事（SKILL.md 头拿真 YAML 解析，在 pre_publish_scan.py）的自检针 11-17 补：import 同目录那份，
+   喂一发坏头（description 值里带 ASCII「冒号＋空格」）进它的 check_skill_head，断言红；再喂一发好头，
+   断言绿；再用它真读本技能 SKILL.md，断言绿。三发的结果都印进输出；关口加载不了、或这台机没有可用的
+   YAML 库，一律红（没真查不许长得像过了）。谁把那段删了或换成宽容正则，红在这里，
+   不会只剩「行动侧清单少一本」那种静默。
 
 不联网、不跑离线套件、不写 Mongo、不发 QQ。
 
@@ -30,8 +38,13 @@
 用法：
     python3 check_skill.py [SKILL.md 路径]        # 默认取脚本旁边的 SKILL.md
     python3 skills/asuna-offline-selfchecks/check_skill.py   # 候选根目录
+    python3 skills/asuna-offline-selfchecks/check_skill.py --expect-entries <上一份报告的名单条数>
+        # 给了才算名单条数差值（只报差、不算失败；这个数会随加词长大）
 退出码 0 = 全绿；非 0 时最后一行写「N/M 通过，失败：<检查名>」。
 """
+import argparse
+import importlib.util
+import io
 import os
 import re
 import sys
@@ -102,7 +115,8 @@ BACKLOG_PINS = [
     ("pin_b_corroboration", ["必须带旁证", "不拿最新一版当现场"]),
     ("pin_c_module_file", ["`模块.__file__`", "主干那份 blob"]),
     ("pin_d_content_scan_documented", ["内容级私密词扫描",
-                                       "名单 125 条、命中 12 处全在 `integration/envoy_meters_read.py`"]),
+                                       "命中 12 处全在 `integration/envoy_meters_read.py`",
+                                       "名单条目数不是基线", "不要开查道链"]),
     ("pin_f_which_zero", ["报 0 之前先说它是哪种 0", "必须显式给 `fields` 或先枚举键路径"]),
     ("pin_g_receipt_or_no_number", ["指不到就写「我没读到号」", "在跑，号等回执"]),
     ("pin_h_table_beats_prose", ["以表格为准，并追问同一格"]),
@@ -121,10 +135,18 @@ BACKLOG_PINS = [
 TEMP_MENTION = re.compile(r"临时目录|TEMP|TMPDIR|\bTMP\b")
 TEMP_LANDING_RULE = "跨命令要留的东西一律写 `/task`"
 
-# 内容级私密词扫描的既有基线（2026-10-24 发布前扫整棵候选根的读数；名单条目数 2026-11-02 现量更新 69→90，主人当日判过；11-03 20:35 发布趟现量再更 90→103、命中 11→12（名单增长是我 11-03 自判、已向金主报备）：漂了只打 NOTE，不变红。
+# 内容级私密词扫描的既有基线（2026-10-24 发布前扫整棵候选根的读数；命中 11→12 处，全在 envoy 那个文件）：
+# 漂了只打 NOTE，不变红。命中只许在那一个文件里、本次改动零新增——这两条才是基线。
+#
+# 名单条目数从 11-17 起不再钉在这里。钉死一个会长大的数（它随我加词／删词长大：69→90→103→106→125→130→129，
+# 逐次读数与来路在 SKILL.md「判据补遗」(d)）等于每加一个词白响一次；响多了这条就成了噪音，等名单真被人改了
+# 也没人看它。现在每次现读、按类别打印（好和 `private_words summary` 一眼对照），差值只在调用方带
+# --expect-entries N（N 抄上一份报告那一行，与 pre_publish_scan.py 同一口径）时才算，且只报差、不算失败。
+# 数对不上时的处置也印在输出里：先跑一次 private_words summary 对一次，对得上就只更数，不要开查道链。
 ENVOY_FILE = "integration/envoy_meters_read.py"
-BASELINE_LIST_ENTRIES = 125
 BASELINE_ENVOY_HITS = 12
+# 名单认的类别（与 private_words 工具的 summary、pre_publish_scan.py 的 CATEGORIES 同一套）。
+CATEGORIES = {"person", "group", "account", "site", "host", "email", "other"}
 
 # 11-04：发布前一条命令（pre_publish_scan.py）并进「发布前自检（私密词扫描）」一节。一条判据名底下挂几个关键串，缺哪个写进 detail。
 PREPUB_SCRIPT_RULES = [
@@ -135,6 +157,8 @@ PREPUB_SCRIPT_RULES = [
     ("prepub_script_unjudged_said", "②没判"),
     ("prepub_script_exit_codes", "2 = 没法判"),
     ("prepub_script_self_compare", "--candidate <ACTIVE 的 packageRoot>"),
+    ("prepub_fifth_thing_probe", "第⑤件事有自己的自检针"),
+    ("prepub_entries_count_grows", "这个数会随我加词长大"),
 ]
 
 SECTIONS = [
@@ -348,8 +372,120 @@ def core_skill_body():
                     return read_frontmatter(text)[1], cand
     return None, None
 
+# ── 第 5 件事（SKILL.md 头拿真 YAML 解析）的自检针 ─────────────────────────────────────────
+# 为什么要有这一族：那一段护的是「我这侧发布探针是宽容正则、一路绿，装载侧真 YAML 解析、一路空」
+# 那一格（11-17 查明，两本技能就是这么从行动侧清单里静默消失的）。可它自己没人守——谁把 yaml.safe_load
+# 换成宽容正则、或整段删掉，自检照绿，关口裸着。反证口径（实测过）：把第 5 件事那段换成宽容正则，
+# 红的就是 skill_head_probe_bad_head_red 这一格，别的不连带。
+PREPUB_SCRIPT = "pre_publish_scan.py"
+PROBE_BAD = ("---\nname: probe-head-bad\n"
+             "description: 直路是 generate_image，标 source_image: required 的路线才走它\n"
+             "---\n正文一行（上一行那个值里带 ASCII 冒号＋空格）\n")
+PROBE_GOOD = ("---\nname: probe-head-good\n"
+              "description: 直路是 generate_image，标 source_image=required 的路线才走它\n"
+              "---\n正文一行（同一个值改成＝号）\n")
+
+
+def load_pre_publish_scan():
+    """按文件路径 import 同目录的 pre_publish_scan.py，只为拿它的 check_skill_head。
+    那份脚本只在 __main__ 里跑 main()，import 不带副作用（模块级只固定 stdout／stderr 编码）。
+    返回 (模块, 问题)；拿不到就是 (None, 说明)，调用方记红——不许 NOTE 一行算过。"""
+    script = os.path.join(HERE, PREPUB_SCRIPT)
+    if not os.path.isfile(script):
+        return None, "同目录没有 %s（第 5 件事整个不在了）" % PREPUB_SCRIPT
+    try:
+        spec = importlib.util.spec_from_file_location("_probe_pre_publish_scan", script)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except Exception as exc:  # noqa: BLE001 加载失败要原样报出来
+        return None, "%s import 不了：%s: %s" % (PREPUB_SCRIPT, type(exc).__name__, exc)
+    if not callable(getattr(module, "check_skill_head", None)):
+        return None, "%s 里没有可调的 check_skill_head（被删或改名）" % PREPUB_SCRIPT
+    return module, ""
+
+
+def skill_head_probe(skill_md):
+    """三发：坏头必须红、好头必须绿、本技能 SKILL.md 真读一遍必须绿。
+    返回 (要印的行, [(检查名, 过不过, 说明)])；两发样本无论绿不绿都印进输出。
+    样本走内存喂：把那份模块里的 open 换成 BytesIO，用完还原。为什么不落临时文件：开发沙箱只让写
+    候选目录（实测 TEMP 里 open 报 PermissionError: [Errno 13]），冻结快照那一份还可能只读——
+    为样本要临时目录会红在环境上，不像关口红。真读文件那一格由本技能 SKILL.md 这一发覆盖（走真的 open）。
+    临时目录只活一条命令，跨命令要留的东西一律写 `/task`（或候选里）——这里同一条命令内写读，不需要留。"""
+    module, problem = load_pre_publish_scan()
+    results = [("skill_head_gate_importable", module is not None, problem)]
+    lines = ["PROBE 第 5 件事的尺子：%s%s"
+             % (getattr(module, "__file__", "没加载成"), "" if not problem else " — " + problem)]
+    if module is None:
+        for name in ("skill_head_probe_bad_head_red", "skill_head_probe_good_head_green",
+                     "skill_head_self_head_loads"):
+            results.append((name, False, "关口加载不了——这一格没真查，不许长得像「过了」"))
+        lines.append("PROBE 坏头：没跑；好头：没跑（关口加载不了）")
+        return lines, results
+    yaml_lib = getattr(module, "yaml", None)
+    if yaml_lib is None:
+        lines.append("PROBE YAML 库：没有可用的（%s）——不退化成正则"
+                     % getattr(module, "YAML_IMPORT_ERROR", "读不到原因"))
+        for name in ("skill_head_probe_bad_head_red", "skill_head_probe_good_head_green",
+                     "skill_head_self_head_loads"):
+            results.append((name, False, "这台机没有可用的 YAML 库——没真查，不许长得像「过了」"))
+        lines.append("PROBE 坏头：没真查；好头：没真查（没有 YAML 库）")
+        return lines, results
+    lines.append("PROBE YAML 库：PyYAML %s（%s）"
+                 % (getattr(yaml_lib, "__version__", "?"), getattr(yaml_lib, "__file__", "?")))
+    feeds = (("坏头", "mem://probe-bad.SKILL.md", PROBE_BAD, True, "skill_head_probe_bad_head_red"),
+             ("好头", "mem://probe-good.SKILL.md", PROBE_GOOD, False, "skill_head_probe_good_head_green"))
+    streams = {key: io.BytesIO(text.encode("utf-8")) for _label, key, text, _want, _name in feeds}
+    saved = getattr(module, "open", None)
+    module.open = lambda target, mode="rb": streams[target]      # noqa: ARG005 只用 'rb'
+    printed = []
+    try:
+        for label, key, _text, want_red, name in feeds:
+            streams[key].seek(0)
+            try:
+                problems = module.check_skill_head(key)
+            except Exception as exc:  # noqa: BLE001 探针自己抛错也要报出来
+                results.append((name, False, "check_skill_head 抛异常：%s: %s" % (type(exc).__name__, exc)))
+                printed.append("PROBE %s：check_skill_head 抛异常 %s" % (label, type(exc).__name__))
+                continue
+            red = bool(problems)
+            shape = "description 值里带 ASCII 冒号＋空格" if want_red else "同一个值改成＝号"
+            if red == want_red:
+                results.append((name, True, ""))
+            elif want_red:
+                results.append((name, False, "坏头却是绿（装载侧收得下）——真 YAML 解析那一格可能被换成宽容正则或被删了"))
+            else:
+                results.append((name, False, "好头却红了：%s" % "｜".join(problems)[:200]))
+            printed.append("PROBE %s（%s）：%s%s" % (
+                label, shape, "红（装载侧收不下）" if red else "绿（0 条问题）",
+                "" if red == want_red else " ← 与期望不符"))
+            if red and want_red:
+                printed.append("PROBE %s 逮住的第一条：%s" % (label, problems[0][:220]))
+    finally:
+        if saved is None:
+            del module.open
+        else:
+            module.open = saved
+    try:
+        problems = module.check_skill_head(os.path.abspath(skill_md))
+        printed.append("PROBE 本技能 SKILL.md（真读文件那一格）：%s"
+                       % ("绿（0 条问题）" if not problems else "红（装载侧收不下）"))
+        results.append(("skill_head_self_head_loads", not problems,
+                        "本技能 SKILL.md 的头装载侧收不下：%s" % "｜".join(problems)[:200]))
+    except Exception as exc:  # noqa: BLE001
+        printed.append("PROBE 本技能 SKILL.md：check_skill_head 抛异常 %s" % type(exc).__name__)
+        results.append(("skill_head_self_head_loads", False,
+                        "check_skill_head 抛异常：%s: %s" % (type(exc).__name__, exc)))
+    lines.extend(printed)          # 三发的结果不管绿不绿都要出现在输出里（交代点名的那一格）
+    return lines, results
+
+
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
+    parser = argparse.ArgumentParser(description="asuna-offline-selfchecks 的零依赖离线自检（只读）")
+    parser.add_argument("skill_md", nargs="?", help="SKILL.md 路径（默认取脚本旁边那份）")
+    parser.add_argument("--expect-entries", type=int,
+                        help="上一份报告里的私密名单条数；给了才算差值（只报差，不算失败）")
+    args = parser.parse_args()
+    path = args.skill_md or os.path.join(HERE, "SKILL.md")
     results = []
     notes = []
 
@@ -462,10 +598,30 @@ def main():
             for lineno, category in scan_text(compiled, text_of):
                 own_hits.append("%s:%d:%s" % (os.path.basename(target), lineno, category))
         check("no_listed_words", not own_hits, "、".join(own_hits))
-        leak_note = "，泄露检查扫过（名单 %d 条，命中只报类别与行号）" % len(entries)
-        if len(entries) != BASELINE_LIST_ENTRIES:
-            notes.append("NOTE 名单条目数 %d，与基线 %d 对不上——按私密词那一节的三岔第②条：停下来报主人"
-                         % (len(entries), BASELINE_LIST_ENTRIES))
+        # 名单条目数：现读值，不当失败也不钉基线（这个数随我加词长大）。分档数一并打出来，
+        # 好与 `private_words summary` 一眼对照；差值只在带 --expect-entries 时算。
+        by_cat = {}
+        for _number, category, _word in entries:
+            by_cat[category] = by_cat.get(category, 0) + 1
+        breakdown = "／".join("%s %d" % (cat, by_cat[cat]) for cat in sorted(by_cat))
+        leak_note = "，泄露检查扫过（名单现读 %d 条：%s；命中只报类别与行号）" % (len(entries), breakdown)
+        odd_cats = sorted({category for _number, category, _word in entries if category not in CATEGORIES})
+        check("private_list_categories_known", not odd_cats,
+              "名单里有认不出的类别 %s（工具与 pre_publish_scan 只认 %s）——三把尺会数出不同的条目数：%s"
+              % ("、".join(odd_cats), "／".join(sorted(CATEGORIES)),
+                 "、".join("第%d行 %s" % (number, category)
+                           for number, category, _word in entries if category not in CATEGORIES)))
+        remedy = "处置：先跑一次 private_words summary 对一次——脚本数到＝工具数到就是我在加词，更掉那个数即可，" \
+                 "不要开查道链；只有两边数对不上、或命中位置冒出 %s 以外，才当名单被人改了来查。" % ENVOY_FILE
+        if args.expect_entries is None:
+            notes.append("NOTE 名单现读 %d 条（%s）。这一格不算失败：这个数会随我加词长大。要差值就带 "
+                         "--expect-entries <上一份报告的数> 再跑。" % (len(entries), breakdown))
+        elif args.expect_entries != len(entries):
+            notes.append("NOTE 名单现读 %d 条，与 --expect-entries %d 差 %+d（只报差、不算失败：这个数会随我加词长大）。%s"
+                         % (len(entries), args.expect_entries, len(entries) - args.expect_entries, remedy))
+        else:
+            notes.append("NOTE 名单现读 %d 条（%s），与 --expect-entries 一致——一致也不等于该把它钉成基线。"
+                         % (len(entries), breakdown))
         pkg_root = package_root()
         if pkg_root:
             outside = []
@@ -511,6 +667,10 @@ def main():
         except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
             check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
 
+    # 第 5 件事的自检针（坏头必须红、好头必须绿、本技能自己的头必须绿）
+    probe_lines, probe_results = skill_head_probe(path)
+    results.extend(probe_results)
+
     stray = [d for d in os.listdir(HERE) if d == "__pycache__"]
     if stray:
         notes.append("NOTE 技能目录里有 __pycache__（compileall 留下的），发布前清掉："
@@ -521,6 +681,8 @@ def main():
     for name, ok, detail in results:
         if not ok and detail:
             print("FAIL %s  <- %s" % (name, detail))
+    for line in probe_lines:                 # 第 5 件事的三发：不管绿不绿都要出现在输出里
+        print(line)
     for line in notes:
         print(line)
     if failed:

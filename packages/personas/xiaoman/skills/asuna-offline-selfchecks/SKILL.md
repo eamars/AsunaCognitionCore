@@ -107,6 +107,10 @@ python3 skills/asuna-offline-selfchecks/pre_publish_scan.py --expect skills/<这
 
 第⑤件事护的是「两侧尺子不同」（11-17 查明）：装载侧 DSH 用真 YAML 解析器读头，`description` 是 plain scalar，值里出现 ASCII「冒号＋空格」就抛 `YAMLParseError`（Nested mappings are not allowed in compact mappings），`parseSkillFile` 返回 undefined、`discoverRoot` 只 warn 一行就 `continue`；我这侧 `src/asuna/skills.py` 的 `header()` 是宽容正则，整行当值收下，所以发布探针照报 `Skill headers valid.`——我一路绿、行动侧一路空。两道静默都要逮：① 解析抛错（尺子必须是真解析器，不许拿宽容正则替它）；② 值里「空格＋#」被 YAML 当注释、后半截丢掉——这种**解析器不抛错**，所以那一格只能拿原文与解析结果成对判（只对 plain scalar 判，引号／块标量／流式放过）。口径三条：这一格不看 `--expect`（一本装载不上的技能不该因为「这次没改它」就跟着发出去）；`--skill-heads <根>`（可重复）只跑这一格，用来现扫 ACTIVE 那几根——技能散在人格包／core／通道包三个 `skills/` 下，份数现读，11-17 实测三根 19 份、全绿；`name` 与 `description` 也照装载侧的硬要求判（非空字符串、`name` 合 `SKILL_NAME`、废弃与非布尔的 invocation 字段），它们红了同样是整本消失。**未核实**：两侧解析器不是同一枚（装载侧 npm `yaml`、我这侧 PyYAML），我只在「冒号＋空格抛错」「空格＋# 截断」两种形状上对拍过，别的 YAML 怪形状谁更严没测。
 
+**第⑤件事有自己的自检针**（11-17 补，之前它裸着）：本目录 `check_skill.py` 里 `skill_head_probe_*` 三发——import 同目录那份 `pre_publish_scan.py`，喂一发**坏头**（`description` 值里带 ASCII「冒号＋空格」）进它的 `check_skill_head`，断言**红**；再喂一发**好头**（同一个值改成＝号）断言绿；再用它真读一遍本技能自己的 `SKILL.md`，断言绿。三发的结果都印进输出（`PROBE` 开头，含尺子的 `__file__` 与 YAML 库版本），关口加载不了、或这台机没有可用的 YAML 库，一律红——「没真查」不许长得像「过了」。反证口径：把第⑤件事那段换成宽容正则或整段删掉，红的是 `skill_head_probe_bad_head_red` 这一族（实测过），不是只剩「行动侧清单少一本」那种静默。
+
+**名单条目数那一格**（11-17 改）：`check_skill.py` 不再钉死它——**这个数会随我加词长大**，钉死一个会长大的数等于每加一个词白响一次；响多了这条就成噪音，等它真响（名单被人改了）也没人看。现在每次现读、按类别打印（好和 `private_words summary` 一眼对照），差值只在带 `--expect-entries N`（N 抄上一份报告那一行，和上面第③件事同一口径）时才算，**只报差、不算失败**。`--expect-entries` 的处置写死在下面「三岔」第②条那句里。
+
 下面是它第③件事对着的判据原文和手工跑法。
 
 跑法：`asuna.private_words` 读本机名单（`<data>/private/personal-words.txt`），逐行 `find()` 扫整棵候选根，命中只报**文件＋行号＋类别＋名单行号**，绝不回显词本身；报告里照抄两行——一行命中数（`TOTAL HITS: N`），一行名单条目数。
@@ -115,6 +119,8 @@ python3 skills/asuna-offline-selfchecks/pre_publish_scan.py --expect skills/<这
 
 - **通过、直接发**：命中**全部**落在 `integration/envoy_meters_read.py`（光伏表计读数脚本，命中的词都是 `site`／`host` 类）**并且**本次改动零新增命中——改动前后各扫一次，命中数与命中文件两处都对得上。发；报告带那一行命中数。
 - **停下来报主人**，撞到下面任一：① 命中冒出 `integration/envoy_meters_read.py` 以外的文件；② 名单条目数跟上一份报告对不上；③ `integration/envoy_meters_read.py` 本身在这次改动里被改。
+
+②这一条 11-17 把处置写死（它响的频次＝我加词的频次，不写处置就会被读成噪音）：对不上先跑一次 `private_words summary` 对一次——脚本数到＝工具数到，就是我在加词，**只更那个数（报告那一行与 `--expect-entries`／基线），不要开查道链**；只有两边数对不上、或命中位置冒出 envoy 以外，才当「名单被人改了」来查。停仍然要停（这是一步确认，不是一场调查）。
 - **这一格允许我自己走**：那脚本每加一个设备号就多一处命中，命中数天然会漂——次次停会把「停」练成橡皮章，停下来得挑得出新东西才算。所以基线只有两条：命中只许在那一个文件里、本次改动零新增；基线以外的动静才停。
 
 两条写法分寸：
@@ -148,9 +154,10 @@ python3 skills/asuna-offline-selfchecks/pre_publish_scan.py --expect skills/<这
 
 发布闸只管本次改动的文件：`publicationFindings` 会对本次改动的文件跑检出里的 `publication_scan.py`，回执里有 `content_check`／`content_scan`，检出里没有那份脚本就跳过并在回执里写 skipped。没改的文件、整个包根的基线、没有检出的环境它都不管，这份自检补的是这几块。这份有三格：`leak_scan_ran`（名单配不上或 0 条就红，不许「没跑」长得像「过了」）、`no_listed_words`（本技能目录里的文件，零命中）、`no_listed_words_outside_envoy`（找得到包根时扫整个包根，命中只许在 `integration/envoy_meters_read.py`；找不到包根就打一行 NOTE，没真扫）。
 
-基线：名单 125 条、命中 12 处全在 `integration/envoy_meters_read.py`（host×1、site×11）——那 12 处是既有基线，不算新增。69 是 10-24 发布前的读数，11-02 现量 90 条（本机名单自己长出来的，主人判过不是串词），11-12 现量 125 条、命中仍 12 处（候选与 ACTIVE 逐文件一致、本次零新增）；11-05 实量 106 条；11-03 20:35 发布趟现量 103 条、12 处（那次候选与 ACTIVE 逐文件一致、本次零新增；名单增长是我 11-03 自判、已向金主报备）：名单条目数一长，正文这一格和脚本里的基线一起更。命中数与名单条目数会漂，漂了脚本只打 NOTE、按上面的三岔判，不靠它变红。缺口：脚本只在读得到本机名单的地方真扫（名单在 `.runtime/private/`，不进包）；换到读不到名单的机器上，会红在 `leak_scan_ran`，那是「没真查」，不是「干净」。
+基线（钉的是命中位置，不是条目数）：命中 12 处全在 `integration/envoy_meters_read.py`（host×1、site×11）——那 12 处是既有基线，不算新增。**名单条目数不是基线**：这个数随我加词长大，钉死它等于每加一个词白响一次，响多了我就不看这条，真出事前它已经是噪音了。11-17 起 `check_skill.py` 里那个 `BASELINE_LIST_ENTRIES = 125` 常量删掉：改成每次现读＋按类别打印（差值只在带 `--expect-entries N` 时算，只报差、不算失败，口径同上「三岔」第②条），并加一格 `private_list_categories_known`（名单里出现工具与 `pre_publish_scan.py` 不认的类别就红——那条目会被脚本数进去、被那两把尺数在外，三把尺悄悄数出两个数）。对不上的处置照第②条那句：先和 `private_words summary` 对一次，对得上就只更数，**不要开查道链**。
+条目数读数史（每次现读、都带来源）：69 是 10-24 发布前，11-02 现量 90 条（本机名单自己长出来的，主人判过不是串词），11-03 20:35 发布趟 103 条（增长是我自判、已向金主报备），11-05 实量 106 条，11-12 现量 125 条，11-16 那次发布回执自述现量 130 条，11-17 现量 129 条（`private_words summary`：entries 129，person 59／host 30／group 17／account 10／other 5／email 3／site 5，文件非空 131 行含 2 行注释；`check_skill.py` 现读同一份文件也是 129 条、命中仍 12 处）。命中数会漂，漂了脚本只打 NOTE、按上面的三岔判，不靠它变红。缺口：脚本只在读得到本机名单的地方真扫（名单在 `.runtime/private/`，不进包）；换到读不到名单的机器上，会红在 `leak_scan_ran`，那是「没真查」，不是「干净」。
 
-钉：`pin_d_content_scan_documented`（这一格验的是本节写了这件事；扫描本身是上面三格在跑）。
+钉：`pin_d_content_scan_documented`（这一格验的是本节写了这件事；扫描本身是上面三格在跑）。11-17 起钉四处字面：「内容级私密词扫描」「命中 12 处全在 `integration/envoy_meters_read.py`」「名单条目数不是基线」「不要开查道链」——把条目数又当基线写回来，或把那条处置删掉，钉就红。
 
 ### (f) 一个「0」先问它是哪一种 0
 

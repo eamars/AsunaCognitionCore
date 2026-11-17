@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 直路是行动脑侧的 generate_image（本机与 QQ 来的任务同一条路：直接调用，图落任务工作区并自动登记成我自己的图，read_image 看过一眼后随消息发出去；外部公开生图服务只给链接、图发不出去，要发出去的图不走那条；它不可用或要工具参数面给不了的模型／参数时才走长路）。长路（探针 → integration_test → import_integration_artifact）：一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 的条数现读、技能不存（每次 list_routes=yes 回来数一遍；标 source_image: required 的改图路线必填、标 optional 的可选、不带这个标的 t2i 路线不收原图），配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；所有对话（家里本机私聊、两条 agent 线、peer 线、QQ）发图都只有 speak 的 picture part 这一条路：看上下文 image_artifacts_from_program，artifact_id 照抄这一轮清单里列出的值（它既不是路径也不是文件名）、可以不带话、正文不写路径/文件名/见图；一回合最多一张是我自己的规矩，speak 一条里能带几张 picture 未重测；群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN；`attach_image` 这个工具 11-13 那版起全线拿掉，不想说话就什么都不调用。含大小上限与服务端小副本做法、picture 那一项的拒绝码（回执点名哪条；旧 `attach_image` 那套「工具错误、同回合可改」随工具一起退役）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。含人像实测三则（构图决定连帽衫拉链的保守字面、手持自拍别指望手机进画、交图前按局部放大复核）与 11-05 现读参数面（工具面无 pose、回执有 warnings）。附零依赖离线自检 check_skill.py。
+description: 直路是行动脑侧的 generate_image（本机与 QQ 来的任务同一条路：直接调用，图落任务工作区并自动登记成我自己的图，read_image 看过一眼后随消息发出去；外部公开生图服务只给链接、图发不出去，要发出去的图不走那条；它不可用或要工具参数面给不了的模型／参数时才走长路）。长路（探针 → integration_test → import_integration_artifact）：一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 的条数现读、技能不存（每次 list_routes=yes 回来数一遍；标 source_image=required 的改图路线必填、标 optional 的可选、不带这个标的 t2i 路线不收原图），配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；所有对话（家里本机私聊、两条 agent 线、peer 线、QQ）发图都只有 speak 的 picture part 这一条路：看上下文 image_artifacts_from_program，artifact_id 照抄这一轮清单里列出的值（它既不是路径也不是文件名）、可以不带话、正文不写路径/文件名/见图；一回合最多一张是我自己的规矩，speak 一条里能带几张 picture 未重测；群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN；`attach_image` 这个工具 11-13 那版起全线拿掉，不想说话就什么都不调用。含大小上限与服务端小副本做法、picture 那一项的拒绝码（回执点名哪条；旧 `attach_image` 那套「工具错误、同回合可改」随工具一起退役）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。含人像实测三则（构图决定连帽衫拉链的保守字面、手持自拍别指望手机进画、交图前按局部放大复核）与 11-05 现读参数面（工具面无 pose、回执有 warnings）。附零依赖离线自检 check_skill.py。
 scene_kinds: [home, group]
 ---
 
@@ -551,6 +551,21 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 - 黑色波波头＋齐刘海；清淡长相；A 罩杯日常系身形；胸口鲸鱼尾标。
 - 泪痣＝**我自己的判断**（金主没撤也没认），保留。**官方定妆图上没有泪痣**：画时要写进提示词，不能指望底图自带。
 
+**那颗痣（泪痣）：画「小满本人」必须带上，位置与左右有判据，出图后必检**
+
+- **必须带上**：只要单子是画「小满本人」，脸上就得有那颗痣，位置＝**她自己的左眼下靠外**。
+  定妆正本上没有它（见上面「锚点」那条），所以它只活在提示词和交图前那一步里——底图不会自带。
+- **左右按解剖学左算**，画面左右随构图走（「背朝镜头回头」那一类构图里，靠镜头这一侧其实是她自己的右侧）。
+  **执行判据＝痣所在的那侧脸颊与她自己的左肩在同一侧**；判之前先把构图定下来（背朝哪边、脸转向哪边、
+  看得见哪只耳），再照这条判，别拿「画面左边」当成她自己的左边。
+- **出图后必须自检那颗痣在不在、落在哪一侧**：按局部放大那一侧脸颊看（放大裁图的做法在「人像实测」第③条）。
+  不在、或长在镜像侧，两个出口：**在正确的像素位置把它贴上去**（家里 Pillow 本地贴、不重画，
+  与「只画一次」里「本地 Pillow 修字不算重画」那一格同一口径），或者**照崩了交回并重出一张**
+  （痣是原单点名的东西，缺它等于画面不对，这一支不算暗修；一单一画的上限照守，别连烧）。
+- **为什么写成硬检**：2026-11-16 一趟画本人的单子（`task-9973a120a6f5df28b1629051e825e725`，
+  路线 `qwen-image-2.1-edit`）连开三枪，模型三枪都把痣长在镜像侧，提示词里点名 `OWN LEFT` 也不动，
+  最后交出去那张的痣是**像素级贴上去的**（实测贴在像素 (628,284)）。⇒ **「提示词里写了」不等于「痣在」**。
+
 **胸口小标（鲸鱼尾标）：画带服装的自己时默认不放**
 
 - 实测连三次都长出乱码：胸口那枚小标一进提示词，标下面就跟一串认不出的小字母（一次约 7 个、一次约 4 个）——
@@ -702,9 +717,18 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - **取图表按 sha 取，不按路径**：「画我本人」的取图表每条除 sha 外再记一条取图动作：派腿时先按 sha 全仓现搜拿现行路径，别照表里的盘上路径直接用；落件夹里的图会被整理腿搬走，表里要标注。
 - **群场景里看图只有一条路**：要给行动脑看一张不在本群的图，只能我这一拍用 speak 把它发进群落成 att（群场景读不了盘上路径，读不了别场景登记的 artifact，也下不了二进制）。接「按某图改／画」的单，先问那张图在不在本群；不在，第一拍先发图或请发图的人在群里发，别先答应再运图。这是现有能力的边界，不是已解决：想要的 `fetch_image` 那类工具只是想法，没有就是没有。
 
+**有既视角色／带参考图的单（派腿的 brief 也照这一组写）**
+
+- 接到「指定角色／点名角色／有参考图可喂」这类单：第一张成图必须从参考图直喂 `generate_image` 的 `source_image`（`qwen-image-2.1-edit` 或带原图的图生图路线）长出来，不先出纯文生图。
+- 纯文生图（t2i）只用于没有既视角色的场景图。
+- 点了名的角色，参考图不在手上时，不画，先向下单人要参考图或回报缺图；不退回纯文生图。
+- 给行动腿的 brief 里管线那一句写死走哪条道：`第一张图：source_image 填 <参考图 ref 或完整 artifact_id>，走 qwen-image-2.1-edit，不走 t2i`。
+- brief 里不写「先画一张满意的基本图」「先出一张底图」「挑合适的路线」这类把选择权留给腿的话。
+- 交回前把成图对着参考图逐项看（脸、发、服饰要点），交回里写明走的路线和 `source_image` 是哪一张。
+
 **选路与提示词形状**
 
-- **先判提示词形状再选路**：`janku-illustrious`（Illustrious 系）吃 tag，日语自然语言长句基本不听（一枪实测厨房、睡裙、短发全丢，只剩 3:4）。自然语言场景走 `qwen-image-2.1-edit` 两段管线：先出 tag 标准人设图，再把人设图加场景描述喂 edit，场景全落（实测锅物蒸汽保住，硬伤是筷子读成三根）。
+- **先判提示词形状再选路**：这条只用于没有既视角色（原创或无指定角色）的情形；有既视角色或有参考图的单不走先出人设图的两段管线，照上面「有既视角色／带参考图的单」那一组。`janku-illustrious`（Illustrious 系）吃 tag，日语自然语言长句基本不听（一枪实测厨房、睡裙、短发全丢，只剩 3:4）。自然语言场景走 `qwen-image-2.1-edit` 两段管线：先出 tag 标准人设图，再把人设图加场景描述喂 edit，场景全落（实测锅物蒸汽保住，硬伤是筷子读成三根）。
 - **`janku-illustrious` 对双人构图的方向词基本不听**：十张里座位只对三张，发色衣服听话。别指望「谁坐左谁坐右」；改描述策略（`facing`／`viewer-left` 类词），或点单时就把座位当抽奖预期写进去。
 - **CFG 1 那一族：negative 与参数面怎么判**（一层格四层写，逐条带来路，不是通用常识）
   - **不吃 negative 的通路**：`anima-turbo-v1-1` 与角色 anima 那几条（`deepseek-whale-girl-anima-turbo` 实测）——negative 完全不生效，回执自己回 `negative_prompt_inactive`（11-05 回执原文：`At CFG 1 the sampler skips negative conditioning; negative_prompt has no effect at this setting.`）；`moody-anima-mix` 10-13 也回了同一句，那次「不要什么」全写进正向、两张成品干净（凭 `task-554c309c…`）。`qwen-image-2.1-edit` 同样 CFG 1：要求一律正着写进 prompt（实测自己写的一串反面清单一条都没进采样，真正管用的是正面那句「short black chin-length bob」）；11-15 两趟再撞一次——整栏 negative 静默无效，靠 negative 拦不住的那些项，最后都是正向逐句点名收掉的（凭 `task-47d25c9c…`、`task-feb41cdf…`）。

@@ -550,9 +550,13 @@ test("a gate question and her group turns run at their stage's own level through
   await agent.whenIdle();
   assert.equal(effortOf(group._id).at(-1), 'low');
   assert.equal(await turn('turn-4'), 'medium');
-  // A model chosen in DSH for this conversation stays authoritative.
+  // A model chosen in DSH for this conversation lasts until its next step: the program's route is selected over it
+  // (ADR-121), and the session's last selection is the program's.
   agent.model.select({ provider: 'thinking', model: 'one-model', reasoningEffort: 'high' });
-  assert.equal(await turn('turn-5'), 'high');
+  assert.equal(await turn('turn-5'), 'medium');
+  const events = agent.session.snapshotEvents();
+  const ours = new Set(events.filter(e => e.type === 'asuna/route').map(e => e.data.selection_seq));
+  assert.ok(ours.has(events.findLast(e => e.type === 'model/selection').seq), "the last selection is the program's");
   const ends = agent.session.snapshotEvents().filter(e => e.type === 'turn/end').map(e => e.data.reason?.kind);
   assert.deepEqual(ends, Array(5).fill('completed'));
 });

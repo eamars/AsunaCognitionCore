@@ -1513,6 +1513,33 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       inject: sessionId => shippedPermission()?.inject?.(sessionId) ?? {},
     }, PermissionPicker));
 
+    // ── DSH's model seat, shown and locked where the program routes (ADR-121) ─────────
+    // Every request of her routed sessions takes the program's route (index.js requestRoute), so a model chosen there
+    // would last one step. Their seat is DSH's own with DSH's own lock: it names the model and level of the session's
+    // selection and does not open. Every other session renders DSH's seat live, with DSH's injection and locale.
+    const routedPresets = { value: new Set(), listeners: new Set() };
+    rpc('routedPresets').then(list => {
+      routedPresets.value = new Set(list); for (const listener of routedPresets.listeners) listener();
+    }).catch(error => ctx.logger?.warn?.(String(error)));
+    const subscribeRouted = listener => { routedPresets.listeners.add(listener); return () => routedPresets.listeners.delete(listener); };
+    const shippedModel = () => ctx.slots.entries('conversation.input.model').find(entry => entry.component !== ModelSeat);
+    function ModelSeat(props) {
+      const presets = React.useSyncExternalStore(subscribeRouted, () => routedPresets.value);
+      const preset = props.useSessions(state => state.byId[props.sessionId]?.projectionValues?.agentPreset);
+      const shipped = shippedModel();
+      if (!shipped) return null;
+      const routed = typeof preset === 'string' && presets.has(preset);
+      return h(shipped.component, { ...props, renderSlot: modelLabel, ...(routed ? { locked: true } : {}) });
+    }
+    // DSH gives `renderSlot` only to the entry that declares the seat's label child (its own entry; a second declaration
+    // stops this package from activating). The label renders DSH's own fallback, the model's name and badge: what DSH
+    // shows while that child seat has no occupant.
+    const modelLabel = (_name, _props, options) => options?.fallback ?? null;
+    ctx.slots.inject('conversation.input.model', () => ctx.slots.register({
+      name: 'conversation.input.model', priority: -1, locale: 'model',
+      inject: sessionId => shippedModel()?.inject?.(sessionId) ?? {},
+    }, ModelSeat));
+
     // ── a turn's trigger, titled in the viewer's language ─────────────
     // DSH titles a turn started by a notice "execution requested"; an Asuna notice says what started it.
     function AsunaTrigger(props) {

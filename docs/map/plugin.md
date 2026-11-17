@@ -32,6 +32,7 @@ The `asunaApi` remote service the Web page calls: worker and model status, the s
   - `uiLanguage` — The browser's language for the names the program gives (ui-language.js); unsupported means English.
   - `workspaceTitles` — Workspace titles in the viewer's language: DSH stores them as plain text, so the client says which words it shows (client.js).
   - `brainPresets` — The presets her two brains run in: her persona's and the action brain's.
+  - `routedPresets` — The presets whose sessions run on the program's route (ADR-121): the client shows their model seat locked.
   - `speakParts` — ADR-129 D5(b): what one speak call of hers sent, for its node on the page: the parts as they left.
   - `speakPicture` — ADR-129 D5(b): one part's picture of that call (base64), one part per request.
   - `speakCall` — The fence of both: a character session's own speak call, found with its result in that session's events.
@@ -269,8 +270,9 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `resolveRoutes` — The model each brain's route resolves to: for the routes given (a draft's, when a save is checked), else for the routes in force (the worker's own start).
   - `stageEfforts` — Per-stage effort on the character route, as chosen on the settings card from the levels its model offers: the relevance gate (attendEffort), her group turns (groupEffort) and the action route's summaries (summaryEffort).
   - `tierRoute` — ADR-075: the route of a request in a job she sent to 高, while it has not fallen and 高 is not resting; else undefined (the action route).
-  - `requestRoute` — The provider, model, level and output limit the next request of this conversation takes (before nativeRoute): a deliberate native model selection stays authoritative for its session; otherwise 高 for a job she sent there, else the lane's rou
+  - `requestRoute` — The provider, model, level and output limit the next request of this conversation takes (before nativeRoute): 高 for a job she sent there, else the lane's route, at the stage's own effort when it has one.
   - `selectRoute` — The route a stage's requests take (requestRoute: the relevance gate's, a group turn's and a summary's own level among them), selected before its turn starts when the session's differs (settings.js `selectFor`: DSH 0.2.2 fixes a step's route
+  - `routedPresets` — The presets of her routed sessions (every lane but recovery): their requests take the program's route.
   - `laneOf` — The lane of one of her sessions, by the preset it was opened with; undefined for a session not hers.
   - `summaryInstance` — ADR-094 §10.2: a compaction summary of this conversation is sent as its next request would be: that request's provider and model; its level: the conversation's own (its last request's on that model), else the route's, else the compaction en
   - `fall` — The job falls to 低 for good; the worker records it on the task, said to her in capability words.

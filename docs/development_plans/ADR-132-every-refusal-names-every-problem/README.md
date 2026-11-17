@@ -166,9 +166,10 @@ Built on this branch after the signed page (`b392f0390d5c`). Times are local.
     code that the strict schema has already named is not named twice.
   - A failure reading a value already found wrong leaves the refusal to the problems found.
   - Each handler ends its check part before its first effect. Where a module checks and writes in one call, it takes a
-    `ready` hook that runs between the two: `credentials` (keep names all its own problems, `credentials.problems`),
-    `watches`, `switches`, `group_admin`, `notices`, `questions.close`, the five sticker writes, `received_files` and
-    `promote`. A note's own checks (`notes.prepare`) run with the rest.
+    `ready` hook that runs between the two: `credentials.drop`, `watches`, `switches`, `group_admin`, `notices`, `questions.close`, the five sticker writes, `received_files` and
+    `promote`. `credential`'s keep collects every one of the vault's own problems first (`credentials.problems`) and
+    ends with `checkpoint()` in the handler, before `credentials.keep`. A note's own checks (`notes.prepare`) run
+    with the rest.
   - Still after the checkpoint, best effort as F6: the checks inside the scheduler's visit, errand and note send,
     `restart`'s `when`, `group_focus`'s focus change, a sticker found already kept after its bytes are fetched, and
     `read_image`'s and `received_file`'s reads. They stop alone only when nothing else is pending.
@@ -213,8 +214,8 @@ Her verdict: install `8b7098fc8b47`, the branch's tip, read by her own read-only
   pushed; stopped and started 11:58:39, `loaded.commit` `a56cb644`; the 169 installed files the same as the commit;
   worker and QQ adapter back by themselves. Core package `a2616738662a` -> `b80a013f90d6`. No `3221225477` in
   `host.log` after the restart.
-- Read by content in her installed copy: no field of the declared specs is required; her mark on 37 fields (her 36 and
-  `message_developer`'s one); `SPLIT` gone, `RoleTools._handle` there, the vault's `ready` hook there.
+- Read by content in her installed copy: no field of the declared specs is required; her mark on 37 fields (her 36 and the
+  old name `reply`'s one; `message_developer` has none, her 0562); `SPLIT` gone, `RoleTools._handle` there, the vault's `ready` hook there.
 - Left, from her 0560: `read_image`'s `ref` has no description, so its missing-field words are 「缺 ref」 alone (a
   follow-up). Her tools' budget test pins the measured size with no margin, as every budget there does: a longer
   field states its cost in its ADR and raises the number.

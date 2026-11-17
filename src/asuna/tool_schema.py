@@ -7,13 +7,14 @@ reaches the worker. The worker repairs a copy of the call, checks the copy again
 violation with the other layers' problems into one refusal (role_tools.RoleTools.call).
 
 Declared is derived from strict by this module alone, so the two cannot drift:
-- a field the program fills in or repairs is no longer required (`REQUIRED_FILLED`), and its description says what the
-  program does when it is missing;
+- no field is required (ADR-132 D1): a field the strict schema requires says so in its description, her mark
+  (`REQUIRED_MARK`), or what the program does when it is missing for a field the program fills in (`REQUIRED_FILLED`);
+  the worker names a missing field together with the turn's and the handler's problems;
 - `speak`'s `parts` is declared `json`: a list written as a string is parsed, a part without a `kind` is completed, and the
   part's own fields (and their descriptions) are written into the field's description, which is all the model then reads;
 - no field declares an enum: each field's description lists its values, and a value outside them is one problem among the
   others, not a refusal of its own.
-What stays declared is what the program cannot repair: a value of the wrong type, a missing field it cannot infer.
+What stays declared is what the program cannot repair: a value of the wrong type.
 """
 from __future__ import annotations
 
@@ -35,6 +36,8 @@ REQUIRED_FILLED = {
 FILLED_LATER = {('write_document', 'doc'), ('delegate', 'title')}
 # Declared as json: the program parses and completes it, then checks it against the strict schema.
 JSON_FIELDS = {('speak', 'parts')}
+# ADR-132 D1: a field the strict schema requires and the program cannot fill in says so here, in her words (her 0526).
+REQUIRED_MARK = '（必填。不写＝这次不执行；缺哪几项一次全说）'
 PART_KIND_WORDS = '；kind 不写时按这一条只有的字段定'
 
 TYPE_WORDS = {'string': '一段文字', 'integer': '整数', 'number': '数字', 'boolean': 'true 或 false', 'array': '一个列表',
@@ -55,9 +58,19 @@ def _listed(field):
     return out
 
 
-def _without_enums(field):
-    """A field with every enum below it listed in a description instead (a list's items, an object's properties)."""
-    out = _listed(field)
+def _marked(field, filled=''):
+    """A field that is not required, its description saying it is when the strict schema requires it (ADR-132 D1):
+    her mark, or what the program does when it is missing (`filled`, REQUIRED_FILLED)."""
+    out = {key: value for key, value in field.items() if key != 'required'}
+    if field.get('required'):
+        out['description'] = out.get('description', '') + (filled or REQUIRED_MARK)
+    return out
+
+
+def _without_enums(field, filled=''):
+    """A field with every enum below it listed in a description instead (a list's items, an object's properties), and
+    no `required` at any depth (ADR-132 D1)."""
+    out = _marked(_listed(field), filled)
     if isinstance(out.get('properties'), dict):
         out['properties'] = {key: _without_enums(value) for key, value in out['properties'].items()}
     if isinstance(out.get('items'), dict):
@@ -81,22 +94,27 @@ def declared(tool, parameters):
     out = {}
     for name, field in parameters.items():
         if (tool, name) in JSON_FIELDS:
-            out[name] = {'type': 'json', 'description': _parts_words(field), **({'required': True} if field.get('required') else {})}
+            out[name] = _marked({'type': 'json', 'description': _parts_words(field), 'required': field.get('required')})
             continue
-        relaxed = _without_enums(field)
-        if (tool, name) in REQUIRED_FILLED:
-            relaxed.pop('required', None)
-            relaxed['description'] = relaxed.get('description', '') + REQUIRED_FILLED[(tool, name)]
-        out[name] = relaxed
+        out[name] = _without_enums(field, REQUIRED_FILLED.get((tool, name), ''))
     return out
 
 
 # ── strict ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 def _head(field):
-    """What a missing field is for: the first clause of its description, cut."""
+    """What a missing field is for: the first clause of its description, cut, and the values it takes when it has a
+    list of them (as the guard's refusal said them before ADR-132; D4)."""
     text = str((field or {}).get('description') or '').strip()
-    clause = re.split(r'[。；;\n]', text)[0].strip()
-    return '（%s）' % (clause if len(clause) <= HEAD_CHARS else clause[:HEAD_CHARS] + '…') if clause else ''
+    whole = re.split(r'[。；;\n]', text)[0].strip()
+    clause = whole[:HEAD_CHARS]
+    while clause.count('（') > clause.count('）'):        # never end inside a bracket: cut before the open one (her 0555)
+        clause = clause[:clause.rfind('（')].rstrip()
+    if clause != whole:
+        clause += '…'
+    values = [str(value) for value in (field or {}).get('enum') or ()]
+    if values and not all(value in clause for value in values):     # a clause that names them says them once
+        clause += ('；' if clause else '') + '只能是：%s' % '、'.join(values)
+    return '（%s）' % clause if clause else ''
 
 
 def _kind_of(value):

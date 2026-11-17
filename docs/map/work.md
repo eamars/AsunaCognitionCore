@@ -267,8 +267,9 @@ Her credentials (owner 2026-10-07): secrets a home task may use without any brai
 - def `attach` — The Host's credential requests: call({'op': 'list'|'read'|'write'|'delete', ...}).
 - def `available`
 - def `listing` — What a home turn or task may see: [{name, note, env: [variable names]}].
+- def `problems` — (every problem of a credential to file, as [(code, words)], and the name, note and variables as filed).
 - def `keep` — File a credential (a new one, or new values for a name already filed).
-- def `drop`
+- def `drop` — Remove a credential; `ready` as in `keep`.
 - def `environment` — The variables of these credentials, for one sandboxed command.
 - def `scrub` — The same value with every stored credential value replaced by HIDDEN (strings, lists and dicts).
 - def `home_task` — Whether this task came from home (credentials are for home tasks only).

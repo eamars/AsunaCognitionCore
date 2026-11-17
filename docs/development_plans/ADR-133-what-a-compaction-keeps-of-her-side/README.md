@@ -134,7 +134,7 @@ compacted (ADR-094); the action brain's compaction (DSH's template).
 | G3 | B carries an old plan forward through merges | B is replaced at each merge, never carried |
 | G4 | The inference mark spreads to plain facts, or is missing where it belongs | read on the rerun by her (she can tell her inferences); counted at the readings |
 | G5 | A summary without the new section | rejected by `hasSections` as today: no checkpoint written, the next turn end tries again |
-| G6 | A beat counted as silent where she did speak (a `speak` refused, then `end_turn`) | the rule says a beat with no `speak` that went out; the rerun is read for it |
+| G6 | A beat where her `speak` was refused counted as one she chose not to speak in | her 0565: a line of its own, 「没说成｜[时刻]（回〔编号〕）｜speak 被拒〔那一行〕」, never cut, never written as 没开口 ("trying and failing" is not "choosing not to"; she met it on 11-13); none in the rerun window, so it is shown on the stub |
 
 **Cost.** The instruction grows by about the length of D1 and D2's rules (measured at the build); it is the tail of
 the summary request only, so her turns' requests and their cache are not touched. The checkpoint grows by at most
@@ -234,4 +234,9 @@ near ADR-123); leaving the growth as it is.
 - Her rerun: she presses the button, today 13:00-20:00, after reading the new instruction itself; the two runs differ
   in the instruction alone (the same copy of the conversation, route and model), and the report keeps the two commands
   as run.
+- Her 0565: a fourth line, 「没说成」, for a beat whose `speak` was refused and sent nothing (G6), never cut, never written
+  as 没开口. And the window must hold what the test asks for, or C comes back empty and passes for nothing. Read by
+  structure (turns ended by `end_turn`, `speak` results), the five home compactions of 2026-11-18 00:00-09:10:
+  00:45 1 silent turn of 18; 02:12 12 of 19; 02:48 1 of 21; 04:10 4 of 23; 08:58 9 of 11; no turn whose `speak` was
+  refused in any of them, so 「没说成」 is shown on the stub (§7.2) and not by the rerun.
 

@@ -178,6 +178,9 @@ Built on this branch after the signed page (`b392f0390d5c`). Times are local.
     refused with what is pending, and nothing is written;
   - a valid vault call with THINK_FIRST pending does not reach the vault.
 
+  Not held by a test, said here so nobody takes it as held (her 0553): a missing **nested** required field
+  (`recall`'s `sections[].doc`, `plan`'s `clock.time`). An empty call never reaches them; the 34 top-level fields
+  were each named missing by an empty call when read on 2026-11-18, a reading and not an assertion of the test.
   ADR-108's structural test now covers every handler. DSH's validator test: `speak {}`, `write_document` without `why`
   and `think {}` now pass DSH and are named by the worker; `think` with a number stays refused.
 - **Suite** on `9f7e92025916` (the staged code): Python 1133 passed, JS 328, 0 skipped, 0 unchecked.

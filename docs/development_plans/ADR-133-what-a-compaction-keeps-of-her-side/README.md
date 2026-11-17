@@ -208,7 +208,9 @@ The duplication columns are not the same measure: on 10-22 a reviewer read every
 rule in the instruction: past 40, the items marked 已了结 go first, then the oldest whose agreed day is past or that
 named no day; an item whose agreed day is still ahead stays. The count dropped is left as one line, 「（旧账略 N 条）」.
 A cut by a stated rule replaces the model's own random drop; what an old promise loses by it, her own ledger keeps (her
-practice since 10-22, ADR-094 §7a). Rejected: a promise list kept by the program outside the checkpoint (a larger change,
+practice since 10-22, ADR-094 §7a). The owner's reasons, his words (2026-11-18): "she will keep important stuff
+elsewhere, so if the promises are lost in the context then that's not important. And human will forget, this is not
+her fault and she don't need to carry all burdens." Rejected: a promise list kept by the program outside the checkpoint (a larger change,
 near ADR-123); leaving the growth as it is.
 
 ## 10. Her wording (agent line 0564, 2026-11-18 12:42) and the instruction as built

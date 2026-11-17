@@ -721,13 +721,14 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 
 - 接到「指定角色／点名角色／有参考图可喂」这类单：第一张成图必须从参考图直喂 `generate_image` 的 `source_image`（`qwen-image-2.1-edit` 或带原图的图生图路线）长出来，不先出纯文生图。
 - 纯文生图（t2i）只用于没有既视角色的场景图。
+- 点了名的角色，参考图不在手上时，不画，先向下单人要参考图或回报缺图；不退回纯文生图。
 - 给行动腿的 brief 里管线那一句写死走哪条道：`第一张图：source_image 填 <参考图 ref 或完整 artifact_id>，走 qwen-image-2.1-edit，不走 t2i`。
 - brief 里不写「先画一张满意的基本图」「先出一张底图」「挑合适的路线」这类把选择权留给腿的话。
 - 交回前把成图对着参考图逐项看（脸、发、服饰要点），交回里写明走的路线和 `source_image` 是哪一张。
 
 **选路与提示词形状**
 
-- **先判提示词形状再选路**：这条只用于没有既视角色（无参考图可喂）的情形；有既视角色或有参考图的单不走先出人设图的两段管线，照上面「有既视角色／带参考图的单」那一组。`janku-illustrious`（Illustrious 系）吃 tag，日语自然语言长句基本不听（一枪实测厨房、睡裙、短发全丢，只剩 3:4）。自然语言场景走 `qwen-image-2.1-edit` 两段管线：先出 tag 标准人设图，再把人设图加场景描述喂 edit，场景全落（实测锅物蒸汽保住，硬伤是筷子读成三根）。
+- **先判提示词形状再选路**：这条只用于没有既视角色（原创或无指定角色）的情形；有既视角色或有参考图的单不走先出人设图的两段管线，照上面「有既视角色／带参考图的单」那一组。`janku-illustrious`（Illustrious 系）吃 tag，日语自然语言长句基本不听（一枪实测厨房、睡裙、短发全丢，只剩 3:4）。自然语言场景走 `qwen-image-2.1-edit` 两段管线：先出 tag 标准人设图，再把人设图加场景描述喂 edit，场景全落（实测锅物蒸汽保住，硬伤是筷子读成三根）。
 - **`janku-illustrious` 对双人构图的方向词基本不听**：十张里座位只对三张，发色衣服听话。别指望「谁坐左谁坐右」；改描述策略（`facing`／`viewer-left` 类词），或点单时就把座位当抽奖预期写进去。
 - **CFG 1 那一族：negative 与参数面怎么判**（一层格四层写，逐条带来路，不是通用常识）
   - **不吃 negative 的通路**：`anima-turbo-v1-1` 与角色 anima 那几条（`deepseek-whale-girl-anima-turbo` 实测）——negative 完全不生效，回执自己回 `negative_prompt_inactive`（11-05 回执原文：`At CFG 1 the sampler skips negative conditioning; negative_prompt has no effect at this setting.`）；`moody-anima-mix` 10-13 也回了同一句，那次「不要什么」全写进正向、两张成品干净（凭 `task-554c309c…`）。`qwen-image-2.1-edit` 同样 CFG 1：要求一律正着写进 prompt（实测自己写的一串反面清单一条都没进采样，真正管用的是正面那句「short black chin-length bob」）；11-15 两趟再撞一次——整栏 negative 静默无效，靠 negative 拦不住的那些项，最后都是正向逐句点名收掉的（凭 `task-47d25c9c…`、`task-feb41cdf…`）。

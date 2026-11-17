@@ -154,7 +154,10 @@ Built on this branch after the signed page (`b392f0390d5c`). Times are local.
   (+163; §5 computed +155) and 33,800 -> 35,547 bytes (+1,747; computed +1,651). `tests/test_tool_budget.py` is
   raised to 20,676. A missing field's refusal now comes from the worker. It says the field's values when it has a
   list of them, as the guard's refusal did, in one bracket (her 0551): 「缺 do（做什么；只能是：keep、drop）」 (added after
-  the staging below; the unit tests hold it).
+  the staging below; the unit tests hold it). Her 0555 found two faults in those words, and the class behind them:
+  a first clause cut at 40 characters inside a bracket (`ideas.do`, `sticker.candidate` and others; the cut is older
+  than this ADR), and values said twice when the clause already names them (`private_words.do`, `feel.direction`).
+  The words now never end inside a bracket and say the values once; a test walks every field of every tool.
 - **D2, how.** `SPLIT` is gone. Every handler runs with the general problems pending (`RoleTools._handle`).
   - A check that stops before the handler's checkpoint is one problem, named with the pending ones. A missing-field
     code that the strict schema has already named is not named twice.
@@ -174,7 +177,7 @@ Built on this branch after the signed page (`b392f0390d5c`). Times are local.
   - the declared schema walked at every depth;
   - the owner's case;
   - §6's note case;
-  - all 38 tools and options called with no thought, with no arguments and with every required one filled in: each is
+  - all 37 tools and options called with no thought, with no arguments and with every required one filled in: each is
     refused with what is pending, and nothing is written;
   - a valid vault call with THINK_FIRST pending does not reach the vault.
 
@@ -183,7 +186,9 @@ Built on this branch after the signed page (`b392f0390d5c`). Times are local.
   were each named missing by an empty call when read on 2026-11-18, a reading and not an assertion of the test.
   ADR-108's structural test now covers every handler. DSH's validator test: `speak {}`, `write_document` without `why`
   and `think {}` now pass DSH and are named by the worker; `think` with a number stays refused.
-- **Suite** on `9f7e92025916` (the staged code): Python 1133 passed, JS 328, 0 skipped, 0 unchecked.
+- **Suite**: on `9f7e92025916` (the staged code) Python 1133 passed, JS 328, 0 skipped, 0 unchecked. The code changed
+  after it twice (the values in a missing field's words, `_head`, and its two test expectations; then the bracket fix
+  below), so the reading that covers the code landed is the one on the final tip, given at its handoff.
 - **Staged (造的), 10:39-10:42.** An isolated profile `asuna-demo132` on the stub model, without DEEPSEEK_API_KEY, with
   its own database.
   - On the agent line `credential` is not offered (DSH answered that the line has no such tool), so the demo

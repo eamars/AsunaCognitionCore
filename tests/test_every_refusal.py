@@ -141,3 +141,11 @@ def test_a_valid_call_with_think_first_pending_does_not_reach_its_effect(world, 
     outcome, said, codes = call(world, turn(world, thought=False), 'credential',
                                 {'do': 'keep', 'name': 'demo-key', 'note': '演示', 'env': {'DEMO_KEY': 'v'}})
     assert outcome == 'refused' and codes == ('THINK_FIRST',), said
+
+
+def test_a_missing_fields_words_close_every_bracket_and_say_its_values_once():
+    """Her 0555: `ideas.do` cut inside a bracket, `private_words.do` with its values twice. Every field of every tool."""
+    for name, spec in TOOLS.items():
+        for field, value in spec['parameters'].items():
+            words = tool_schema._head(value)
+            assert words.count('（') == words.count('）') and words.count('只能是') <= 1, (name, field, words)

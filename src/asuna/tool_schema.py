@@ -105,11 +105,15 @@ def _head(field):
     """What a missing field is for: the first clause of its description, cut, and the values it takes when it has a
     list of them (as the guard's refusal said them before ADR-132; D4)."""
     text = str((field or {}).get('description') or '').strip()
-    clause = re.split(r'[。；;\n]', text)[0].strip()
-    clause = clause if len(clause) <= HEAD_CHARS else clause[:HEAD_CHARS] + '…'
-    values = (field or {}).get('enum')
-    if values:
-        clause += ('；' if clause else '') + '只能是：%s' % '、'.join(str(value) for value in values)
+    whole = re.split(r'[。；;\n]', text)[0].strip()
+    clause = whole[:HEAD_CHARS]
+    while clause.count('（') > clause.count('）'):        # never end inside a bracket: cut before the open one (her 0555)
+        clause = clause[:clause.rfind('（')].rstrip()
+    if clause != whole:
+        clause += '…'
+    values = [str(value) for value in (field or {}).get('enum') or ()]
+    if values and not all(value in clause for value in values):     # a clause that names them says them once
+        clause += ('；' if clause else '') + '只能是：%s' % '、'.join(values)
     return '（%s）' % clause if clause else ''
 
 

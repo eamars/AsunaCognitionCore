@@ -146,9 +146,12 @@ before the landing.
   label and the lock on her routed sessions.
 - Her page, read by the owner (2026-11-16, after 20:25): "The model and thinking effort is now locked".
 - The one pin of §1: at the install its session had had no step since 2026-11-15 23:42:58, so its record still names
-  the model chosen in DSH. Nothing reads it now: that session's next request takes her route, and at that step the
-  program's selection replaces the record (shown in §9's demo). Unchecked on her profile, said as such: the record's
-  change at that step. A read-only script reads that one session until it changes; she reads it too.
+  the model chosen in DSH. Nothing reads it now: that session's next request takes her route. Corrected 2026-11-18:
+  the record does not change at that step. The pin names her route's own model and level (`medium`), and the program
+  writes a selection only when the session's differs (`selectFor`), so it writes none; the session stepped on 11-17
+  23:58 and its 3 requests after the install all went on her route at `medium`, which proves nothing either way, since
+  the pin is the same. The record changes when the settings card next changes her model or level. The read-only
+  watch on it was stopped.
 
 Found after, outside this ADR: `land.py`'s report leaves out the suite's Python line (the run's own output has it); a
 tool fix, not an ADR.

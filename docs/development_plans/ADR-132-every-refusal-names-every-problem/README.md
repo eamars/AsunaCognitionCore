@@ -1,7 +1,7 @@
 # ADR-132: Every refusal names every problem, for every tool
 
-Status: **Proposed** 2026-11-16 by big sis (Claude Code), at the owner's ask (The ask). Drafted for the owner and for
-her reading; not built. Every count in §3 covers 2026-11-02 18:55 to 2026-11-16 18:55 and was read 2026-11-16 18:30-18:57 from her profile, read-only (session files
+Status: **Installed** 2026-11-18 11:58 (`a56cb644476a`, §9); open until §6's third reading (2,000 of her real calls).
+Proposed 2026-11-16 by big sis (Claude Code), at the owner's ask (The ask). Drafted for the owner and for her reading. Every count in §3 covers 2026-11-02 18:55 to 2026-11-16 18:55 and was read 2026-11-16 18:30-18:57 from her profile, read-only (session files
 through their structure only; audit rows by tool name and code only). Times on this page are local time.
 
 ## The ask
@@ -30,7 +30,9 @@ It was built as two opt-ins, and a tool that is not listed keeps the old behavio
   `tool_schema.declared`: every enum is dropped, but a required field stays required unless it is listed in
   `tool_schema.REQUIRED_FILLED` (three fields: `write_document` `doc` and `do`, `delegate` `title`). A call missing any
   other required field is refused by the guard before it reaches the worker, alone: THINK_FIRST, the call cap and the
-  handler's checks never run. 34 required fields in 20 of her 37 tools are on this path, `credential` `do` among them.
+  handler's checks never run. 34 required fields in 20 of her 37 tools are on this path, `credential` `do` among them
+  (counted as §5's marks are, top-level fields the program cannot fill; the strict schema's required fields in all, nested
+  ones and `speak`'s `parts[].kind` included, are 40, her 0560).
 - **The handler's own checks.** They collect only for the 10 handlers in `RoleTools.SPLIT` (each split into a check
   part and an effect part). For the other 27, `call()` runs `checkpoint()` before the handler, so a general problem
   (THINK_FIRST, a schema problem) refuses alone and the handler's checks are not reached.
@@ -157,7 +159,8 @@ Built on this branch after the signed page (`b392f0390d5c`). Times are local.
   the staging below; the unit tests hold it). Her 0555 found two faults in those words, and the class behind them:
   a first clause cut at 40 characters inside a bracket (`ideas.do`, `sticker.candidate` and others; the cut is older
   than this ADR), and values said twice when the clause already names them (`private_words.do`, `feel.direction`).
-  The words now never end inside a bracket and say the values once; a test walks every field of every tool.
+  The words now never end inside a bracket and say the values once; a test walks every top-level field of every tool
+  (the nested ones are not walked, her 0560).
 - **D2, how.** `SPLIT` is gone. Every handler runs with the general problems pending (`RoleTools._handle`).
   - A check that stops before the handler's checkpoint is one problem, named with the pending ones. A missing-field
     code that the strict schema has already named is not named twice.
@@ -199,3 +202,21 @@ Built on this branch after the signed page (`b392f0390d5c`). Times are local.
   - Both were read from the demo's audit rows. Torn down at 10:42: database dropped; profile, config and launch entry
     removed.
 - **Not shown yet:** §6's second and third readings (installed and read by content; 2,000 of her real calls).
+
+## 9. Installed (2026-11-18)
+
+Her verdict: install `8b7098fc8b47`, the branch's tip, read by her own read-only task from the commit (agent line 0560,
+11:48). Her 9 unpushed publications were pushed first through the push gate (0 hits), so `main` = `origin/main` =
+`7d9f903ae576`; the landing is the merge of the two, `a56cb644476a`.
+
+- `land.py`: the suite on `a56cb644476a`, Python 1134 passed, JS 328, 0 unchecked; integration 132 passed; landed and
+  pushed; stopped and started 11:58:39, `loaded.commit` `a56cb644`; the 169 installed files the same as the commit;
+  worker and QQ adapter back by themselves. Core package `a2616738662a` -> `b80a013f90d6`. No `3221225477` in
+  `host.log` after the restart.
+- Read by content in her installed copy: no field of the declared specs is required; her mark on 37 fields (her 36 and
+  `message_developer`'s one); `SPLIT` gone, `RoleTools._handle` there, the vault's `ready` hook there.
+- Left, from her 0560: `read_image`'s `ref` has no description, so its missing-field words are 「缺 ref」 alone (a
+  follow-up). Her tools' budget test pins the measured size with no margin, as every budget there does: a longer
+  field states its cost in its ADR and raises the number.
+- Open: §6's third reading, once her character brain has made 2,000 calls after 11:58:39.
+

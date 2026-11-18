@@ -366,4 +366,10 @@ summarizer whether a beat "wrote a reason" is the step its variance came in by (
 beats that all did). Two consequences asked of her before it is built: a line for a beat nobody waited on can never be
 settled, so it needs an end across merges (proposed: kept for one merge, as a settled promise is); and her rule's
 fallback for an unsure reason, "fold it into the count", needs another (proposed: leave the reason out, assert nothing).
+- Built from her 0588 (her words in the instruction): 没开口 is written beat by beat by default, folded into the count
+  only when the summarizer is sure no reason was written, kept as a line when unsure; a reason is copied word for word
+  or left out, never asserted absent; the count line says only what the checkpoint did,
+  「（另有 N 拍没开口，最早 X、最晚 Y，这几拍的原因没逐行写）」; and the 没开口 lines of the earlier checkpoint are not carried
+  into the new one (only the beats of this span), which bounds the section across merges. Her 「只拄」 is written 「只抄」
+  (copy), as the summarizer reads it; hers to undo.
 

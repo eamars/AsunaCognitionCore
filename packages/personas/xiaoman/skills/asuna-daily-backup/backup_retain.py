@@ -64,6 +64,11 @@ for n in nas:
 if nas_skip:
     print("   跳过（含 weekly）:", nas_skip)
 
+WEEKLY_CAP = 4
+for side, skipped in (("本机", local_skip), ("NAS", nas_skip)):
+    if len(skipped) > WEEKLY_CAP:
+        print("周留档 %s %d 份，超过上限 %d，未清（脚本不清周留档）" % (side, len(skipped), WEEKLY_CAP))
+
 drop_local = local[: max(0, len(local) - args.keep_local)]
 drop_nas = nas[: max(0, len(nas) - args.keep_nas)]
 print()

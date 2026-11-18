@@ -110,6 +110,8 @@ digest 不动，不能读成「技能没换」。
 
 实测边界（只写现象，不写机制）：**跨拍再读有效。**11-18 同一位腿先报「读到旧快照」并标明是推断；02:08 跨拍再读，`Base directory` 里的号与 `candidate` 对上，两次读数都真。第一次为什么是旧的，原因未证，这里不写。第一次读到旧的就写「A 档未证」并留待下一拍再读，不改口。
 
+**没有 64 位号的 Base directory**：回执里那一整行路径中没有 64 位号时，第 2 步无从对。实测：11-18 core 那一发还是 APPLIED 时，`asuna-self-improvement` 的 `Base directory` 是 `node_modules` 下 `@asuna\cognition-core\skills` 的路径，不带号。这类技能的 A 档判据改成两样合起来：`activation.json` 里该项目 `active` 的号（与 selection 一致、state 是 ACTIVE），加 frozen 里正文的 needle 在。`Base directory` 只照抄整行，不用于对号。只写现象，不写成因。同一本技能转 ACTIVE 后跨拍再读，路径变成 `frozen` 后面跟 64 位号、再接 `packages\cognition-core\skills`，号与 `candidate` 逐字对上（这次两枚都已实读）。
+
 **这三样并成一条命令（`--receipt`）**：
 
 ```sh

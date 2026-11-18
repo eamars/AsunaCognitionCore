@@ -40,7 +40,10 @@ BODY_PINS = [
     ("pin_wording_smb_readback", "措辞只到「SMB 读回一致」"),
     ("pin_wording_no_nas_self_check", "不许写「NAS 自己校验过」"),
     ("pin_path_from_base_directory", "`Base directory` 为准，现读，不抄旧号"),
-    ("pin_untested_writes_named", "没有对 NAS 真写／真删跑过"),
+    ("pin_untested_writes_named", "没有对 NAS 真写、真删跑过"),
+    ("pin_first_run_watch_output", "**第一趟真用它的人盯第一份输出。**"),
+    ("pin_weekly_cap_four_script_no_clear", "最多 4 份（我这侧的规矩）。脚本不清它。"),
+    ("pin_probe_not_cleared", "`probe-<日期>.txt` 不清"),
 ]
 SCRIPT_PINS = {
     "backup_push.py": ["require_lan_host", "--verify-only", "SMB 读回"],

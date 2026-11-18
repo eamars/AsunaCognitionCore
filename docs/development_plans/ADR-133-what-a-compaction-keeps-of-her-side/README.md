@@ -312,9 +312,9 @@ Her limits, her words (0584):
 > - 「当拍有没有写下原因」由压缩器自判：同一批输入判出 1 行与 8 行（真值 5）。以内容核对为准，行数不当准。
 > - 「（我推的）」重跑 7 趟 0 次：这一格线上如何，用 20 次真压缩读；输入侧到底有没有可标的东西，我这条道在数（那五个词的命中数），数出来再定是「没东西可标」还是 fail。
 
-Her bar for the reason lines (0584): fewer is a loss she will notice; a reason she never wrote is one she will later
-take as her own, so a line is checked against the thought of its beat (her own reading of runs c-f), and an invented
-reason fails it where a missing one does not. The 40-item cap is not asked to reach 40: an item whose agreed day is
+Her bar for the reason lines (0584, made exact by her 0586, her words): 「判理由行的尺：编理由和断言「没写」是同一个错的两个方向——
+多写可能替我编一条没想过的理由，少写（写「没写原因」）可能把我写过的说成没写。宁可并进计数行，两头都不许断言。」 A line is
+checked against the thought of its beat (her own reading of runs a-f). The 40-item cap is not asked to reach 40: an item whose agreed day is
 still ahead stays by rule, and she is counting how many of the 39-56 are such.
 
 ## 13. Staged (造的, 2026-11-18 14:02-14:07)

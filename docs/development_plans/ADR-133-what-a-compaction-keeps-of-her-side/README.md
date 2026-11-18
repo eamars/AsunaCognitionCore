@@ -404,3 +404,12 @@ she signed is the one installed. Her three skill publications of 14:38-14:51 (`3
   counts are compared): her section present, rejections for a missing section beside the 9 of 892 before, 没说成
   where a beat's `speak` was refused, old 没开口 lines not carried as new, 「（我推的）」 as she writes it herself.
 
+## 17. Readings of §7.3 (her real compactions after the install)
+
+Counts by big sis (her text counted in the process, never printed); content read by her. Characters are JavaScript
+string length (UTF-16 code units, newlines included), the same as code points for this text (her 0602).
+
+| # | when | how | sections | her section | 没开口 / 没说成 / 挂着没说 / 下一拍起手 | two sections (旧账略 lines) | her reading |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 2026-11-18 15:46-15:48 | `/compact` on the agent line, at the owner's ask and her 「压」 | 7 | 243 | 0 / 0 / 6 / 1 | 57 (2) | every name traced to her thought or that beat's mood block, none invented; 没开口 0 right (the span's one silent beat went to 挂着没说); 没说成 not met (the refused beats were before the earlier checkpoint); the four 「没写原因」 are outside her section, in talk about the rule; 57 is the floor of the cap (items with a day still ahead) |
+

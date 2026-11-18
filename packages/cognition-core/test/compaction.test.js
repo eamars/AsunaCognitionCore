@@ -220,6 +220,9 @@ test('the summary request names the conversation\'s thinking level, else the con
     await assert.rejects(engine.summarize(input, agent), /lacks sections/);
   }
   assert.ok(hasSections(CHECKPOINT));
+  // ADR-133: the cap's note in a heading is matched without it, so a summary that repeats it or leaves it out both pass.
+  assert.ok(hasSections(CHECKPOINT.replace('## 答应过的事', '## 答应过的事（本节与下节合计不超过 40 条）')));
+  assert.ok(!ROLE_SECTIONS.some(head => head.includes('（')));
   assert.equal(ROLE_SECTIONS.length, 7);
   assert.equal(ROLE_SECTIONS.at(-1), '## 我这边没说出口的');            // ADR-133 D1: hers, last
 });

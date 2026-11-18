@@ -247,3 +247,38 @@ near ADR-123); leaving the growth as it is.
   `.runtime/private/compaction-rerun-133/` is a rerun product of this ADR, never her history.** Big sis presses the
   button, telling her first.
 
+## 11. The rerun of 2026-11-18 and what it changed
+
+Run by big sis 13:14-13:21 at her word, compaction 1 of her home conversation (02:12), today's instruction and the
+instruction at `def6a3ec04b4`; the same 157 messages (sha256 `764f7498645eee5c`), model, level `high`, output limit
+32,768. Counts only (`rerun133.py count`); she reads the three files.
+
+| | the checkpoint that ran | today's instruction | new instruction |
+| --- | --- | --- | --- |
+| characters | 20,588 | 27,614 | 15,743 |
+| sections | 6 | 6 | 7 |
+| her section, with heading | - | - | 661 |
+| 没开口 / 没说成 / 挂着没说 / 下一拍起手 lines | - | - | 5 / 0 / 2 / 1 (12 silent turns in the span) |
+| her lines with a line number | - | - | 0 of 8 |
+| 答应过的事 + 更正与分歧 items | 66 | 203 | 84 |
+| seconds / output tokens | - | 299 / 23,470 | 105 / 14,174 |
+
+- The same instruction on the same input gave 66 items live and 203 in the rerun: one run of each cannot tell the
+  instruction's effect from the model's spread. Two more runs of the new instruction read its spread only (items,
+  line numbers, 没开口 lines, seconds), never its wording.
+- Her 0574-0576: the 0 of 8 was not the model ignoring the shape. The line numbers are the platform lines' labels; her
+  own beats (her calls) never carry one, live or in the rerun, and three of her four kinds pointed at her beat. Each
+  line now points at the line the beat answered, 「（回〔编号〕那拍）」, her four shapes as she wrote them; a beat that
+  answered no line says 「〔没人开口那一拍〕」, a time not read says 「时刻没读到」, never a borrowed one; no number is
+  made up. Rejected: the program numbering her own beats in the summary request (a number found nowhere else, which
+  she could not look up).
+- The 40-item cap moves into the template's heading, 「## 答应过的事（本节与下节合计不超过 40 条）」, where the model reads
+  the shape (the rule line sat among four merge rules and the rerun wrote 84). The heading check matches the part
+  before the note (`ROLE_SECTIONS`), so a summary that leaves the note out is not rejected for it. Her own section's
+  heading stays bare: it was written in the rerun.
+- Found, not this ADR (her 0575): 21 of the 67 compactions since 10-23 that wrote nothing answered with a tool call
+  (`think`) instead of text. **The live summary request carries `input.tools` (`compaction.js` `once`), for its cache
+  prefix; the rerun script sends no tools, so the rerun cannot show this failure, and a rerun reading is never
+  evidence that it is gone.** A separate follow-up. The 67 split: 23 aborted at the deadline, 21 a tool call, 11 DSH's
+  shrink check, 9 a section missing, 1 truncated, 2 with no error recorded; her section can raise only the 9.
+

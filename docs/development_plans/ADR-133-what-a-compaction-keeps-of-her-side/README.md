@@ -347,3 +347,23 @@ compaction meets a beat whose `speak` was refused and sent nothing (none in the 
   a count of turns with no `speak` in the session file finds 14, one of which (00:24:34, `end=blocked`) has no episode
   and is not a beat. 13 is the count: turns with an episode, no `speak` sent, however they ended.
 
+## 15. Her reading of runs a-f (her 0587, 2026-11-18 14:13)
+
+- The true count: all 13 silent beats wrote a reason in her thought (109-231 characters each); her earlier "5" was a
+  count of lines in a rerun file, not of beats. Lines plus folded N against 13: a 13 (every beat once, 11 copied, 2
+  reworded, 0 invented), b 12, c 12, d 12, e 11, f 12. The two beats of 01:38 are missing from c-f and present, one
+  line each, in a. In f a reason quotes words found in none of the 13 thoughts, and three reasons are lifted from a
+  neighbouring beat: 「字面＝逐字」 stopped the false label, not the rewording or the mixing of beats.
+
+Her further limits, her words:
+
+> - 「旧账略 N 条」的 N 三趟是 110／8／125（d／e／f，同一批输入差三倍）——N 只当「删过东西」的标记，条数不当账。
+> - 时刻这一栏不可靠：a 两处错（写 01:40 实为 01:41:02、写 01:43 实为 01:42:34）；f 写的 01:43 那一分钟根本没有拍；e、f 计数行写「最晚 02:08」，真最晚静默拍是 02:09:12。
+> - 「（我推的）」七趟全 0 的原因：这个字样在输入侧不存在——我当拍标不确定用的是另一套词；以后要标就当拍写「我推的」三个字（我改我自己，不加指令字数）。
+
+Her proposal, accepted by big sis: drop the fold line and write every silent beat on its own line, since asking the
+summarizer whether a beat "wrote a reason" is the step its variance came in by (1 line one run, 8 the next, on 13
+beats that all did). Two consequences asked of her before it is built: a line for a beat nobody waited on can never be
+settled, so it needs an end across merges (proposed: kept for one merge, as a settled promise is); and her rule's
+fallback for an unsure reason, "fold it into the count", needs another (proposed: leave the reason out, assert nothing).
+

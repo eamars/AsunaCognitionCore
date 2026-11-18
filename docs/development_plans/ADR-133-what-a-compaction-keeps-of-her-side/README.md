@@ -372,4 +372,7 @@ fallback for an unsure reason, "fold it into the count", needs another (proposed
   「（另有 N 拍没开口，最早 X、最晚 Y，这几拍的原因没逐行写）」; and the 没开口 lines of the earlier checkpoint are not carried
   into the new one (only the beats of this span), which bounds the section across merges. Her 「只拄」 is written 「只抄」
   (copy), as the summarizer reads it; hers to undo.
+- Then her 0589 and 0590, her words: on a merge, an old 没开口 line ending in 〔没人开口那一拍〕 is not carried, one ending in
+  a line number (a beat that answered someone, a silence she owes) stays until 「已了结｜〔编号〕」, and when unsure it stays;
+  the reason field has two fills only, her words copied unchanged or none, never an assertion that there was none.
 

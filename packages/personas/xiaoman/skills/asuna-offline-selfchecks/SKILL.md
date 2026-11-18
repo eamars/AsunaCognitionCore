@@ -246,3 +246,14 @@ python3 -c "import hashlib,sys;print(hashlib.sha256(sys.stdin.buffer.read()).hex
 发布说明（即提交说明）的第一段只写一句、不超过 80 字；空一行后细节进 body。整段理由堵成一行会让 `git log --oneline` 和回执里的一行读数变成一堵墙。
 
 钉：`pin_o_commit_subject_one_line`（只认这一节的字面）。
+
+### (p) `check_staged_secrets.py` 在非 git 候选上的真实可用写法
+
+11-18 现场在 core 候选上跑出来的三格，按现读记：
+
+- `--strict` 这把工具不认：带上它退出码 2。
+- `--personal --all` 在非 git 候选上一个文件都没读到，退出码 3，输出 `UNCHECKED: no file was read`，不算过闸。
+- 能跑的是 `--personal --paths <文件...>`（候选里的文件可以写绝对路径），同时把 `ASUNA_PRIVATE_WORDS` 指到本机名单；实测 15 个文件退出码 0、命中 0。`denylist` 那一格仍是 `UNCHECKED`（没有那份可选名单），不影响退出码，报告里照写 `UNCHECKED`。
+- 我账上那串命令行字面（带 `--strict`、写 `--all`）是 11-17 现场看到后当规格抄给执行腿的，不通用：以现读为准。实测 `--help` 不打帮助，打一行 `SECRET_SCAN_TAKES_NO_OPTIONS: for files, write --personal --paths FILE...`，退出码 2。核心技能「推 GitHub」那节写的是 `--paths` 用法，不一致按核心技能办。
+
+钉：`pin_p_secrets_real_usage`（只认这一节的字面）。

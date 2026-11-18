@@ -127,6 +127,7 @@ BACKLOG_PINS = [
     ("pin_o_commit_subject_one_line", ["第一段只写一句", "80 字"]),
     ("pin_m_dates_by_script", ["脚本读钟面", "不手打日期", "假数"]),
     ("pin_l_fork_root_cause", ["主检出落后", "不许 merge／rebase／reset 硬挪", "先发布，再把自动提交"]),
+    ("pin_p_secrets_real_usage", ["--personal --paths", "no file was read", "不通用：以现读为准"]),
 ]
 
 # 派活交代的落点（2026-11-02 主人交代，来路是 10-22 部署环境那条 TEMP 回收改动）：正文一提到临时目录／TEMP，

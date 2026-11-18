@@ -87,6 +87,12 @@ CRITERIA = [
     ("criterion_publish_effect_by_content", "看技能内容，不看包 digest"),
     ("criterion_publish_effect_receipt", "self-publish 回执"),
     ("criterion_publish_effect_runtime_sha", "运行时那份 `SKILL.md` 的内容 sha256"),
+    ("pin_three_step_base_directory_line", "`Base directory` 那**整一行**"),
+    ("pin_three_step_candidate_verbatim", "`candidate` 号**逐字**对"),
+    ("pin_three_step_a_tier_unproven", "只写「A 档未证」，不许写「已生效」"),
+    ("pin_no_number_base_directory", "**没有 64 位号的 Base directory**"),
+    ("pin_no_number_a_tier_rule", "`Base directory` 只照抄整行，不用于对号"),
+    ("pin_cross_beat_reread_phenomenon", "跨拍再读有效"),
     ("criterion_revert_not_in_audit", "不进 `audit_events`，只落 `activation.json`"),
     ("criterion_installed_at_only_previous", "`installed_at` 不在 `active.*` 块里，只在 `previous` 里"),
 ]

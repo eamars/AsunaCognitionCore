@@ -100,6 +100,18 @@ python3 skills/asuna-running-version/version_probe.py --package core --file skil
 
 digest 不动，不能读成「技能没换」。
 
+#### 验「我刚发布的正文生效了没有」：三步写死
+
+读的是原生 `skill` 工具这一回合的回执，不读磁盘，不凭记忆：
+
+1. 报 `skill` 工具回执里 `Base directory` 那**整一行**，原样抄，不转述、不截。
+2. 把那串目录里的 64 位十六进制号与本次发布回执的 `candidate` 号**逐字**对（整串对，不看前缀）。xiaoman 实测这串号在 `frozen` 后面那一段，不是整串最后一段（最后一段是技能目录名）。
+3. 对不上，只写「A 档未证」，不许写「已生效」。对上了也只是「`skill` 工具读到的是这一版快照」；正文里那句新字面在不在，仍走上面三样里的 needle。
+
+实测边界（只写现象，不写机制）：**跨拍再读有效。**11-18 同一位腿先报「读到旧快照」并标明是推断；02:08 跨拍再读，`Base directory` 里的号与 `candidate` 对上，两次读数都真。第一次为什么是旧的，原因未证，这里不写。第一次读到旧的就写「A 档未证」并留待下一拍再读，不改口。
+
+**没有 64 位号的 Base directory**：回执里那一整行路径中没有 64 位号时，第 2 步无从对。实测：11-18 core 那一发还是 APPLIED 时，`asuna-self-improvement` 的 `Base directory` 是 `node_modules` 下 `@asuna\cognition-core\skills` 的路径，不带号。这类技能的 A 档判据改成两样合起来：`activation.json` 里该项目 `active` 的号（与 selection 一致、state 是 ACTIVE），加 frozen 里正文的 needle 在。`Base directory` 只照抄整行，不用于对号。只写现象，不写成因。同一本技能转 ACTIVE 后跨拍再读，路径变成 `frozen` 后面跟 64 位号、再接 `packages\cognition-core\skills`，号与 `candidate` 逐字对上（这次两枚都已实读）。
+
 **这三样并成一条命令（`--receipt`）**：
 
 ```sh

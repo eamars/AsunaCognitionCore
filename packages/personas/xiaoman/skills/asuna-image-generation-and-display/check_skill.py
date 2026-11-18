@@ -86,6 +86,13 @@ scope_key 那一格在不在（scope 字面值从 `scenes` 读、`source` 前缀
 大毛病只有「直接发」与「不发」两个出口）＋两条「不算重画」的边界与「本节优先于旧口径」。
 切片为空不等于查过：标题被删那 20 条一起红。
 
+2026-11-19 起再补一族判据（黑边口径，与 asuna-image-upscale 第五节同一口径）：凡提到黑边的那一行
+（扫描面＝SKILL.md ＋ 同目录 references/ 下的 .md，反引号里的引用剥掉；一格＝一条 bullet 连它的缩进续行——
+旧那句「两枪都有」就在续行上，只按单行判会漏；按空行整块算又会把讲色温那条连坐进来，两条都是 11-19 反证实测）
+只许写「部分构图会出现」这一档现象口径；
+写成「两枪都有」「都会加」这一类全称句就红（black_border_no_universal_claim），把那句现象口径删掉也红
+（black_border_phenomenon_wording）。限定在黑边族所在那一格——讲色温、指头数的那些「两枪」不在这一族，不许连坐。
+
 不联网、不调生图服务、不生成图、不写 Mongo、不发 QQ。
 
 用法：
@@ -427,6 +434,8 @@ def portrait_section_slice(body):
 
 # 反引号里的字面量是引用（示例、错误码、历史段与被改坏副本里引用的旧句子），只在散文里判红。
 PROSE = re.compile(r'`[^`]*`', re.S)
+# 黑边这一族只报现象、别当机制（口径正本在 asuna-image-upscale 第五节）：全称句一律禁掉。
+BB_UNIVERSAL = ("两枪都有", "都会加")
 
 # 展示口径：报告里必须是相对路径的 Markdown 图片
 RELATIVE_IMAGE = re.compile(r"!\[[^\]]*\]\((?![A-Za-z]:[\\/]|/|file://)[^)\s]+\)")
@@ -975,6 +984,65 @@ def main():
                              ("pin_batch_self_portrait_recipe", "裁眼区放大")):
         check(pin_name, needle in batch_slice, "「实测补格」节里找不到：" + needle)
 
+    # 黑边族（与 asuna-image-upscale 第五节同一口径）：只报现象、别当机制。判据限定在黑边族所在那一格
+    # （一格＝一条 bullet 连它的缩进续行：旧那枚「两枪都有」就在续行上，只按单行判会漏；
+    # 按空行整块算又会把讲色温那条连坐进来），且只看散文（反引号里的字面量按引用处理）。
+    # 扫描面＝SKILL.md ＋ 同目录 references/ 下的 .md（那本子目录以前不在任何判据面里）。
+    bb_files = [path] + sorted(
+        os.path.join(root, one)
+        for root, _dirs, files_here in os.walk(os.path.join(HERE, "references"))
+        for one in files_here if one.lower().endswith(".md"))
+    bb_spans, bb_hits, bb_wording = 0, [], False
+    for target in bb_files:
+        try:
+            with open(target, encoding="utf-8") as handle:
+                source = handle.read()
+        except OSError as exc:                           # 读不了也要报出来，不许绿着放过
+            bb_hits.append("%s（读不了：%s）" % (os.path.basename(target), exc))
+            continue
+        rel = os.path.relpath(target, HERE).replace(os.sep, "/")
+        # 一格＝一条 bullet（或标题／一段正文）连它的缩进续行；下一条 bullet 或空行断开。
+        # 不按单行：旧那句「两枪都有」落在续行。不按空行整块：那里面混着讲色温那条
+        # （合法带着「两枪都有」，不在黑边这一族）——两条都是 11-19 反证跑出来的实测。
+        spans, block, start = [], [], None
+        for number, raw_line in enumerate(source.splitlines(), 1):
+            if raw_line.strip():
+                opens = raw_line.strip()[:1] in ("-", "*", "#", ">", "|", "!")
+                if block and (opens or raw_line[:1] not in (" ", "\t")):
+                    spans.append((start, block))
+                    block, start = [], None
+                if start is None:
+                    start = number
+                block.append(raw_line)
+            elif block:
+                spans.append((start, block))
+                block, start = [], None
+        if block:
+            spans.append((start, block))
+        for start, block in spans:
+            joined = "\n".join(block)
+            if ("黑边" not in joined) and ("letterbox" not in joined):
+                continue
+            bb_spans += 1
+            clean = PROSE.sub(" ", joined)
+            if "部分构图会出现" in clean:
+                bb_wording = True
+            banned = [shape for shape in BB_UNIVERSAL if shape in clean]
+            if not banned:
+                continue
+            number = start
+            for delta, one in enumerate(block):
+                if any(shape in PROSE.sub(" ", one) for shape in banned):
+                    number = start + delta
+                    break
+            bb_hits.append("%s:%d（全称句 %s）" % (rel, number, "、".join(banned)))
+    check("black_border_no_universal_claim", not bb_hits,
+          "黑边那一格里的全称句（限定黑边／letterbox 所在那一格，反引号里的引用不算）："
+          + "；".join(bb_hits))
+    check("black_border_phenomenon_wording", bb_wording,
+          "黑边那一格里找不到现象口径「部分构图会出现」（SKILL.md 与 references/ 都没有）")
+    bb_note = "，黑边族扫描 %d 格（SKILL.md＋references/）、全称句 %d 处" % (bb_spans, len(bb_hits))
+
     # 换行：必须读字节。文本模式（universal newlines）把 CR 吃掉，"\r" not in text 永远为真——
     # 2026-10-15 实测真 CRLF 样本 CR=59 照样绿。判据名与另外五份 check_skill.py 逐字一致。
     cr_files = cr_bytes([path] + [os.path.join(HERE, script) for script in scripts])
@@ -1002,7 +1070,7 @@ def main():
           "已有图进清单那条（第二条通路／剥 PNG 文字块的 sha 与字节／账面看不见那两格）、"
           "三处同步那三条（图从哪来的数／失败码按来源前缀／归属节的指向）、"
           "退役那族连 frontmatter 的 description 一起扫（no_stale_claim_in_frontmatter）、"
-          "历史段、群发前自检四条要点、归属都在%s。" % (total, total, leak_note + anchor_note))
+          "历史段、群发前自检四条要点、归属都在%s。" % (total, total, leak_note + anchor_note + bb_note))
     return 0
 
 

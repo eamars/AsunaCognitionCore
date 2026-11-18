@@ -317,3 +317,19 @@ take as her own, so a line is checked against the thought of its beat (her own r
 reason fails it where a missing one does not. The 40-item cap is not asked to reach 40: an item whose agreed day is
 still ahead stays by rule, and she is counting how many of the 39-56 are such.
 
+## 13. Staged (造的, 2026-11-18 14:02-14:07)
+
+An isolated profile `asuna-demo133` on a stub model, without DEEPSEEK_API_KEY, with its own database; a conversation of
+three long 造的 messages on its agent line, then `/compact` twice on its Web page, the stub answering each summary
+request with a scripted text.
+- Both summary requests carried the new instruction (its section heading 「## 我这边没说出口的」 and the heading
+  「## 答应过的事（本节与下节合计不超过 40 条）」, read in the stub's log) and her 19 tools, as a real one does.
+- A summary without her section: rejected, 「summary lacks sections of the checkpoint」; no checkpoint written; the page
+  said 「Compaction could not produce a useful summary」.
+- A summary with all seven sections: written (`compaction/summary` with her section), 「Compacted 22 history items」.
+- Torn down 14:07: database dropped; profile, config, launch entry and the `node_modules` link removed.
+
+Corrected from §7.2: 「没说成」 cannot be shown on a stub, which writes what it is told; it is shown only when a real
+compaction meets a beat whose `speak` was refused and sent nothing (none in the rerun window), so it is counted at the
+20-reading (§7.3) as present or absent where such a beat occurred.
+

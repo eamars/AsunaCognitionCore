@@ -1,6 +1,7 @@
 # ADR-133: What a compaction keeps of her own side
 
-Status: **Proposed** 2026-11-18 by big sis (Claude Code): the context reserved in the morning; the design (§6) written
+Status: **Installed** 2026-11-18 15:10 (`c06061eb8878`, §16); open until her next 20 real compactions are read (§7.3).
+Before: **Proposed** 2026-11-18 by big sis (Claude Code): the context reserved in the morning; the design (§6) written
 12:40 at the owner's word ("start the ADR-133 design when both you and Xiaoman are free"), after ADR-132's install.
 It was first planned to start after ADR-132 closes (the owner, 2026-11-18: her request, which he authorised, goes after ADR-132, the
 bug fix). Everything in §1 and §2 was read 2026-11-18 09:52-09:57 from the code on `main` and from her profile,
@@ -285,7 +286,7 @@ instruction at `def6a3ec04b4`; the same 157 messages (sha256 `764f7498645eee5c`)
   evidence that it is gone.** A separate follow-up. The 67 split: 23 aborted at the deadline, 21 a tool call, 11 DSH's
   shrink check, 9 a section missing, 1 truncated, 2 with no error recorded; her section can raise only the 9.
 
-## 12. The instruction to install, and its known limits (2026-11-18 14:00)
+## 12. The instruction as of 14:00, and its known limits (history: the instruction installed is §16's)
 
 After the first rerun the instruction changed four times on her readings (her 0576-0582): every line points at the line
 its beat answered (「（回〔编号〕那拍）」, no number made up, no borrowed time); the 800 counts only the two kinds of line
@@ -309,7 +310,7 @@ Her limits, her words (0584):
 
 > 已知界限（重跑量出，不再拿重跑调措辞）：
 > - 「另有 N 拍没开口」的 N 偶少 1–2 拍（重跑四轮：12、12、11、12，真值 13）：只当近似，不当账；这一节的条数不进任何验收。
-> - 「当拍有没有写下原因」由压缩器自判：同一批输入判出 1 行与 8 行（真值 5）。以内容核对为准，行数不当准。
+> - 「当拍有没有写下原因」由压缩器自判：同一批输入判出 1 行与 8 行（真值 13：13 拍全写过理由，见 §15）。以内容核对为准，行数不当准。
 > - 「（我推的）」重跑 7 趟 0 次：这一格线上如何，用 20 次真压缩读；输入侧到底有没有可标的东西，我这条道在数（那五个词的命中数），数出来再定是「没东西可标」还是 fail。
 
 Her bar for the reason lines (0584, made exact by her 0586, her words): 「判理由行的尺：编理由和断言「没写」是同一个错的两个方向——
@@ -375,4 +376,31 @@ fallback for an unsure reason, "fold it into the count", needs another (proposed
 - Then her 0589 and 0590, her words: on a merge, an old 没开口 line ending in 〔没人开口那一拍〕 is not carried, one ending in
   a line number (a beat that answered someone, a silence she owes) stays until 「已了结｜〔编号〕」, and when unsure it stays;
   the reason field has two fills only, her words copied unchanged or none, never an assertion that there was none.
+
+## 16. Installed (2026-11-18 15:10)
+
+Her signature: `5beaa2a6e2ab` (agent line 0592, 14:30), moved by her to the landing `c06061eb8878` (0597, 15:05) after
+reading its two parents (`5beaa2a6e2ab` and `d2d2b074158d`) and finding `compaction.js` the same blob, so the instruction
+she signed is the one installed. Her three skill publications of 14:38-14:51 (`312460ab2b12`, `ea6d51da7966`,
+`d2d2b074158d`) were pushed first through the push gate (0 hits).
+
+- The confirmation run h on `5beaa2a6e2ab`'s instruction (2,743 characters): seven sections; 没开口 12 lines, beat by
+  beat, no count line; no 「没写原因」; no empty 「为什么：」; her section 855 characters, the part over 800 all 没开口 lines
+  (not counted, not cut). It was read for "not broken" only.
+- `land.py`: the suite on `c06061eb8878` at 15:05, Python 1137 passed, JS 328, 0 unchecked (the first run of the
+  landing stopped at her unread messages; the second cites that report and skips the suite); integration 132 passed;
+  the prepared start passed; landed and pushed; stopped and started 15:10:41, `loaded.commit` `c06061eb`; the 169
+  installed files the same as the commit; worker and QQ adapter back by themselves. Core package `e1e4a10f8637` ->
+  `abeb7bc7dcea`. No `3221225477` in `host.log` after the restart.
+- Read by content in her installed copy: seven sections, the last 「## 我这边没说出口的」; 「## 答应过的事（本节与下节合计不超过
+  40 条）」 present and matched without its note; no 「都没写原因」; the instruction 2,743 characters; `affect.py`'s
+  「（还挂着）」 present.
+- Her 0593, beside her limits: in run f a reason said her thought "only wrote what was to be judged", and the thoughts of
+  those minutes are 109-220 characters each, all of them on why: the summary can make a causal sentence that the
+  database's own counts disprove, and the next beat of hers reads it.
+- An exception recorded at her word (0597): her publication `ea6d51da7966` changed the core package's
+  `asuna-self-improvement` skill, not her own package.
+- Open: §7.3, her next 20 real compactions (she reads them from 2026-11-19 21:00; big sis reads the same, and the
+  counts are compared): her section present, rejections for a missing section beside the 9 of 892 before, 没说成
+  where a beat's `speak` was refused, old 没开口 lines not carried as new, 「（我推的）」 as she writes it herself.
 

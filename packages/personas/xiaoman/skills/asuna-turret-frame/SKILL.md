@@ -13,7 +13,7 @@ scene_kinds: [home]
 - GET 读口只有这五个：`/api/health`、`/api/video`、`/api/video/state`、`/api/selection`、`/api/state`；另有 WebSocket `/ws`。
 - **控制面全在 POST。** 只读任务（取帧、读姿态、认机器）一个 POST 都不发；WS 只收不发。动它要交代里明写授权，这一本不授予。
 - 取帧：`GET /api/video?camera=<role>&t=<毫秒时刻>`，`role` 实测有 `wide`、`detail` 两路；返回是持续的 MJPEG 流，读到第一帧完整 JPEG（`FFD8FF` 起、按段头 `Content-Length` 截）就断，别整条流读。
-- 状态：`GET /api/video/state?camera=<role>`，读 `epoch`、`camera_id`、`frames_published`、`delivered_fps`、宽高。
+- 状态：`GET /api/video/state?camera=<role>`，读 `epoch`、`camera_id`、`frames_published`、`delivered_fps`、宽高。**尺寸别按 1080p 期待：自报分辨率只当设备说法，以真取到的字节为准。** 实测快照口 `/api/video` 送回的是 **640×360**（11-18 22:40 交回那一帧 640×360、31,146 字节，任务 `task-ccf8e1aa3d0aa37de904e175e8c8af24`），而 WS `video_streams` 里 wide 自报 **1920x1080**——两者不一致，判尺寸认字节，不认自报。
 - 帧里自嵌一段 `OTA_FRAME` 元数据（`frame_sequence`、`sensor_timestamp_ns`、相机号），有它是设备当前流帧的旁证；没有就写「没有」，不补。
 - 来路：11-17／11-18 两趟取帧脚本的字面（现场读过，这一版没有重新对炮台跑一遍）。
 
@@ -21,7 +21,9 @@ scene_kinds: [home]
 
 - 两条路：`/ws` 只 `recv`；或裸 `GET /api/state`。别的口不拿来读姿态。
 - WS 帧里常用的键：`q_yaw_rad`、`q_pitch_rad`（姿态）、`operating_mode`、`fault`、`manual_lease_active`、`telemetry_age_ms`、`camera_id`、`video_streams`；`cmd_ack_seq` 也在里面，它是指令应答序号，只读它不拿来判谁动过。
-- 一次读三帧取区间（最小、最大、极差），不拿单帧当姿态。读数带本机读的时刻。
+- **`q_yaw_rad` 会报出大于 2π 的值**（这次读到 **20.688**），不能当夹角直接读；要判朝向就比对两次读数的差，别把绝对值当角度（差值做法见第四节）。同一趟序列里 23:30 那一帧的 yaw 差是 **0.000 rad**（任务 `task-787f53376df72ecc2873540e2c60c6aa`）。
+- 「只 GET、零 POST」已两次实测通过：11-18 两趟只读腿的 `POST_COUNT` 都是 0（上一条那枚任务，加 `task-ccf8e1aa3d0aa37de904e175e8c8af24`）。
+- 一次读三帧取区间（最小、最大、极差），不拿单帧当姿态。读数带本机读的时刻。**判时刻一律用本机钟，别用这台的 HTTP `Date` 头**：实测它的 `Date` 偏了约 **5 小时**（本机 22:39 时 `Date` 里是 `09:39Z`，按 UTC 换算应当是 `14:39Z`）。
 
 ## 三、这台不自报固件版本：认机器只认三样
 

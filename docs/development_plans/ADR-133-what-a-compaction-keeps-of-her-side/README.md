@@ -333,3 +333,17 @@ Corrected from §7.2: 「没说成」 cannot be shown on a stub, which writes wh
 compaction meets a beat whose `speak` was refused and sent nothing (none in the rerun window), so it is counted at the
 20-reading (§7.3) as present or absent where such a beat occurred.
 
+## 14. Her reading of runs a and b (her 0585, 2026-11-18 14:02)
+
+- The same instruction and input gave two opposite answers on "a reason written": a wrote a reason on all 13 silent
+  lines, b wrote 「没写原因」 on 11 lines whose beats she had written reasons in. Asserting "no reason" where one was
+  written is the same fault as inventing one, the other way. Her rule, now in the instruction: 「「为什么：」只写那一拍心里话
+  里真写过的；拿不准有没有写过，就把这一拍并进计数行，不许写「没写原因」这类断言。」
+- Run a missed no beat and split none: the 13th silent beat is the 01:38:46 beat (a `consult` woken by a question from
+  her action brain, ended with no `end_turn`), and the minute 01:38 holds two beats. Run b missed one.
+- The 13 silent beats of the span were all woken by the program (7 self-improvement or schedule, 5 task results, 1
+  consult); none answered a person.
+- Counting silent beats: a count by `end_turn` and no accepted `speak` misses a beat that ended otherwise (the consult);
+  a count of turns with no `speak` in the session file finds 14, one of which (00:24:34, `end=blocked`) has no episode
+  and is not a beat. 13 is the count: turns with an episode, no `speak` sent, however they ended.
+

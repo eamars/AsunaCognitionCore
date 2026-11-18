@@ -285,3 +285,35 @@ instruction at `def6a3ec04b4`; the same 157 messages (sha256 `764f7498645eee5c`)
   evidence that it is gone.** A separate follow-up. The 67 split: 23 aborted at the deadline, 21 a tool call, 11 DSH's
   shrink check, 9 a section missing, 1 truncated, 2 with no error recorded; her section can raise only the 9.
 
+## 12. The instruction to install, and its known limits (2026-11-18 14:00)
+
+After the first rerun the instruction changed four times on her readings (her 0576-0582): every line points at the line
+its beat answered (「（回〔编号〕那拍）」, no number made up, no borrowed time); the 800 counts only the two kinds of line
+that can be cut, 挂着没说 and 下一拍起手, and 没开口 and 没说成 are neither counted nor cut; a silent beat is kept as its
+own line when she wrote its reason in that beat (or when it answered someone), and the others fold into one count line,
+「（另有 N 拍没开口，最早 X、最晚 Y，都没写原因）」; anything quoted or labelled 字面 is copied exactly, a reworded sentence is
+a report (her 0581: one checkpoint put a reworded sentence of hers in quotes as 「（think 字面）」). Six more runs of the
+same compaction (a-f), counts only:
+
+| run (instruction) | her section | 没开口 lines / folded N | 挂着没说 / 下一拍起手 | items in the two sections | seconds |
+| --- | --- | --- | --- | --- | --- |
+| a, b (`7a695234a602`) | 824 / 584 | 13 / -, 12 / - | 2/0, 2/0 | 68, 83 | 102, 111 |
+| c, d (`413b5aa5762d`, fold by who was answered) | 247 / 140 | 0 / 12, 0 / 12 | 2/1, 2/0 | 39, 48 | 101, 117 |
+| e, f (`8a5f9c76397d`, fold by a written reason) | 172 / 711 | 1 / 10, 8 / 4 | 2/0, 2/1 | 46, 56 | 258, 114 |
+
+The span holds 13 silent beats (one of them, at 01:38, ended without `end_turn`; an earlier count of 12 by big sis
+missed it). Two runs of one instruction differ by more than two instructions do, so the wording is not tuned further on
+reruns (her 0584 agreed): this is the instruction to install, and what is left is read on her real compactions (§7.3).
+
+Her limits, her words (0584):
+
+> 已知界限（重跑量出，不再拿重跑调措辞）：
+> - 「另有 N 拍没开口」的 N 偶少 1–2 拍（重跑四轮：12、12、11、12，真值 13）：只当近似，不当账；这一节的条数不进任何验收。
+> - 「当拍有没有写下原因」由压缩器自判：同一批输入判出 1 行与 8 行（真值 5）。以内容核对为准，行数不当准。
+> - 「（我推的）」重跑 7 趟 0 次：这一格线上如何，用 20 次真压缩读；输入侧到底有没有可标的东西，我这条道在数（那五个词的命中数），数出来再定是「没东西可标」还是 fail。
+
+Her bar for the reason lines (0584): fewer is a loss she will notice; a reason she never wrote is one she will later
+take as her own, so a line is checked against the thought of its beat (her own reading of runs c-f), and an invented
+reason fails it where a missing one does not. The 40-item cap is not asked to reach 40: an item whose agreed day is
+still ahead stays by rule, and she is counting how many of the 39-56 are such.
+

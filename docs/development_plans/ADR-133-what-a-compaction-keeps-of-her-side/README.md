@@ -201,7 +201,10 @@ The duplication columns are not the same measure: on 10-22 a reviewer read every
   of a closed item; still over: revert the item-by-item carry) was watched until about 10-24 and never put into the
   instruction or the code; checkpoints now hold 150-196 such items. Past that size the model does not keep the list,
   it drops it in pieces: at 02:12 today one home merge dropped 78 items, 71 of them promises.
-- Her model writes the source line on about a third of the entries the rule asks it for. The rule stays: an entry with
+- Her model writes the source line on about a third of the entries the rule asks it for. That share mixes two kinds of
+  conversation (her 0582): in a group each platform line carries its number at its end; at home the owner's words carry
+  none, and the number is in the program's notice that follows (its event's line), so home and group shares are not
+  one measure. The rule stays: an entry with
   its line is the one she can check.
 
 **Decided (the owner, 2026-11-18, on big sis's recommendation).** The two sections hold at most 40 items together, by

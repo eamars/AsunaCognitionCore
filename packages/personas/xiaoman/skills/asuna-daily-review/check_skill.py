@@ -6,6 +6,7 @@
 2. 内容要点：头判据句、取数各步、四维判据 a／b／c／d、c 的五种候选形态、d 的排除凭据、报告四块（含发起统计与主动开话题读数表）、主动开话题维的判据要点、
    「改不改」三答案、四个落口、「夜间回合的边界」三拍与时间顺序都在；发起／回复归类的本机口径（`reply_to` 不可当机械锚点、归类须标「手判」）与「查空只报查过哪些面」也在；
 2b. 一份反向名单 STALE：旧口径的原句被抄回正文就红（正向断言查不出这种事）；
+2c. v3 读数与回流（V3 组）：四条读数名目、内部词只用词表正本那一把尺、④ 的数据源与禁「某群 0 出站」当证据、d 维整场只剩 owner 判「不判」、回流三样与「今日空转」都在；
 3. 家规：正文无日期、无来历叙述；不带别人的个人信息（禁词表、字面编号、这台机器的私密名单；
    名单配不上或 0 条有效词记红 `leak_scan_ran`，「没跑」不许长得像「过了」）；
 4. 没有占位符残留；随书 CHANGELOG.md 首条是「10-30 新建：金主委托每日自省」。
@@ -38,6 +39,8 @@ SECTIONS = [
     "## 夜间回合的边界",
     "## 交回契约（对外交回只认这一份格式）",
     "## 自检清单（留给自检用，不进对外交回）",
+    # v3 读数与回流那一节的标题（排在末尾，不改前面 section_N 的编号）
+    "## 读数与回流口径（v3，并自 work_log）",
 ]
 
 HEAD_SENTENCE = "不需要迎合任何人：没被接 ≠ 她的错。先问那个场子收不收这种话，再问她说得有不有趣。"
@@ -190,6 +193,27 @@ TWELVE = [
     ("twelve_topic_end_first", "「话题结束」（带凭据）优先报"),
 ]
 
+# v3 读数与回流（并自她自己那本流水的口径）：钉的是名目与尺，不是数值。
+# 防的是这一族：口径只活在正文里没名目，于是每跑自造尺（自造词表）、每跑重记同一个冲突。
+V3 = [
+    ("v3_reading_acceptance", "**应承读数**"),
+    ("v3_reading_topic_fit", "**主题相关率**"),
+    ("v3_reading_reaction_over_delivery", "**反应 ÷ 交付**"),
+    ("v3_reading_chosen_silence", "**今天有没有一次「我自由地选择不说」**"),
+    ("v3_silence_source_group_note", "那个群的群笔记里带「未说：」字面的行"),
+    ("v3_silence_shape", "`未说：`＋那一拍行号"),
+    ("v3_silence_no_zero_outbound", "禁止拿「某群 0 出站」当成「自由选择不说」的证据"),
+    ("v3_silence_home_not_counted", "家里不计"),
+    ("v3_wordlist_authority", "词表正本 v1.2"),
+    ("v3_wordlist_no_selfmade", "**不许自造词表**"),
+    ("v3_wordlist_two_scales", "两把尺，不并"),
+    ("v3_dim_d_owner_only", "**d 维：整场只有 owner 的拍 → 标「不判」**"),
+    ("v3_dim_d_no_action_item", "**不出动作条目**"),
+    ("v3_reflow_three_outlets", "终判至少动一样"),
+    ("v3_reflow_idle", "终判里明写「今日空转」"),
+    ("v3_reflow_action_brain_no_write", "行动脑在报告里只列这三样的候选落点"),
+]
+
 # 旧口径的原句钉在这里。正向名单只查「新字面在不在」，旧句子被顺手抄回正文时它照样绿，
 # 所以另立一份反向名单（同族先例：另一份技能为一句旧口径补出来的 old_sandbox_blind_* 那种条目）。
 STALE = [
@@ -328,7 +352,7 @@ def main():
     for index, section in enumerate(SECTIONS):
         check("section_%d" % index, ("\n" + section) in ("\n" + body), section)
 
-    for group in (FETCH, DIMENSIONS, REPORT, NEWDIM, ANCHORS, OUTLETS, BOUNDARY, TWELVE):
+    for group in (FETCH, DIMENSIONS, REPORT, NEWDIM, ANCHORS, OUTLETS, BOUNDARY, TWELVE, V3):
         for name, token in group:
             check(name, token in body, token)
 

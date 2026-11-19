@@ -14,7 +14,8 @@
    守卫立在这儿防复发。要能找到仓库根（tests/ tools/ pyproject.toml 同层）才真查；
    找不到只留 NOTE（比如装在 node_modules 里的冻结版），不算失败。
 
-5. 补遗的钉：「判据补遗」一节里各条各一个 pin_* 检查，只认本节范围内的字面。
+5. 补遗的钉：「判据补遗」一节里各条各一个 pin_* 检查，只认本节范围内的字面；
+   11-19 起另有一枚钉那一节标题下引言的 `pin_intro_three_shot_refutation`（「限定范围的扫描反证必须交三发」那条标准写在引言里，不在任何字母条目下）。
 6. 内容级私密词扫描（同日补）：leak_scan_ran／no_listed_words／no_listed_words_outside_envoy 三格。
    名单配不上或 0 条＝红 leak_scan_ran（没真查，不是干净）；本技能目录里的文件零命中；
    找得到包根时再扫整个包根，命中只许落在 integration/envoy_meters_read.py（既有基线：命中 12 处，
@@ -128,6 +129,9 @@ BACKLOG_PINS = [
     ("pin_m_dates_by_script", ["脚本读钟面", "不手打日期", "假数"]),
     ("pin_l_fork_root_cause", ["主检出落后", "不许 merge／rebase／reset 硬挪", "先发布，再把自动提交"]),
     ("pin_p_secrets_real_usage", ["--personal --paths", "no file was read", "不通用：以现读为准"]),
+    # 11-19：那一节标题下引言里的三发反证标准。它不在任何字母条目下，所以钉名不带字母；
+    # 同一族——钉验的是字面在不在，那三发反证跑没跑它判不了。
+    ("pin_intro_three_shot_refutation", ["反证必须交**三发**", "同词不同义", "缺第②发", "按全局扫词看待"]),
 ]
 
 # 派活交代的落点（2026-11-02 主人交代，来路是 10-22 部署环境那条 TEMP 回收改动）：正文一提到临时目录／TEMP，
@@ -159,6 +163,7 @@ PREPUB_SCRIPT_RULES = [
     ("prepub_script_exit_codes", "2 = 没法判"),
     ("prepub_script_self_compare", "--candidate <ACTIVE 的 packageRoot>"),
     ("prepub_fifth_thing_probe", "第⑤件事有自己的自检针"),
+    ("prepub_sixth_thing_task_ids", "第⑥件事"),
     ("prepub_entries_count_grows", "这个数会随我加词长大"),
 ]
 

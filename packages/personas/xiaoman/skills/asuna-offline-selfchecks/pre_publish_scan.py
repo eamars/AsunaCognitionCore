@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """pre_publish_scan.py：人格包／通道包发布前的一条命令，并掉原来手敲的几条。只读，不写任何东西。
 
-五件事（前三件是规格，第四件是顺手并进来的「各份 check_skill 全绿」，第五件护「我这侧全绿、装载侧全空」那一格）：
+六件事（前三件是规格，第四件是顺手并进来的「各份 check_skill 全绿」，第五件护「我这侧全绿、装载侧全空」那一格，第六件护「正本里手抄的 task 号是真号」那一格）：
   1. 候选 vs ACTIVE 冻结快照：逐文件 sha256 比，列 changed（内容不同）／added（只在候选）／
      missing（只在 ACTIVE、候选里没有＝缺失，防吞）。`--expect <路径前缀>` 可重复：给了就要求
      changed／added 全落在这些前缀里，落到预期之外的算停；missing 默认算停，确实要删的用
@@ -28,11 +28,19 @@
      装载侧会抛错的废弃／非布尔 invocation 字段；以及解析器**不抛错**的那道静默——值里「空格＋#」
      被 YAML 当注释、后半截丢掉（只对 plain scalar 判，引号／块标量／流式放过）。
      没有可用的 YAML 库＝这一格没真查，退出码 2，不退化成正则。
-     `--skill-heads <根>`（可重复）只跑这一格、不跑其余四件，用来现扫 ACTIVE 那几根。
+     `--skill-heads <根>`（可重复）只跑这一格、不跑其余五件，用来现扫 ACTIVE 那几根。
+  6. 候选根下（含各技能目录）每一份 `SKILL.md`／`CHANGELOG.md` 里手抄的 `task-<hex>` 号，能读到库就按
+     `tasks._id` 逐枚数行（`asuna.dbread.count`，只读；读法见技能 asuna-database）：零行的判红，列 文件＋行号。
+     形状不是「`task-`＋32 位十六进制」的（短号 `task-554c309c` 那一族、或长串的切痕）拿它按 `_id` 等值必然零行，
+     所以不按 _id 判——逐枚列成 NOTE 带长度，不静默（那一枚是没判，不是干净）。
+     连不到库（import 不了、连不上、返回读不出）＝这一格没真查：只打一行 NOTE 明写「没真查」，
+     并进最后一行括号里的未判清单，既不停也不拖红——它不该把整支扫描变成一个红。
+     零行默认停；确实要留着当历史账的那一枚（修正记录里被换掉的旧号那一族）用 `--allow-task-id <号>`
+     逐个放行，放行当场打一行 NOTE 带文件名——放行是明着记一笔，不是安静。这一格不看 `--expect`（同第⑤件事）。
 
 用法：
     python3 skills/asuna-offline-selfchecks/pre_publish_scan.py [--expect skills/<名字>]... \\
-        [--expect-entries N] [--candidate <候选根>] [--project xiaoman] [--data <数据根>]
+        [--expect-entries N] [--allow-task-id task-<hex>]... [--candidate <候选根>] [--project xiaoman] [--data <数据根>]
     python3 skills/asuna-offline-selfchecks/pre_publish_scan.py --skill-heads <根> [--skill-heads <根2>]...   # 只跑第 5 件事
 默认候选根＝本脚本往上两级（skills/<技能>/ 的上上级）；项目名读候选 package.json 的 name 末段；
 ACTIVE 快照＝<数据根>/adr008/activation.json 的 active.<项目>.packageRoot。
@@ -68,6 +76,11 @@ CATEGORIES = {"person", "group", "account", "site", "host", "email", "other"}
 TEXT_EXT = {".py", ".md", ".json", ".js", ".yml", ".yaml", ".txt", ".html", ".css", ".csv", ".toml", ".cmd", ".sh", ""}
 SHOW = 40
 SKILL_HEAD = "SKILL.md"
+# 第 6 件事的扫面与号形：手抄任务号只会出现在这两类正本里；全号＝tasks._id 的形状（task- 加 32 位十六进制），
+# 前后各一道边界，别把长串切一刀当成一枚号；号形不合的（短号、切痕）单列成 NOTE，不按 _id 判。
+DOC_HEADS = ("SKILL.md", "CHANGELOG.md")
+TASK_ID_FULL_LEN = len("task-") + 32
+TASK_ID_ANY = re.compile(r"(?<![0-9a-f])task-[0-9a-f]{6,}(?![0-9a-f])")
 # 装载侧的硬要求（读码依据：deepseek-harness 的 packages/skill/skill/src/index.ts 的 SKILL_NAME，
 # 与 packages/skill/skill-filesystem/src/index.ts 的 parseSkillFile／parseFrontmatter，按名字找不抄行号）
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -177,6 +190,35 @@ def scan_hits(root, compiled):
                 if rx.search(line):
                     hits.setdefault(rel, []).append((lineno, category, number))
     return hits, skipped
+
+
+def task_id_hits(root):
+    """第 6 件事的扫面：根下每份 SKILL.md／CHANGELOG.md 里手抄的 task 号（11-19 加）。
+    返回 ({_id 号形: [(相对路径, 行号)]}, {号形不合的: [(相对路径, 行号)]})——后者单列，不当零行判。"""
+    full, short = {}, {}
+    for rel, absolute in walk(root).items():
+        if os.path.basename(rel) not in DOC_HEADS:
+            continue
+        try:
+            with open(absolute, encoding="utf-8") as handle:
+                text = handle.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for lineno, line in enumerate(text.splitlines(), 1):
+            for token in TASK_ID_ANY.findall(line):
+                bucket = full if len(token) == TASK_ID_FULL_LEN else short
+                bucket.setdefault(token, []).append((rel, lineno))
+    return full, short
+
+
+def task_id_rows(ids):
+    """按 tasks._id 逐枚数行（asuna.dbread，只读）。任何一环不顺利就直接往外抛：
+    调用方拿它走 NOTE 那条「没真查」的路，不在这儿替它兜成干净。"""
+    from asuna import dbread
+    rows = {}
+    for token in sorted(ids):
+        rows[token] = int(dbread.count("tasks", {"_id": token})["found"])
+    return rows
 
 
 def show_list(title, items):
@@ -300,6 +342,8 @@ def main():
     parser.add_argument("--expect", action="append", default=[], help="预期会动的路径前缀，可重复")
     parser.add_argument("--allow-missing", action="append", default=[], help="确实要删的路径，可重复")
     parser.add_argument("--expect-entries", type=int, help="上一份报告里的私密名单条数")
+    parser.add_argument("--allow-task-id", action="append", default=[],
+                        help="第 6 件事：库里零行但确实要留作历史账的 task 号，逐个放行（可重复）")
     parser.add_argument("--no-checks", action="store_true", help="不跑各份 check_skill.py")
     parser.add_argument("--skill-heads", action="append", default=[],
                         help="只跑第 5 件事（SKILL.md 头真 YAML 解析）于这些根，可重复；其余四件不跑")
@@ -501,6 +545,40 @@ def main():
         print("  NOTE 候选根下一份 SKILL.md 都没有——这一格没东西可查（不因此判干净）")
     if head_bad:
         stops.append("⑤ %d 份 SKILL.md 的头装载侧收不下：%s" % (len(head_bad), "、".join(rel for rel, _ in head_bad)))
+
+    # ---- 6. 正本里手抄的 task 号真伪（11-19 加；能读库就按 tasks._id 数行，连不到库只打 NOTE 不拖红）
+    print("\n== 6. 正本里手抄的 task-<hex> 号：按 tasks._id 数行（只读；SKILL.md／CHANGELOG.md） ==")
+    id_hits, id_short = task_id_hits(candidate)
+    print("  按 _id 号形判 %d 枚（出现 %d 处）；号形不合、不按 _id 判 %d 枚"
+          % (len(id_hits), sum(len(v) for v in id_hits.values()), len(id_short)))
+    for token in sorted(id_short):
+        print("     号形不合 tasks._id 的 %s（十六进制 %d 位，不是 32 位——这一枚没按 _id 判，不是干净）：%s"
+              % (token, len(token) - len("task-"), "、".join("%s:%d" % w for w in id_short[token])))
+    if not id_hits:
+        print("  NOTE 候选里没有 _id 号形的手抄 task 号——这一格没东西可查，不因此判干净。")
+    else:
+        try:
+            rows = task_id_rows(id_hits)
+        except Exception as exc:                                    # noqa: BLE001 连不到库＝没真查，不拖红
+            unjudged.append("⑥ 没真查（读不到库：%s：%s）" % (type(exc).__name__, exc))
+            print("  NOTE 没真查：连不到库（%s：%s）——这一件没判，不算干净。" % (type(exc).__name__, exc))
+        else:
+            for token in sorted(t for t in args.allow_task_id if t not in id_hits):
+                print("  NOTE --allow-task-id %s 指向候选里根本没有的号——这一枚没东西可放行。" % token)
+            dead, let_go = [], 0
+            for token in sorted(id_hits):
+                if rows[token]:
+                    continue
+                where = "、".join("%s:%d" % w for w in id_hits[token])
+                if token in args.allow_task_id:
+                    let_go += 1
+                    print("  NOTE 放行（库里零行，明着留作历史账）%s：%s" % (token, where))
+                else:
+                    dead.append("%s（%s）" % (token, where))
+            print("  库里数到：非零 %d 枚、零行 %d 枚（其中放行 %d 枚）"
+                  % (sum(1 for t in id_hits if rows[t]), sum(1 for t in id_hits if not rows[t]), let_go))
+            if dead:
+                stops.append("⑥ %d 枚手抄 task 号在 tasks 里零行：%s" % (len(dead), "；".join(dead)))
 
     print()
     if stops:

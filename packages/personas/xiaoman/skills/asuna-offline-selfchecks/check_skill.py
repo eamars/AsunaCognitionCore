@@ -15,11 +15,14 @@
    找不到只留 NOTE（比如装在 node_modules 里的冻结版），不算失败。
 
 5. 补遗的钉：「判据补遗」一节里各条各一个 pin_* 检查，只认本节范围内的字面；
-   11-19 起另有一枚钉那一节标题下引言的 `pin_intro_three_shot_refutation`（「限定范围的扫描反证必须交三发」那条标准写在引言里，不在任何字母条目下）。
+   11-19 起另有一枚钉那一节标题下引言的 `pin_intro_three_shot_refutation`（那条「反证交几发」的标准写在引言里，不在任何字母条目下；同日拆成两型——红形扫描交三发、presence 钉交两发，钉名沿用三发那一版）。
 6. 内容级私密词扫描（同日补）：leak_scan_ran／no_listed_words／no_listed_words_outside_envoy 三格。
    名单配不上或 0 条＝红 leak_scan_ran（没真查，不是干净）；本技能目录里的文件零命中；
    找得到包根时再扫整个包根，命中只许落在 integration/envoy_meters_read.py（既有基线：命中 12 处，
    全在那个文件里；漂了只打 NOTE，不变红）。命中只报 文件:行号:类别，绝不回显词本身。
+   扫整棵包根用的跳过表只有 pre_publish_scan.py 里 SKIP_DIRS 那一枚：11-19 起 walk_texts 从它拿、不各写一份，
+   拿不到就记红 skip_table_shared 并退回「什么都不跳」的保守扫法；skip_table_applies 那一格管「跳过是不是真生效」——
+   跳过目录下一个文件都没有时它没东西可查，打 NOTE 说没真查，不冒充绿。
    名单条目数 11-17 起不再钉基线：这个数随我加词长大，钉死一个会长大的数＝每加一个词白响一次。现在
    每次现读＋按类别打印（好和 private_words summary 一眼对照），差值只在带 --expect-entries 时算，
    且只报差、不算失败；对不上的处置写在 SKILL.md「判据补遗」(d)。
@@ -83,6 +86,8 @@ PACKAGING_RULES = [
     ("rule_whitelist_scan_before_publish", "只留 `package.json` 里 `files` 白名单列出的路径"),
     ("rule_package_content_proof", "只认 artifact 那串 sha256 和 `.tgz` 的文件清单"),
     ("rule_changed_files_is_not_package", "`changed_files` 反映的是候选树／冻结快照那一格，不等于包内容"),
+    # 11-19：两把尺的跳过表只能有一份来源（这一格验正文写了这件事）。
+    ("rule_tmp_shared_skip_table", "共用同一份跳过表"),
 ]
 
 # 「development_publish 撞 EFFECTIVE_PROJECT_CHANGED 的处置」一节的字面守卫（2026-10-25 主人交代）：
@@ -129,9 +134,12 @@ BACKLOG_PINS = [
     ("pin_m_dates_by_script", ["脚本读钟面", "不手打日期", "假数"]),
     ("pin_l_fork_root_cause", ["主检出落后", "不许 merge／rebase／reset 硬挪", "先发布，再把自动提交"]),
     ("pin_p_secrets_real_usage", ["--personal --paths", "no file was read", "不通用：以现读为准"]),
-    # 11-19：那一节标题下引言里的三发反证标准。它不在任何字母条目下，所以钉名不带字母；
-    # 同一族——钉验的是字面在不在，那三发反证跑没跑它判不了。
-    ("pin_intro_three_shot_refutation", ["反证必须交**三发**", "同词不同义", "缺第②发", "按全局扫词看待"]),
+    # 11-19：那一节标题下引言里的反证标准（同日拆两型：红形扫描交三发、presence 钉交两发）。它不在任何
+    # 字母条目下，钉名沿用三发那一版；同一族——钉验的是字面在不在，那几发反证跑没跑它判不了。
+    # 钉自己就是 presence 型，所以它的反证按它自己钉的那条标准交两发（旧句塞回该红／标准句挪到本节以外该红）。
+    ("pin_intro_three_shot_refutation", ["按那枚尺子的**形状**分两型", "presence 钉", "结构上必绿",
+                                        "白得的两发不算证据", "同词不同义", "缺第②发",
+                                        "按全局扫词看待", "挪到本节以外"]),
 ]
 
 # 派活交代的落点（2026-11-02 主人交代，来路是 10-22 部署环境那条 TEMP 回收改动）：正文一提到临时目录／TEMP，
@@ -165,6 +173,8 @@ PREPUB_SCRIPT_RULES = [
     ("prepub_fifth_thing_probe", "第⑤件事有自己的自检针"),
     ("prepub_sixth_thing_task_ids", "第⑥件事"),
     ("prepub_entries_count_grows", "这个数会随我加词长大"),
+    # 11-19 收紧：--allow-task-id 不再认裸旗（号旁带作废／零行字样才降级成 NOTE）。
+    ("prepub_sixth_thing_flag_not_bare", "不再认裸旗"),
 ]
 
 SECTIONS = [
@@ -285,16 +295,32 @@ def package_root():
     return None
 
 
-def walk_texts(root):
-    """包根下全部文件（跳过 node_modules、.git、__pycache__），返回 [(相对路径, 文本或 None)]。"""
+def walk_texts(root, skip_dirs):
+    """包根下全部文件（目录名落在 skip_dirs 里的整棵跳过），返回 [(相对路径, 文本或 None)]。
+    跳过表不在这里写：调用方从 shared_skip_dirs() 拿那份唯一来源（pre_publish_scan.SKIP_DIRS）。
+    11-19 之前这里自己写着一份 ("node_modules", ".git", "__pycache__")，与那把尺的表差着 .tmp 与 .runtime——
+    同一棵候选根两把尺跳过的东西不一样，往 `.tmp/` 塞一个带名单词的脚本就能只搅红这一把。"""
     found = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in ("node_modules", ".git", "__pycache__")]
+        dirnames[:] = [d for d in dirnames if d not in skip_dirs]
         for name in sorted(filenames):
             full = os.path.join(dirpath, name)
             rel = os.path.relpath(full, root).replace("\\", "/")
             found.append((rel, read_utf8(full)))
     return found
+
+
+def shared_skip_dirs():
+    """共用跳过表的唯一来源：同目录 pre_publish_scan.py 里的 SKIP_DIRS（11-19 起两把尺都从这儿拿）。
+    返回 (表, 问题)。拿不到时返回 (frozenset(), 说明)——调用方记红，并退回「什么都不跳」的保守扫法：
+    宁可多扫出几处可疑，也不静默少扫；「拿不到表」本身不许长得像「跳得干干净净」。"""
+    module, problem = load_pre_publish_scan()
+    if module is None:
+        return frozenset(), problem
+    table = getattr(module, "SKIP_DIRS", None)
+    if not table:
+        return frozenset(), "pre_publish_scan.py 里没有 SKIP_DIRS（共用跳过表被删或改名）"
+    return frozenset(table), ""
 
 
 def cr_bytes(paths):
@@ -630,9 +656,29 @@ def main():
                          % (len(entries), breakdown))
         pkg_root = package_root()
         if pkg_root:
+            # 跳过表只有一份来源：拿 pre_publish_scan.SKIP_DIRS，这里不各写一份（11-19）。
+            # 拿不到＝红，并且什么都不跳地保守扫一遍——少扫的静默比多扫的噪音贵。
+            shared, skip_problem = shared_skip_dirs()
+            check("skip_table_shared", not skip_problem and ".tmp" in shared,
+                  skip_problem or (".tmp 不在共用跳过表里（现表：%s）" % "、".join(sorted(shared))))
+            scanned = walk_texts(pkg_root, shared)
+            raw = {rel for rel, _text in walk_texts(pkg_root, frozenset())}
+            kept = {rel for rel, _text in scanned}
+            under_skip = sorted(rel for rel in raw if rel.split("/")[0] in shared)
+            # 「漏进来」＝跳过的目录下、却出现在扫面里的文件（kept 是扫面）。判反过一次：
+            # 最初写成 rel not in kept，逮的是「被正确跳过的那些」，跳过一生效就自己红。
+            leaked = sorted(rel for rel in under_skip if rel in kept)
+            check("skip_table_applies", not leaked,
+                  "跳过表没生效：跳过的目录下有文件被扫进来了：%s" % "、".join(leaked[:5]))
+            if not under_skip:
+                notes.append("NOTE skip_table_applies 这一格没东西可查：候选根里被跳过的目录（%s）下面没有文件"
+                             % "、".join(sorted(shared)))
+            else:
+                notes.append("NOTE skip_table_applies：被跳过的目录下有 %d 个文件（样：%s），扫面里出现 %d 个（该是 0）"
+                             % (len(under_skip), under_skip[0], len(leaked)))
             outside = []
             envoy = 0
-            for rel, text_of in walk_texts(pkg_root):
+            for rel, text_of in scanned:
                 if text_of is None:
                     continue
                 for lineno, category in scan_text(compiled, text_of):

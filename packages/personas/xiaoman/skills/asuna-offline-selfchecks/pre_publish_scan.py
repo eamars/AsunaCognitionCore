@@ -36,7 +36,10 @@
      连不到库（import 不了、连不上、返回读不出）＝这一格没真查：只打一行 NOTE 明写「没真查」，
      并进最后一行括号里的未判清单，既不停也不拖红——它不该把整支扫描变成一个红。
      零行默认停；确实要留着当历史账的那一枚（修正记录里被换掉的旧号那一族）用 `--allow-task-id <号>`
-     逐个放行，放行当场打一行 NOTE 带文件名——放行是明着记一笔，不是安静。这一格不看 `--expect`（同第⑤件事）。
+     逐个放行，但 11-19 起**不再认裸旗**：只有那枚号出现的每一行里都带着「作废／库里零行」这类字样
+     （已作废、作废、零行、库里零行、0 行、0行），才降级成 NOTE；号旁没这些字样的，旗带着也照旧判红。
+     NOTE 明写这一枚是**调用方自行声明放行**、闸没查该不该放——闸只查那句话在不在，不查它该不该在。
+     放行是明着记一笔，不是安静；旧号照样留在账上，闸不替谁抹。这一格不看 `--expect`（同第⑤件事）。
 
 用法：
     python3 skills/asuna-offline-selfchecks/pre_publish_scan.py [--expect skills/<名字>]... \\
@@ -70,6 +73,9 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# 跳过表只有这一份（11-19 起）：同目录 check_skill.py 的 walk_texts 不各写一份，从这一枚拿。
+# 各写一份的旧形状就是分歧本体——同一棵候选根，两把尺跳过的目录不一样：往 `.tmp/` 塞一个带名单词的脚本，
+# 那把尺跳过它、这一把当正本扫，红只落在其中一把上。
 SKIP_DIRS = {"__pycache__", ".tmp", "node_modules", ".git", ".runtime"}
 ENVOY = "integration/envoy_meters_read.py"
 CATEGORIES = {"person", "group", "account", "site", "host", "email", "other"}
@@ -81,6 +87,9 @@ SKILL_HEAD = "SKILL.md"
 DOC_HEADS = ("SKILL.md", "CHANGELOG.md")
 TASK_ID_FULL_LEN = len("task-") + 32
 TASK_ID_ANY = re.compile(r"(?<![0-9a-f])task-[0-9a-f]{6,}(?![0-9a-f])")
+# 11-19 收紧：--allow-task-id 不再认裸旗。放行只在「那枚号出现的那一行里写着作废／零行」时生效——
+# 闸只查这句话在不在，不查它该不该在（声明内容归调用方），也不删账上那串号。行内没这些字样的判红。
+TASK_ID_MARKS = ("已作废", "作废", "库里零行", "零行", "0 行", "0行")
 # 装载侧的硬要求（读码依据：deepseek-harness 的 packages/skill/skill/src/index.ts 的 SKILL_NAME，
 # 与 packages/skill/skill-filesystem/src/index.ts 的 parseSkillFile／parseFrontmatter，按名字找不抄行号）
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -194,7 +203,9 @@ def scan_hits(root, compiled):
 
 def task_id_hits(root):
     """第 6 件事的扫面：根下每份 SKILL.md／CHANGELOG.md 里手抄的 task 号（11-19 加）。
-    返回 ({_id 号形: [(相对路径, 行号)]}, {号形不合的: [(相对路径, 行号)]})——后者单列，不当零行判。"""
+    返回 ({_id 号形: [(相对路径, 行号, 号旁有没有作废／零行字样)]}, {号形不合的：同形状的表})——
+    后者单列，不当零行判。第三格是 11-19 收紧 --allow-task-id 用的：放行只在该号出现的那一行带着
+    作废／零行字样时才生效，所以这一格必须在扫面就地判，不能事后凭文件名猜。"""
     full, short = {}, {}
     for rel, absolute in walk(root).items():
         if os.path.basename(rel) not in DOC_HEADS:
@@ -205,9 +216,10 @@ def task_id_hits(root):
         except (OSError, UnicodeDecodeError):
             continue
         for lineno, line in enumerate(text.splitlines(), 1):
+            marked = any(mark in line for mark in TASK_ID_MARKS)
             for token in TASK_ID_ANY.findall(line):
                 bucket = full if len(token) == TASK_ID_FULL_LEN else short
-                bucket.setdefault(token, []).append((rel, lineno))
+                bucket.setdefault(token, []).append((rel, lineno, marked))
     return full, short
 
 
@@ -553,7 +565,8 @@ def main():
           % (len(id_hits), sum(len(v) for v in id_hits.values()), len(id_short)))
     for token in sorted(id_short):
         print("     号形不合 tasks._id 的 %s（十六进制 %d 位，不是 32 位——这一枚没按 _id 判，不是干净）：%s"
-              % (token, len(token) - len("task-"), "、".join("%s:%d" % w for w in id_short[token])))
+              % (token, len(token) - len("task-"),
+                 "、".join("%s:%d" % (w[0], w[1]) for w in id_short[token])))
     if not id_hits:
         print("  NOTE 候选里没有 _id 号形的手抄 task 号——这一格没东西可查，不因此判干净。")
     else:
@@ -565,20 +578,32 @@ def main():
         else:
             for token in sorted(t for t in args.allow_task_id if t not in id_hits):
                 print("  NOTE --allow-task-id %s 指向候选里根本没有的号——这一枚没东西可放行。" % token)
-            dead, let_go = [], 0
+            dead, bare_flag, let_go = [], [], 0
             for token in sorted(id_hits):
                 if rows[token]:
                     continue
-                where = "、".join("%s:%d" % w for w in id_hits[token])
+                where = "、".join("%s:%d" % (w[0], w[1]) for w in id_hits[token])
                 if token in args.allow_task_id:
-                    let_go += 1
-                    print("  NOTE 放行（库里零行，明着留作历史账）%s：%s" % (token, where))
+                    unmarked = [(w[0], w[1]) for w in id_hits[token] if not w[2]]
+                    if unmarked:
+                        bare_flag.append("%s（旗带着，可这些行的号旁没有作废／零行字样：%s）"
+                                         % (token, "、".join("%s:%d" % w for w in unmarked)))
+                    else:
+                        let_go += 1
+                        print("  NOTE 自行声明放行（调用方用 --allow-task-id 声明；闸只查号旁那句作废／零行在不在，"
+                              "没查这一枚该不该放）%s：%s" % (token, where))
                 else:
                     dead.append("%s（%s）" % (token, where))
-            print("  库里数到：非零 %d 枚、零行 %d 枚（其中放行 %d 枚）"
-                  % (sum(1 for t in id_hits if rows[t]), sum(1 for t in id_hits if not rows[t]), let_go))
+            print("  库里数到：非零 %d 枚、零行 %d 枚（自行声明放行 %d 枚、号旁没作废字样 %d 枚、没带旗 %d 枚）"
+                  % (sum(1 for t in id_hits if rows[t]), sum(1 for t in id_hits if not rows[t]),
+                     let_go, len(bare_flag), len(dead)))
+            print("  （--allow-task-id 是逃生口，11-19 起不再认裸旗：号旁带「作废／库里零行」这类字样才降级成 NOTE；"
+                  "放行＝调用方自行声明，闸没查该不该放）")
             if dead:
                 stops.append("⑥ %d 枚手抄 task 号在 tasks 里零行：%s" % (len(dead), "；".join(dead)))
+            if bare_flag:
+                stops.append("⑥ %d 枚零行号带了 --allow-task-id 但号旁没有作废字样（不再认裸旗）：%s"
+                             % (len(bare_flag), "；".join(bare_flag)))
 
     print()
     if stops:

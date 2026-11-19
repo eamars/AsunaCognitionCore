@@ -36,6 +36,13 @@ scene_kinds: [home, group]
   `negative_prompt_inactive: At CFG 1 the sampler skips negative conditioning; negative_prompt has no effect at this setting.`、
   `outside_recommended_range: steps=4 is outside the recommended range [8, 12] for anima-turbo-v1-1; the requested value was retained.`）。
   ⇒ **出图 ≠ 参数被接受**：`anima-turbo-v1-1` 推荐步数 8–12，正式图别停在 4 步；CFG 1 下 negative 白写（与「步骤 1」末尾那条一致）。
+  - **另有一档：报了预算警告仍然出图**（11-20，凭 `task-31cc32e0278ee89b1505441858a2cb1b`）。同一趟在
+    `moody-desire-v30` 上提交 1024×1536（＝1,572,864 像素），八发每一发都回
+    `over_pixel_budget: 1572864 total pixels exceeds the tested budget of 1048576 for moody-desire-v30; the job was kept but may be slow or fail with out_of_memory.`，
+    而八发**全都出了图**（每张 20.3–23.4 秒）。⇒ 这一档只许写「报了预算警告仍出图」：**不算失败**（没有一发崩），
+    **也不等于这个尺寸在它预算内**（那句警告自己写着 `may be slow or fail with out_of_memory`）。要判尺寸合不合，
+    现读那条路线回执 `guidance` 里它自己的口径：同一趟 `moody-desire-v30` 的 `guidance` 里根本没有 `size` 那一格，
+    而 `janku-illustrious` 的 `guidance` 写着 `size: [1024,1536]` —— 同一尺寸在那条路线不报警告。
 - **`guidance` 回的是选中那条路线自己的提示词口径**（style／structure／quality_prefix／prompt_scope／best_for／not_for／size／example）：
   照它写，别照记忆写。`job` 是超时续取的凭据——一次调用超时不等于画失败，拿回到的 `prompt_id` 再调一次取回来，别重画。
 
@@ -733,11 +740,31 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 
 - **先判提示词形状再选路**：这条只用于没有既视角色（原创或无指定角色）的情形；有既视角色或有参考图的单不走先出人设图的两段管线，照上面「有既视角色／带参考图的单」那一组。`janku-illustrious`（Illustrious 系）吃 tag，日语自然语言长句基本不听（一枪实测厨房、睡裙、短发全丢，只剩 3:4）。自然语言场景走 `qwen-image-2.1-edit` 两段管线：先出 tag 标准人设图，再把人设图加场景描述喂 edit，场景全落（实测锅物蒸汽保住，硬伤是筷子读成三根）。
 - **`janku-illustrious` 对双人构图的方向词基本不听**：十张里座位只对三张，发色衣服听话。别指望「谁坐左谁坐右」；改描述策略（`facing`／`viewer-left` 类词），或点单时就把座位当抽奖预期写进去。
+- **「A 用一件物件挡住自己的脸 ＋ A 另一只手在 B 身上」这种两人关系：tag 路线在这一格几乎不可用，走吃自然语言的那条**（11-20，凭 `task-31cc32e0278ee89b1505441858a2cb1b`）。
+  `janku-illustrious`（成图 PNG 里 checkpoint 字面 `JANKU_v7_77.safetensors`）九枪**没有一枪摆对**，两种错法：物件整个消失、或物件改由另一个人拿；
+  那批 tag 提示词已经把物件反复点名（`holding book, open book, book in front of face, covering face with book, book covering face`）、
+  负面里还写了 `closed book, no book, book on bed`，仍救不了（字面读自那些 PNG 的 `prompt` 块）。
+  换 `moody-desire-v30`（回执 `guidance` 自述 `short natural-language or tag-like visual description`、`fast 4-step Flux.2 Klein generation`；
+  PNG 里模型字面 `moodyDesireMix_v30_2943512.safetensors`）**第一枪就把那件物件摆到正确的那张脸上**。
+  **别写成「换路线就稳」**：那条路线八枪里这一格摆对的只有两枪（首枪 `d1_flux_oblique` 与交出去那张 `e2_flux_backview`），
+  中间还有一枪 `d2_flux_side` 同样丢本子／男人出画。提示词形状照抄成功那张的 `prompt` 字面：质量前缀一行之后，
+  人物那一句**开头**就是物件＋遮挡（`his entire face hidden behind an open manga volume that he holds up with one hand, his face must not be visible`），
+  同一句里紧跟另一只手在对方身上（`his other arm is wrapped around the girl in front of him`…`palm on her bare hip and upper thigh`）。
+  **交代里那两样别照抄进配方**：`anima` 那一族这趟没试；「把人物手臂数写死」（`he has exactly two arms: one … the other …`）
+  的字面只出现在崩掉的那两枪的 `prompt` 里，摆对的那两枪没有这句 ⇒ 这一句算**待验**，不是已验证写法。
+  张数三个数并存，照各自的账本记：盘上那枚 checkpoint 的 PNG 是 9 张、当趟最终报告写「前 8 张走 `janku-illustrious`」、
+  当趟想法本写 6 张——三个数都是「全没摆对」，取哪个都不改变结论。
 - **CFG 1 那一族：negative 与参数面怎么判**（一层格四层写，逐条带来路，不是通用常识）
   - **不吃 negative 的通路**：`anima-turbo-v1-1` 与角色 anima 那几条（`deepseek-whale-girl-anima-turbo` 实测）——negative 完全不生效，回执自己回 `negative_prompt_inactive`（11-05 回执原文：`At CFG 1 the sampler skips negative conditioning; negative_prompt has no effect at this setting.`）；`moody-anima-mix` 10-13 也回了同一句，那次「不要什么」全写进正向、两张成品干净（凭 `task-554c309c…`）。`qwen-image-2.1-edit` 同样 CFG 1：要求一律正着写进 prompt（实测自己写的一串反面清单一条都没进采样，真正管用的是正面那句「short black chin-length bob」）；11-15 两趟再撞一次——整栏 negative 静默无效，靠 negative 拦不住的那些项，最后都是正向逐句点名收掉的（凭 `task-47d25c9c…`、`task-feb41cdf…`）。
   - **负面栏看着管用的通路**：`janku-v5-illustrious`——10-13 那次正向负面并写、成品没字没水印（凭 `task-9745755f…`）。**这是结果反推，不是机制实测**：服务端没正面说过它生效，别写成「实测 negative 生效」。
   - **解法（要紧的半句）**：CFG 1 路线上「不要什么」必须写进正向提示词的**正文**，不能指望 negative 栏；交图前必过 `read_image`。11-15 实测可用：`task-47d25c9c…` 那句 `the only chest detail is one small solid dark plain crown-shaped mark, filled solid, nothing drawn inside it` 一枪收干净。同一件事在「步骤 1」末尾与「姿势（pose）与现行 prompt 口径」那节的 negative 一格也写着，三处口径一致。
   - **参数进没进采样：分两层判——工具面看不出，不等于服务端没生效。**要判生效没，看服务端回执里的 `applied_parameters`／`effective_parameters`：10-25 一趟 `dry_run` 实测 `cfg=5`／`steps=30` 原样写进 KSampler、`ignored_parameters: []`、只回一条 `the requested value was retained` ⇒ 服务端这一层不吞值（凭 `task-babdac31…`）。而 `generate_image` 工具面的回执只有 `warnings`、没那两格（11-05 键表）⇒ 从工具面**看不出**有没有生效。工具回执既不能当「参数没生效」的证据，也不能当「生效了」的证据；要证就走长路读服务端那两格。
+- **参数被「吞」与参数被「拒」是两种形状，判词别混**（11-20，凭 `task-31cc32e0278ee89b1505441858a2cb1b`）：上面那一族是**收下了不生效**（图照出、回执带 `negative_prompt_inactive`）；
+  `moody-desire-v30` 是**这条 workflow 根本没声明 `negative_prompt` ⇒ 工具当场拒**，回一行 `Error:` 且没有 `prompt_id`（当趟两发都这样）：
+  `IMAGE_OPTION_NOT_IN_WORKFLOW: {"workflow": "moody-desire-v30", "options": ["negative_prompt"], "allowed": ["batch_size", "cfg", "denoise", "height", "input_fit", "input_image", "pose", "prompt", "sampler_name", "scheduler", "seed", "steps", "width"]}`。
+  ⇒ 看见这枚码先想「这条路线没声明这个参数」，不是服务端坏了——同一枚码 11-12 那格是 edit 路线上的顶层 `width`／`height` 撞的（见下面「改图路线」）；
+  这类路线上「不要什么」只有写进正文一条路。**那串 `allowed` 顺手两格读数**：`pose` 在服务端允许里而 `generate_image` 工具面没有 `pose` 键
+  （与「姿势」那节一致：带姿势只能写进 prompt 或走长路）；`height`／`width` 在允许里（这条路线能点名尺寸，跟 edit 路线那条「尺寸跟源图走」不是一回事）。
 - **想要「格数正好」的三视图／设定图，别在一张图里指望提示词压住人数**：`janku-illustrious` 连抽都出四格（两格重复，还会自己长乱码标签或金色边框），把格数写成权重标签、把多余的写进负面都压不住。可行路：三个视角各是一条单子各画一次，用 SVG 拼成横排（`render_svg`）；或先抽一张多格、再用 inpaint 把多余那格刷成背景（inpaint 从 `generate_image` 进不去，只能走长路）。两条代价写清：一条命令 vs 视角之间的一致性漂移。
 
 **改图路线（`qwen-image-2.1-edit`）**

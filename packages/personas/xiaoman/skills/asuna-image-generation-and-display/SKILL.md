@@ -668,7 +668,9 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - 出来是一条**新**的 `blob-…` 行（`kind=image / state=DONE / storage=gridfs / created_at=now`）。底层 `put()` 每次给新 key、**不去重**（去重只在 `put_once`）⇒ 同一张图登记两次＝两行两个 id，要重登记先查一遍库里有没有（查同 sha）。
 - **`source` 决定这行算谁的**：以 `integration:` 开头才算我自己做的，主人私聊和群两边都进得了清单；不传或传别的，只有那个 scope（和同一主人的另一个私人入口）能引，拿去群里会被 `ATTACHMENT_NOT_HER_OWN` 挡。
 - 清单怎么排：**新的在前、一轮最多 6 张**。主人自己的私聊那一拍按 scope 取（本场景 ＋ 配置联动的另一个本人 dm）；群那一拍只列 `integration:` 那批，从**最新 200 行 image** 里筛。所以「被挤掉排名」只在群那条清单上成立，私聊那条看的是 scope 对不对；`created_at=now` 让它排第 1，也顺手把最旧的挤出那 6 张 ⇒ **发之前别先画一张新的**。
+- **一趟登记多张 ≠ 后面几拍都发得出**：当拍那份可发清单只放行最新登记的几条——实测一趟登记 6 张，当拍清单里只出现首尾两枚（11-19 实测，按当场读数记；机制我只核到「新的在前、一轮最多 6 张」那一半，为什么只剩首尾两枚没扒到源码）。要逐张发多张就把**登记和发送绑成一对**：发完这一张再登记下一批，别指望一次登记管后面几拍。
 - 上限 `0 < size ≤ 8 MiB`，超了回执 `registered: false / reason=ATTACHMENT_OVER_LIMIT`（文件照旧在工作区）；魔数认 png／jpeg／webp／gif ⇒ **JPEG 走这条进得了清单**；字节根本不是图就返回 `None` —— 那是「没东西可登记」，不是失败。
+- **发不出去时的补救不是重画，是拿盘上源文件重新登记一次**：零网络、字节原样，新 id 当拍立刻发（`created_at=now` 排第 1，见上面「清单怎么排」那条）。要证「还是同一份」，比的是**我交给登记的那手字节**的 sha 与盘上源文件一致——这只证到送进去之前；库里那行还要再剥一次，带文字块的 PNG 别硬报「库里的 sha 与源文件一致」（剥法见下面「代价」那一小节）。
 
 ### 代价：登记会剥掉 PNG 的文字块，sha 跟着变
 - 像素和其余块一个字节不动，但 `tEXt`／`iTXt`／`zTXt` 被剥 ⇒ **sha 变了、size 少了**（少的字节＝文字块长度 + 12，那 12 是块头块尾开销：4 字节长度＋4 字节类型＋4 字节 CRC）。
@@ -679,6 +681,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - 按**路径**读盘上的图时，`vision.py` 的 `path_image` 也会登记一条，但来源前缀是 `file:<路径>`、scope 是**那个任务自己的** scope —— 它不算我做的图。
 - `read_image` 看过不改变清单：speak 的 picture 引不在 `image_artifacts_from_program` 里的 id 会被退（`ATTACH_ARTIFACT_NOT_IN_CONTEXT` 只认**这一轮列出的那些 id**）。
 - 所以要发哪张，就照抄**这一轮**清单里的 `artifact_id`；「我刚才看过它」不是依据，上一轮的 id 也可能已经掉出那 6 张。
+- **报告里交出去的 `artifact_id` 不能隔拍拿去发**：同一批字节登记两次就是两行两个 id（上面 `put()` 不去重那条），隔拍只剩源文件 sha 能把两个 id 对回同一份（11-19 实测：同一张图两次登记，两个 id 不同、源文件 sha 同一枚）。所以发之前一律照抄**当拍清单**里的那串，别拿上一拍报告里写过的 id 当凭据。
 
 ### 判据：图发出去没有，账面上可能永远看不见
 - 适配器**等不到自己那声 ack** 那一支会先按 `unknown` 交回就直接 return，**不进 `settle()`**：库里那行留 `delivery_state=UNKNOWN / platform_message_id=null / delivery_basis=unknown`，**`sends.jsonl` 连这一行都不落**。NapCat 事后回的那格（`retcode 1200 / reason=platform_send_timeout`）走的是迟到回执那条：`late_acks.jsonl` 里会留下一条带 publication 与 attempt 的记录，并把库里那行的回执补成 1200，`platform_message_id` 仍然是 null。契约照旧：`unknown` 不重发、不读回。

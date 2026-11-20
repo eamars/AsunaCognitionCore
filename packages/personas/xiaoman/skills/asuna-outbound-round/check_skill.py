@@ -3,7 +3,7 @@
 
 这份技能是「出门那一轮」的规则集，所以这里查四件事：
 1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译、换行是 LF（读字节数 CR，文本模式那把尺看不见 CR）；
-2. 内容要点：开口前六查、回看四条、一条边界的字面要点都在；「这条道上有哪几份技能——别编名字」那一节的
+2. 内容要点：开口前八查、回看四条、一条边界的字面要点都在；「这条道上有哪几份技能——别编名字」那一节的
    真名单、两条规矩在（ROSTER 逐条判）；front matter 的 scene_kinds 覆盖 home／group／dm；
 3. 不带别人的个人信息：禁词表（人名／群名／称呼）与字面编号（#数字）都不该出现在正文；
    这台机器的私密名单可达就真扫（命中只报类别与名单行号，词本身不打印）；配不上、或名单在却解析出 0 条有效词，都记一条红
@@ -54,6 +54,9 @@ PRECHECKS = [
     # 第 6 查（11-20 加）：带图的消息，评论那张图之前先当场真拉一次；note 那句「图已随回合给你」不可信
     ("precheck_image_pull_before_comment", "先当场 `read_image` 真拉一次"),
     ("precheck_image_note_untrusted", "不用再 read_image」不可信"),
+    # 第 7、8 查（11-21 加）：错字扫描＋「未说」当场留群笔记；关键词挑只在正文这两条出现的字面，改前旧正本里没有
+    ("precheck_typo_rescan_one_line", "只重打那一行"),
+    ("precheck_unsaid_note_in_scene", "未说：<那一拍行号>"),
 ]
 
 # 回看四条
@@ -312,7 +315,7 @@ def main():
     if failed:
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
-    print("%d/%d 通过：六查、回看、边界要点齐全，没夹个人信息%s。" % (total, total, leak_note))
+    print("%d/%d 通过：八查、回看、边界要点齐全，没夹个人信息%s。" % (total, total, leak_note))
     return 0
 
 

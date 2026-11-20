@@ -134,8 +134,8 @@ BASE = "http://%s:%s" % (e["host"], e["port"])
 m = json.loads(urllib.request.urlopen(BASE + "/.well-known/agent-manifest.json", timeout=20).read())
 print("MANIFEST_KEYS", sorted(m.keys()))
 r = urllib.request.Request(BASE + "/project/resolve",
-    data=json.dumps({"domain": "general", "content_mode": "sfw", "input_type": "text",
-                     "input_mode": "text_to_image", "prompt_granularity": "detailed"}).encode(),
+    data=json.dumps({"domain": "general", "input_mode": "text_to_image"}).encode(),
+    # 11-20 现读：content_mode / input_type / prompt_granularity 已废（收但忽略，回 deprecated_selector 警告）；可用字段与 selectors 见「步骤 1」（run b9e37568）
     headers={"Content-Type": "application/json"})
 res = json.loads(urllib.request.urlopen(r, timeout=40).read())
 print("SELECTED", res.get("selected_workflow"))
@@ -143,31 +143,38 @@ for x in (res.get("matches") or [])[:3]:
     print("CAND", x.get("workflow_id"), "ready=", x.get("ready"), "score=", x.get("score"))
 ```
 
-- 期望：`ENDPOINT_KEYS ['host', 'image', 'napcat']`、`IMAGE_ENDPOINT {'host': …, 'port': …}`（host 与 port 是现读值：取自集成配置的 `endpoints.image`，只在 `integration_test`／`integration_start` 那一趟里读得到——跑一遍 `json.load(open(os.environ['ASUNA_INTEGRATION_CONFIG']))` 再打印；技能不存端口，旧正文写过的一个端口数已作废）。
+- 期望：`ENDPOINT_KEYS` 含 `image`（11-20 现读该机为 envoy／host／image／napcat／old-home，别拿旧三件套那串判「端点没了」）、`IMAGE_ENDPOINT {'host': …, 'port': …}`（host 与 port 是现读值：取自集成配置的 `endpoints.image`，只在 `integration_test`／`integration_start` 那一趟里读得到——跑一遍 `json.load(open(os.environ['ASUNA_INTEGRATION_CONFIG']))` 再打印；技能不存端口）。
 - `resolve` 不加载模型、不排队，所以这一步**不会生成新图**；已有产物在不在，用步骤 3 的 job/history 查，别靠重画来"确认"。
 - 配置里没有 `image`：停，回报「集成配置里没有 image 端点」。加端点要改集成 profile 并重启宿主才出现转发——
   这两件都不在本次授权里。
 
 ## 步骤 1：读服务自述，别把根路径当 API
 
-`GET /.well-known/agent-manifest.json`（约 328 KB，**按键取，别整份塞进上下文**）。
+`GET /.well-known/agent-manifest.json`（2026-11-20 现读 37,046 字节——旧正文「约 328 KB」作废，run 81b57d8b；按键取仍是习惯，现在整读也不挤正事）。
 `protocol = project-comfyui-agent/v1`，`api_base = /project`，`authentication = none`。
 
 服务自己的 instructions 里，跟这条流程直接相关的：
 
 - 根路径 `/` 是原生 ComfyUI UI，不是 agent 首选入口；首选清单入口就是这个 manifest，备用 `/project/agent-manifest`、`/project/openapi.json`。
-- 路由未知时 `POST /project/resolve`（`domain` / `content_mode` / `style` / `input_type` / `input_mode` / 可选 `family`、`prompt_granularity`），**只选 `ready=true` 的条目**，并把该 workflow 的 models / capabilities / routing / agent_hints 一起用。
-- `GET /project/workflows/{workflow_id}` 给出 API 格式 graph + `parameter_schema`（允许字段、必填、真实默认值）。
+- 路由未知时 `POST /project/resolve`（`domain` / `style` / `input_mode`，词从 `route_table[].selectors` 现取；可选 `family`、`workflow` 点名看单条、`limit` 1–20 默认 1），**只选 `ready=true` 的条目**，并把 matches[0].workflow 里的 parameter_schema / prompting / agent_hints 一起用。**2026-11-20 起 `content_mode` / `input_type` / `prompt_granularity` 已废：收了不用，回 `deprecated_selector` 警告**（run b9e37568）。input_mode 可用值：text-to-image / image-edit / extend / image-to-image / inpaint / face-reference / openpose-control。
+- `GET /project/workflows/{workflow_id}` 给出 `parameter_schema`（允许字段、必填、真实默认值）与 prompting；11-20 回执形状是 `{"workflow": 条目, "prompt": API 格式 graph}`——graph 在 `prompt` 键里，别和 `parameters.prompt` 混（run 46ffbe83）。
 - `POST /project/generate`（或 `/project/prompt`）返回 `prompt_id`；`GET /project/jobs/{prompt_id}` 轮询到 `succeeded` 或 `failed`。
 - 输入图先 `GET /project/inputs` 或 `POST /upload/image`（multipart，`type=input`，每次用新的唯一 basename）；**上传响应是输入文件名，不是产物引用**。
-- `parameters.prompt` 必须显式给（空串合法），`subject` 只是兼容别名；`seed` 省略即随机；未知字段会被拒（`ignored_parameters` 恒空）。
+  手拼 multipart 的 boundary 拼错，服务端直接 500 不带 body；`type=input` 字段照 manifest 给全（11-20 首趟 500 的教训，run 1f79864b）。
+- 服务端 11-20 的读面（operations 端点数 17：GET 11／POST 5／DELETE 1，run 04d9e376）：新增 `GET /project/routes`（resolve 的 GET 形状）、`GET /project/workflows`（全路线＋就绪）、`GET /project/models` 与 `/project/models/{model_id}`（模型／适配器档）、`GET /project/resources`（显存快照＋上限）、`DELETE /project/inputs/{name}`。models 当拍 32 档、resources 读到 max_pending_jobs 32（与旧账一致）与 max_input_pixels 16777216（run dbcb4e39——models／resources 本趟实读过，routes／单档／DELETE 没碰）。
+- models 账 11-20 新档（run dbcb4e39）：NIKKE/Rapi 两档（animagine 的 best_for 现含 NIKKE/Rapi，run 79ac3ea6）、`ai-girls-aiseak-anima-lora`（多角色一枚）、`controlnet-openpose-sdxl-xinsir`、`dwpose-pose-extractor`、`anima-control-pose-preview2`（正文 11-04 记的 `anima-control-pose` 在档、带 Preview-2 后缀）、`anima-ipadapter-character-reference-v10`、`ipadapter-plus-face-sdxl-vith`；glm／grok／kimi girl 的 LoRA 没有单独档而路线 ready——报现象，机制没扒。**放大模型不在这 32 条账里**（超分 11-20 实测在线，见下面 upscale 格），别拿这张单判超分没装。
+- 参考图六种用途（`input_files.reference_uses`，run b9e37568；除标「实测」者外＝**服务端 2026-11-20 当拍字面、未实测**）：image-edit（qwen-edit）、**extend（qwen-edit＋`extend` 往外扩画幅——真 outpaint，11-20 实测见「改图与 `generate_image`」）**、image-to-image（15 条，denoise 默认 0.65）、inpaint（`moody-anima-inpaint`／`anima-turbo-inpaint`，mask 宽高比须同原图、默认读红色通道白重绘黑保留、`mask_channel=alpha` 走透明通道）、face-reference（`sdxl-face-reference-ipadapter`／`anima-turbo-face-reference-ipadapter`，IPAdapter 非 FaceID；anima 条 `ipadapter_weight` 默认 0.6，0.8–1.0 连衣服背景一起抄）、openpose-control（18 条，与 11-04 名单同集合，本趟逐条对过）。`moss-image-sft-t2i` 是唯一 text-only 路线。
+- characters 格（run b9e37568，未实测）：八条吉祥物角色路由按 domain／别名触发（大肥鱼、Claude娘、千问娘、哈基米、智谱娘、Grok娘、Kimi娘），把她写成成年人；`loras.character` 可调弱 LoRA——工具面给不了这个键（见「改图与 `generate_image`」工具面那格）。
+- `POST /project/images/transform`（即时裁／放，不进队列不用模型；run b9e37568，**服务端 2026-11-20 当拍字面、未实测**）：结果落成 `transformed/` 下新输入文件；crop 支持像素框／aspect＋anchor（center／top／…／四角）／around:face（取景用最大脸，framing head／head-and-shoulders 默认／upper-body，找不到脸回 `face_not_found`）；resize 支持 width/height/scale/max_side（只缩小），先裁后缩、放大只插值并回 `upscaled_without_model`。生成产物可直接喂它转成输入文件。
+- `POST /project/images/upscale`（模型超分，**11-20 实测**，run 1f79864b）：`{"image": 输入文件名或 /view URL, "scale": 2}`，排队轮询 job_url；实测 1024×1536→2048×3072、succeeded、elapsed 4797 ms、产物 6,916,293 字节 PNG、预览尺度下干净；不点名 `look` 时上传图默认 photo（回 `upscale_look_default`；anime＝4x-AnimeSharp 非商用协议、photo＝Real-ESRGAN x4plus，README 提醒会抹平照片细纹理）。与本机 `asuna-image-upscale` 那条 run_sr.py 路**没做过质量比对**——两条并存，换路先测。
+- `parameters.prompt` 必须显式给（空串合法）；`subject` 服务端 11-20 起标 `deprecated: true`，与 prompt 冲突一起给会被拒（run 46ffbe83）；`seed` 省略即随机；未知字段会被拒（`ignored_parameters` 恒空——11-20 extend 枪回执里它就是空表）。
 - `compatibility_notes`、`selection.not_for`、模型兼容性与 prompting 是**约束**，不是建议。
-- `prompt_contract.limits`：prompt ≤ 8000 字符，宽高 64–2048 且为 8 的倍数，batch ≤ 4，steps ≤ 100。
+- 限额逐路线放在 `parameter_schema`（顶层 `prompt_contract` 键 11-20 已没有，run 81b57d8b）：anima-turbo-v1-1 现读 prompt ≤ 8000、宽高 64–2048 且 8 的倍数、batch_size 1–4、steps 1–100——数值与旧正文一致，位置变了（run 46ffbe83）。
 
-路由读数（`route_table` 全为 ready）：文生图可用 `qwen-image-2.1-t2i`（建议 steps 25–50、cfg 1）
+路由读数（11-20 现读 22 条全 ready，run 79ac3ea6）：文生图可用 `qwen-image-2.1-t2i`（**该路线参数面没有 steps 属性**、推荐只剩 cfg 1——旧正文「建议 steps 25–50」现读查无出处，作废，run dbcb4e39）
 或 `anima-turbo-v1-1`；`*-edit` / `inpaint` / `face_image` / `control_image` 是另外的输入契约，别把 `input_image`
-发给没声明图输入的路由。**这台机器没有 photoreal 专用路由**：`style:"photoreal"` 不报错，`resolve` 会退回通用
-anime 路由（实测 `selected_workflow=anima-turbo-v1-1`）。想要照片感就写进 prompt，并预期结果偏插画——
+发给没声明图输入的路由。**写实这格 11-20 变了**：qwen 那条的 selectors 明列 photo／photorealistic／real world，moody-desire 的 best_for 原文写着「Qwen-Image stays the default photo route」（run 79ac3ea6）——照片有正牌入口了。
+`style:"photoreal"` 现在 resolve 怎么落**没验**（resolve 是 POST，11-20 没发）——旧结论「退回 anime、结果偏插画」当未核实旧档留着。
 不要把 resolve 的选择当成「这台机器认为这是照片」。
 
 当前路线面：`generate_image` 的 `list_routes` 条数现读（出处：`list_routes=yes` 回执的 `workflows`；技能不存这个数），含改图路线（必填／可选／不收原图三种标记都有）。
@@ -176,9 +183,9 @@ anime 路由（实测 `selected_workflow=anima-turbo-v1-1`）。想要照片感�
 先按目标选路由：
 
 - 人物／动漫向：默认走 anime fallback（实测 `resolve` 给的就是 `anima-turbo-v1-1`），不用点名。
-- 静物、要照片感：可以点名吃自然语言的那条（`qwen-image-2.1-t2i` 这类，建议 steps 25–50、cfg 1）。
-- 这台机器没有 photoreal 专用路由（上面实测）：`style:"photoreal"` 会退回 anime，想要照片感就写进
-  prompt，并预期结果偏插画。
+- 静物、要照片感：点名 `qwen-image-2.1-t2i`（11-20 起它就是 photo 路线；steps 不可设——schema 里没这个属性，默认即推荐，run dbcb4e39）。
+- 旧「没有 photoreal 专用路由」是 resolve 行为的旧实测，11-20 没重测；字面层面 photo 词已归 qwen 条（上面 11-20 读数）。
+  想要照片感仍写进 prompt；「偏插画」是旧 resolve 行为的预期，未重测。
 - 提示词跟着选中 workflow 的 prompting 口径写（`prompting` / `prompt_granularity`），多数要英文。
 - **CFG 1 的路由不吃 `negative_prompt`**：「不要什么」必须写进正向提示词（如 `no text, no watermark`），
   单开 negative 字段等于没说。
@@ -200,7 +207,7 @@ anime 路由（实测 `selected_workflow=anima-turbo-v1-1`）。想要照片感�
 `GET /project/jobs/{prompt_id}`，`state=succeeded` 后取输出里的 `/view?...` 相对 URL；
 manifest 的 `result_contract.download_urls` 写的就是这个口径（`/project/jobs/{prompt_id}` 返回的相对 `/view` URL）。
 
-- 走原生 `/prompt` 的图（例如服务端做小副本）用 `GET /history/{prompt_id}` 交叉核对：`outputs` 的
+- 走原生 `/prompt` 的图（例如服务端做小副本）用 `GET /history/{prompt_id}` 交叉核对（11-20：operations 17 端点清单里**没有** `/history`——它是原生 ComfyUI 路由、他 README 说原生客户端可用；本趟没打它，在不在未核实）：`outputs` 的
   `filename` / `subfolder` / `type` 拼成 `/view?filename=…&subfolder=…&type=output`。
 - 别凭 prefix 猜编号。`sm_a_00001_.webp` 这种名字要靠 history 里的节点参数确认是哪一张。
 - 只有 `succeeded` 才导。`failed` 时把 `state` / `phase` 与服务端错误原样回报，不连着重试——
@@ -405,6 +412,8 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 - `list_routes=yes` 回来的路线条数现读、技能不存（出处：回执 `workflows` 数组；两处旧写死数已拿掉）：`qwen-image-2.1-edit` 标 `source_image: required`；
   其余多数标 `optional`（能纯文字画、也能改图，数目现读）；不带 `source_image` 标的 t2i 路线（如 `qwen-image-2.1-t2i`）不收原图。
 - **带 `source_image` 不写 workflow 时，服务自己挑一条改图路线**（实测），不必点名 edit 那条。
+- **`extend`＝真 outpaint（11-20 实测，长路 `POST /project/generate`，run 6c750521＋4051451a）**：qwen-edit 带 `extend:{right:512}`，1024×1536→**1536×1536**（输出＝原图＋扩展边，每边 ≤4096）；提交回执 `extend` 对象回显 output_size／drawn_at（没出 `extend_drawn_smaller`＝没缩小画），提交与 job 的 warnings 皆空（**没出 `extend_original_not_kept`**）；job elapsed 104 s。逐像素比对原区：diff 只落在贴缝右侧 63 px 一条带（bbox (961,0,1024,1536)，原区非零像素 5.32%、L>8 占 0.703%）⇒ **原区没有被重绘**；`read_image` 亲看对得上（人物、书、构图未动，新边床面自然延续）。机制（他 README）：灰画布＋提示词前缀＋贴回前按原区仿射对齐＋每边新侧 64 px 渐变；超过约 2.4 MP 的画布缩小生成再放大。**工具面 `generate_image` 没有 `extend` 键**——这一枪是长路发的；提示词只描述新区域。
+- **工具面键位（2026-11-20 14:2x 当拍工具表）**：`generate_image` 参数面**没有** `pose`／`pose_strength`／`extend`／`loras.character`／`input_fit`／`mask_image`——**服务端有 ≠ 我当场能指定**；这类单子照旧走长路 `POST /project/generate` 或写进 prompt（与「姿势」那节 11-05 那句同口径，那节原文未动）。
 - edit 路线自述（`list_routes` 里读到的）：输出尺寸跟着原图走（按 32 的倍数取整）；提示词写成直接指令——
   改什么、点名什么必须不动。
 
@@ -421,7 +430,7 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 - `IMAGE_WORKFLOW_NEEDS_SOURCE` —— 这条路线要原图；
 - `IMAGE_WORKFLOW_NEEDS_MORE_PICTURES` —— 这条路线还要别的图，回执带 `needs:["mask_image"]` 说明缺什么。
 - **inpaint 路线从 `generate_image` 永远进不去**：工具参数面根本没有 `mask_image`，所以它们不进 `list_routes` 清单
-  （edit 路线的 not_for 会把遮罩改动指到 inpaint 路线，那些名字在清单里找不到，别去工具里找它们）。
+  （edit 路线的 not_for 把遮罩改动指到 inpaint 路线——服务端 11-20 已给名：`moody-anima-inpaint`、`anima-turbo-inpaint`（run 79ac3ea6，未实测）；`generate_image` 清单收不收它们没重测，别去工具里赌）。
 
 **归属边界：改了谁的图，结果算谁的**
 
@@ -492,9 +501,9 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 
 **prompt 现行口径（服务端原文）**
 
-- `parameters.prompt` 必填（空串合法），≤8000 字符；宽高 64–2048 且为 8 的倍数（MOSS-Image 取 16 的倍数）。
+- `parameters.prompt` 必填（空串合法），≤8000 字符；宽高 64–2048 且为 8 的倍数（MOSS-Image 取 16 的倍数；11-20 的 instructions 原文仍这样写）。anima-turbo-v1-1 现读默认：896×1152、steps 12（推荐 8–12）、cfg 1.0、sampler `er_sde`、scheduler `simple`、filename_prefix `anima_turbo_v1_1`（run 46ffbe83）。
 - anima-turbo-v1-1 的 `prompting.structure`：quality/meta、subject count、character/series、appearance、outfit、**pose**、composition、environment、lighting（pose 这一格是新是旧没有旧版原文可比，未核实）。
-- negative：服务端现在明说了：`negative_prompt_effective_at_default: false`，「CFG 1 skips negative conditioning. Negative text has no effect at the default setting; CFG changes can affect distilled-model quality.」——和上文「CFG 1 的路由不吃 `negative_prompt`」一致，「不要什么」仍写进正向提示词。negative 字段仍被接受，有默认值（`worst quality, low quality, score_1, …`）。
+- negative：服务端现在明说了：`negative_prompt_effective_at_default: false`，「CFG 1 skips negative conditioning. Negative text has no effect at the default setting; CFG changes can affect distilled-model quality.」——和上文「CFG 1 的路由不吃 `negative_prompt`」一致，「不要什么」仍写进正向提示词。negative 字段仍被接受，默认值全文（11-20 现读，run 46ffbe83）：`worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, artist name, chromatic aberration`。
 - 内容：manifest `content`：「Resolve never routes by content: the prompt decides what an image shows … When the selected route has prompting.content_lines, add its 'explicit' or 'safe' line to the prompt. Explicit images must show adults.」我们只画全年龄：选中路线有 `prompting.content_lines` 时，把它的 `safe` 那一行加进 prompt。
 - 其他：保存的 PNG 带 ComfyUI prompt 元数据（输入文件名换成 `[input image]`）；发到不该看到 prompt 的地方前要剥（本技能「发出去的图不带提示词」一节已覆盖）。
 - 路线条数：现读 `list_routes=yes`（技能不存条数；11-04 那一趟读到的数已按现读口径从正文拿掉，正文几处旧写死数一并改成现读句式）。
@@ -771,9 +780,9 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 
 - **尺寸跟源图走，别传顶层 `width`／`height`**：传了会被 `IMAGE_OPTION_NOT_IN_WORKFLOW` 拒（`options` 只收 `steps`／`cfg`／`sampler_name`／`scheduler` 四个键，`input_fit` 也报没声明）。要什么尺寸，靠源图本身决定。
 - **喂 edit 前先裁底图的单人格**：多格人设表（一张图里好几个视角）直接喂，有带出多个人或版式残留的风险。先从表里裁出单个人物那一格，按目标构图长宽比等比放大到输出尺寸（输出尺寸跟原图走、只按 32 取整），再当 `source_image`。实测把设定表里的半身格裁出放大后，一枪出了单人、不带设定表版式的图。裁与放大在家里沙箱用 Pillow 做。
-- **拿多格设定页当底，别走 latent 图生图路线**：`janku`、`anima-turbo` 这类会把整页版式吸进成品（画出一堆重复人物）；想换构图只能走指令编辑式路线，且记住它输出锁源尺寸。本机没有 face-reference 路线可用。点这类单，brief 里直接指定编辑式路线。
+- **拿多格设定页当底，别走 latent 图生图路线**：`janku`、`anima-turbo` 这类会把整页版式吸进成品（画出一堆重复人物）；想换构图只能走指令编辑式路线，且记住它输出锁源尺寸。face-reference 服务端 11-20 有两条了（「步骤 1」六用途那格，run 79ac3ea6，未实测）——**工具面 list_routes 收没收没测过**，点这类单先看当回合清单；收不进就照旧，brief 里直接指定编辑式路线。
 - **换视角／机位类编辑：它默认死保源图构图重心**：要顶视只给到斜俯拍，要脸不入镜才成功切到下巴。提示词必须显式写死什么在画外（如 `chest and shoulders out of frame, only thighs and lap visible`）才压得动机位；这条路线 CFG 1，负面词同样无效。
-- **要目标尺寸的改图单，先确认有没有真 outpaint 路线**：指令编辑式路线输出锁源图尺寸，能上目标尺寸的路线都是整幅重绘、人物会走样。先查路线再对外报尺寸，或者不问尺寸、只承诺「内容不动」这一条。
+- **要目标尺寸的改图单：真 outpaint 有了**——qwen-edit 的 `extend`（11-20 实测见「改图与 `generate_image`」那格：原区贴回未重绘、输出＝原图＋扩展边）。除 `extend` 外能上目标尺寸的路线仍是整幅重绘、人物会走样；`extend` 也拼不出目标尺寸时先查再对外报，或不问尺寸、只承诺「内容不动」。工具面没有 `extend` 键，这路走长路。
 - **多条文字修改并进同一个 pass**：改梗图里多格中文文字时，一次只改一条标题反而会丢或挪走邻格的文字（实测第 3 次 pass 改对两条却掉了一格，第 4、5 次补它分别把字写到错的格子、把邻格标题糊掉；第 6 次一条中文指令同时锁死位置、参照邻格字体，一次成功）。指令用中文写，明写「字体字号基线与某某那格一致」。梗图换主角＝1 次全量替换 pass ＋ 最多 1～2 次定点文字 pass，每个 pass 必须 `read_image` 复核后才决定留不留。这个 pass 额度只用在点单人明确要「改图」的单子里；不是给我自己修坏图用的，「只画一次」那一节照旧管我自己的生成。
 - **自画像配方**：参考正本（角色设定图）→ 量尺寸、补成 3:4 → `qwen-image-2.1-edit` 喂整张设定图做换场景 → 交图前必须裁眼区放大，核对泪痣颗数与位置、发型长度。正本格三条（黑 bob＋刘海／一颗泪痣／白衫胸口鲸标）逐条对着看，不靠整图目测（实测首图痣整颗没出、二图痣多成两颗，缩略图都看不出）。
 
@@ -811,7 +820,7 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
   等），本技能文件就在这里；生图探测脚本要写进 napcat-qq 通道包候选的 `integration/`（`project: "napcat-qq"`，
   `integration_test` 把它冻结成 `/app`）——两个候选不是一个地方，集成沙箱也不挂载技能目录。
 - `/integration/config.json` 在普通 `sandbox_run` 里读不到（那边也没网络）。别把「我读不到」报成「端点不存在」。
-- manifest 328 KB，整份读进上下文会挤掉正事；按键取（`operations` / `prompt_contract` / `prompting` / `route_table` / `result_contract`）。
+- manifest 11-20 现读约 37 KB（旧「328 KB」作废，run 81b57d8b）；按键取（`operations` / `route_table` / `resolve` / `poses` / `characters` / `image_tools` / `input_files` / `result_contract` / `warning_codes` / `error_codes`——`prompt_contract` 与顶层 `prompting` 已没有，参数口径进了各路线）。
 - `resolve` 的 `style` 只是路由选择器，不是画面保证；`not_for` 与 `compatibility_notes` 是约束。
 - 串行调度：一次只有一个 named workflow 进原生 worker，切 workflow 会卸模型。别连着排三张图然后干等。
 - **改图也排队**：一次改图排队约 85 秒、生成约 60～88 秒，一张卡；「提交成功」离出图还有一两分钟，别连烧。

@@ -87,7 +87,7 @@ PINS = [
     # 全身扩展格
     ("pin_fullbody_pillow", "先用 pillow 把原图拼贴进一张竖版画布（原图居上、下半留白）"),
     ("pin_fullbody_beats_lock", "绕开了 edit「锁源尺寸」那个缺口"),
-    ("pin_true_outpaint_other_slot", "**真 outpaint（无 mask 参数那种往四周扩）超分治不了，那是另一格，别混写。**"),
+    ("pin_true_outpaint_other_slot", "**真 outpaint（无 mask 参数那种往四周扩）超分治不了——超分只放大、不添画布；那是另一格，别混写。**"),
     # 对外口径
     ("pin_three_words", "**「超分＋整图重描＋补角」**"),
     ("pin_no_fidelity_promise", "不保忠于原稿"),

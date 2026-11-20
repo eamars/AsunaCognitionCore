@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 直路是行动脑侧的 generate_image（本机与 QQ 来的任务同一条路：直接调用，图落任务工作区并自动登记成我自己的图，read_image 看过一眼后随消息发出去；外部公开生图服务只给链接、图发不出去，要发出去的图不走那条；它不可用或要工具参数面给不了的模型／参数时才走长路）。长路（探针 → integration_test → import_integration_artifact）：一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 的条数现读、技能不存（每次 list_routes=yes 回来数一遍；标 source_image=required 的改图路线必填、标 optional 的可选、不带这个标的 t2i 路线不收原图），配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；所有对话（家里本机私聊、两条 agent 线、peer 线、QQ）发图都只有 speak 的 picture part 这一条路：看上下文 image_artifacts_from_program，artifact_id 照抄这一轮清单里列出的值（它既不是路径也不是文件名）、可以不带话、正文不写路径/文件名/见图；一回合最多一张是我自己的规矩，speak 一条里能带几张 picture 未重测；群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN；`attach_image` 这个工具 11-13 那版起全线拿掉，不想说话就什么都不调用。含大小上限与服务端小副本做法、picture 那一项的拒绝码（回执点名哪条；旧 `attach_image` 那套「工具错误、同回合可改」随工具一起退役）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。含人像实测三则（构图决定连帽衫拉链的保守字面、手持自拍别指望手机进画、交图前按局部放大复核）与 11-05 现读参数面（工具面无 pose、回执有 warnings）。附零依赖离线自检 check_skill.py。
+description: 直路是行动脑侧的 generate_image（本机与 QQ 来的任务同一条路：直接调用，图落任务工作区并自动登记成我自己的图，read_image 看过一眼后随消息发出去；外部公开生图服务只给链接、图发不出去，要发出去的图不走那条；它不可用或要工具参数面给不了的模型／参数时才走长路）。长路（探针 → integration_test → import_integration_artifact）：一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 的条数现读、技能不存（每次 list_routes=yes 回来数一遍；标 source_image=required 的改图路线必填、标 optional 的可选、不带这个标的 t2i 路线不收原图），配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；所有对话（家里本机私聊、两条 agent 线、peer 线、QQ）发图都只有 speak 的 picture part 这一条路：看上下文 image_artifacts_from_program，artifact_id 照抄这一轮清单里列出的值（它既不是路径也不是文件名）、可以不带话、正文不写路径/文件名/见图；一回合最多一张是我自己的规矩，speak 一条里能带几张 picture 未重测；群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN；`attach_image` 这个工具 11-13 那版起全线拿掉，不想说话就什么都不调用。含大小上限与服务端小副本做法、picture 那一项的拒绝码（回执点名哪条；旧 `attach_image` 那套「工具错误、同回合可改」随工具一起退役）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。含人像实测三则（构图决定连帽衫拉链的保守字面、手持自拍别指望手机进画、交图前按局部放大复核）与 11-05 现读参数面（工具面无 pose、回执有 warnings）。含「能力面」一节：11 个只读口的现读命令与当拍量、逐能力的工具面键位与长路配方（upscale／transform／inpaint／face-reference／pose／character LoRA／extend／dry_run 校验）、八条角色路线对照，以及「与角色脑的指令相抵时先问一次」那条硬口径。附零依赖离线自检 check_skill.py。
 scene_kinds: [home, group]
 ---
 
@@ -161,12 +161,12 @@ for x in (res.get("matches") or [])[:3]:
 - `POST /project/generate`（或 `/project/prompt`）返回 `prompt_id`；`GET /project/jobs/{prompt_id}` 轮询到 `succeeded` 或 `failed`。
 - 输入图先 `GET /project/inputs` 或 `POST /upload/image`（multipart，`type=input`，每次用新的唯一 basename）；**上传响应是输入文件名，不是产物引用**。
   手拼 multipart 的 boundary 拼错，服务端直接 500 不带 body；`type=input` 字段照 manifest 给全（11-20 首趟 500 的教训，run 1f79864b）。
-- 服务端 11-20 的读面（operations 端点数 17：GET 11／POST 5／DELETE 1，run 04d9e376）：新增 `GET /project/routes`（resolve 的 GET 形状）、`GET /project/workflows`（全路线＋就绪）、`GET /project/models` 与 `/project/models/{model_id}`（模型／适配器档）、`GET /project/resources`（显存快照＋上限）、`DELETE /project/inputs/{name}`。models 当拍 32 档、resources 读到 max_pending_jobs 32（与旧账一致）与 max_input_pixels 16777216（run dbcb4e39——models／resources 本趟实读过，routes／单档／DELETE 没碰）。
+- 服务端读面（operations 端点 17 个：GET 11／POST 5／DELETE 1，run 04d9e376；11-20 晚间逐口打了一遍）：`GET /project/routes`（resolve 的 GET 形状，晚间带 `domain=deepseek` 实打）、`GET /project/workflows`（全量＝422,935 字节）、`GET /project/workflows/{workflow_id}`（晚间单条打了角色条、`anima-turbo-inpaint`、`sdxl-face-reference-ipadapter`、`qwen-image-2.1-edit`）、`GET /project/models`（32 档，run dbcb4e39）、`GET /project/resources`（`max_pending_jobs` 32、`max_input_pixels` 16777216、`cpu_vae` true）、`GET /project/poses`／`/project/inputs`／`/project/jobs/{prompt_id}`／`/project/openapi.json`（22,935 字节、paths 21）、`DELETE /project/inputs/{name}`（晚间实测：`deleted: true`、`size_bytes`、`remaining_bytes`）。**只剩 `GET /project/models/{model_id}` 没打（未实测）**。逐口的量与用法在「能力面」那一节。
 - models 账 11-20 新档（run dbcb4e39）：NIKKE/Rapi 两档（animagine 的 best_for 现含 NIKKE/Rapi，run 79ac3ea6）、`ai-girls-aiseak-anima-lora`（多角色一枚）、`controlnet-openpose-sdxl-xinsir`、`dwpose-pose-extractor`、`anima-control-pose-preview2`（正文 11-04 记的 `anima-control-pose` 在档、带 Preview-2 后缀）、`anima-ipadapter-character-reference-v10`、`ipadapter-plus-face-sdxl-vith`；glm／grok／kimi girl 的 LoRA 没有单独档而路线 ready——报现象，机制没扒。**放大模型不在这 32 条账里**（超分 11-20 实测在线，见下面 upscale 格），别拿这张单判超分没装。
-- 参考图六种用途（`input_files.reference_uses`，run b9e37568；除标「实测」者外＝**服务端 2026-11-20 当拍字面、未实测**）：image-edit（qwen-edit）、**extend（qwen-edit＋`extend` 往外扩画幅——真 outpaint，11-20 实测见「改图与 `generate_image`」）**、image-to-image（15 条，denoise 默认 0.65）、inpaint（`moody-anima-inpaint`／`anima-turbo-inpaint`，mask 宽高比须同原图、默认读红色通道白重绘黑保留、`mask_channel=alpha` 走透明通道）、face-reference（`sdxl-face-reference-ipadapter`／`anima-turbo-face-reference-ipadapter`，IPAdapter 非 FaceID；anima 条 `ipadapter_weight` 默认 0.6，0.8–1.0 连衣服背景一起抄）、openpose-control（18 条，与 11-04 名单同集合，本趟逐条对过）。`moss-image-sft-t2i` 是唯一 text-only 路线。
-- characters 格（run b9e37568，未实测）：八条吉祥物角色路由按 domain／别名触发（大肥鱼、Claude娘、千问娘、哈基米、智谱娘、Grok娘、Kimi娘），把她写成成年人；`loras.character` 可调弱 LoRA——工具面给不了这个键（见「改图与 `generate_image`」工具面那格）。
-- `POST /project/images/transform`（即时裁／放，不进队列不用模型；run b9e37568，**服务端 2026-11-20 当拍字面、未实测**）：结果落成 `transformed/` 下新输入文件；crop 支持像素框／aspect＋anchor（center／top／…／四角）／around:face（取景用最大脸，framing head／head-and-shoulders 默认／upper-body，找不到脸回 `face_not_found`）；resize 支持 width/height/scale/max_side（只缩小），先裁后缩、放大只插值并回 `upscaled_without_model`。生成产物可直接喂它转成输入文件。
-- `POST /project/images/upscale`（模型超分，**11-20 实测**，run 1f79864b）：`{"image": 输入文件名或 /view URL, "scale": 2}`，排队轮询 job_url；实测 1024×1536→2048×3072、succeeded、elapsed 4797 ms、产物 6,916,293 字节 PNG、预览尺度下干净；不点名 `look` 时上传图默认 photo（回 `upscale_look_default`；anime＝4x-AnimeSharp 非商用协议、photo＝Real-ESRGAN x4plus，README 提醒会抹平照片细纹理）。与本机 `asuna-image-upscale` 那条 run_sr.py 路**没做过质量比对**——两条并存，换路先测。
+- 参考图六种用途（`input_files.reference_uses` 是契约正本、正文不抄全；六格本趟与 `route_table` 逐条对过）：image-edit（`qwen-image-2.1-edit`，输出跟源尺寸取整到 32）、**extend（同一条＋`extend` 往外扩画幅——真 outpaint，实测见「改图与 `generate_image`」）**、image-to-image（15 条，`denoise` 默认 0.65；只给宽或只给高保形状，两个都给且形状不同是中心裁并回 `input_cropped`，从不拉伸）、inpaint（`moody-anima-inpaint`／`anima-turbo-inpaint`：必填 `input_image`＋`mask_image`，mask 宽高比须同原图，`mask_channel` 默认 `red`＝白／红重绘黑保留、`alpha` 走透明通道，`grow_mask_by` 默认 6，遮罩外像素合成回原图；**这一族没有 width／height 字段**）、face-reference（`sdxl-face-reference-ipadapter`／`anima-turbo-face-reference-ipadapter`，IPAdapter 非 FaceID；anima 条 `ipadapter_weight` 默认 0.6、sdxl 条默认 0.8，0.8–1.0 连衣服背景一起抄，`input_fit=none` 才把衣服一起参考）、openpose-control（18 条，与 `route_table[].pose` 同一集合）。六格契约本趟**全部实读**；只有标「实测」的那两格真跑过图。
+- characters／角色 LoRA（本趟实读＋dry_run 实测）：`characters` 那一格本身**是一段散文不是清单**，清单在 `route_table[].selectors`：八条吉祥物角色路线（DeepSeek 大肥鱼、Claude 娘、ChatGPT 龙娘、千问娘、Gemini 娘（哈基米）、智谱娘、Grok 娘、Kimi 娘），每条各有 `domains`／`aliases`（例：DeepSeek 那条 `domains` 有 `deepseek`、`deepseek whale girl`，`aliases` 有 `DeepSeek娘`、`大肥鱼`、`鲸鱼娘`、`溟月`）；给这些词或点名 workflow 都会落到那条。**点上去 LoRA 就默认生效**（`loras.character` 默认 0.9、范围 −2–2；dry_run 里 graph 的 `strength_model` 跟着变）。写成成年人、别加降龄词（`agent_hints` 明说）。对照表与「冲突先问一次」那条硬口径在「能力面」那一节；**调弱 LoRA 工具面够不到**。
+- `POST /project/images/transform`（即时裁／放，**不进队列、不用模型**；11-20 晚间实测）：`{"image": 输入文件名或任一 /view URL, "crop": …, "resize": …}`，两者都可给、先裁后缩；结果落成 `transformed/` 下一份**新输入文件**（回执 `name`／`url`／`size`／`operations`，`next` 明写这个名字可直接当 `input_image`／`face_image`／`mask_image`／`pose` 用，且像上传一样长期留着、用完自己 DELETE）。crop 支持像素框／aspect＋anchor（center／top／…／四角）／around:face（取景用最大脸，framing head／head-and-shoulders 默认／upper-body，找不到脸回 `face_not_found`）；resize 支持 width／height／scale／max_side（max_side 只缩小），放大只插值并回 `upscaled_without_model`。实测那枪：`{"image": "bg_base.png", "resize": {"max_side": 256}}` → `transformed/bg_base_256x222_e7047adc.png`、lanczos、256×222、warnings 空。生成产物可直接喂它转成输入文件。
+- `POST /project/images/upscale`（模型超分，**11-20 实测两发**，run 1f79864b 加晚间那发）：`{"image": 输入文件名或 /view URL, "scale": 2}`，或点名 width／height（1–4x、输出最多 16.7 MP；两个都给且形状不同先中心裁），可选 `look`: anime／photo，排队轮询 job_url。档位与默认：不点名 `look` 时 job 产物按产出它那条路线的 look、上传图按 photo（回 `upscale_look_default`；anime＝4x-AnimeSharp 非商用协议、photo＝Real-ESRGAN x4plus，README 提醒会抹平照片细纹理）。白天那发：1024×1536→2048×3072、succeeded、elapsed 4797 ms、产物 6,916,293 字节 PNG、预览尺度下干净。晚间那发：`{"image": "bg_base.png", "scale": 2}`→480×416→960×832、succeeded、`elapsed_ms` 1234、提交回执 `workflow` 是 `image-upscale`、`upscale` 对象给 `source_size`／`output_size`／`look: photo`／`look_from`／`model: RealESRGAN_x4plus.pth`，仍只回 `upscale_look_default`。**放大模型不在 `/project/models` 那 32 档里**，要认它只能读回执 `upscale.model`。与本机 `asuna-image-upscale` 那条 run_sr.py 路**没做过质量比对**——两条并存，换路先测。
 - `parameters.prompt` 必须显式给（空串合法）；`subject` 服务端 11-20 起标 `deprecated: true`，与 prompt 冲突一起给会被拒（run 46ffbe83）；`seed` 省略即随机；未知字段会被拒（`ignored_parameters` 恒空——11-20 extend 枪回执里它就是空表）。
 - `compatibility_notes`、`selection.not_for`、模型兼容性与 prompting 是**约束**，不是建议。
 - 限额逐路线放在 `parameter_schema`（顶层 `prompt_contract` 键 11-20 已没有，run 81b57d8b）：anima-turbo-v1-1 现读 prompt ≤ 8000、宽高 64–2048 且 8 的倍数、batch_size 1–4、steps 1–100——数值与旧正文一致，位置变了（run 46ffbe83）。
@@ -413,7 +413,7 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
   其余多数标 `optional`（能纯文字画、也能改图，数目现读）；不带 `source_image` 标的 t2i 路线（如 `qwen-image-2.1-t2i`）不收原图。
 - **带 `source_image` 不写 workflow 时，服务自己挑一条改图路线**（实测），不必点名 edit 那条。
 - **`extend`＝真 outpaint（11-20 实测，长路 `POST /project/generate`，run 6c750521＋4051451a）**：qwen-edit 带 `extend:{right:512}`，1024×1536→**1536×1536**（输出＝原图＋扩展边，每边 ≤4096）；提交回执 `extend` 对象回显 output_size／drawn_at（没出 `extend_drawn_smaller`＝没缩小画），提交与 job 的 warnings 皆空（**没出 `extend_original_not_kept`**）；job elapsed 104 s。逐像素比对原区：diff 只落在贴缝右侧 63 px 一条带（bbox (961,0,1024,1536)，原区非零像素 5.32%、L>8 占 0.703%）⇒ **原区没有被重绘**；`read_image` 亲看对得上（人物、书、构图未动，新边床面自然延续）。机制（他 README）：灰画布＋提示词前缀＋贴回前按原区仿射对齐＋每边新侧 64 px 渐变；超过约 2.4 MP 的画布缩小生成再放大。**工具面 `generate_image` 没有 `extend` 键**——这一枪是长路发的；提示词只描述新区域。
-- **工具面键位（2026-11-20 14:2x 当拍工具表）**：`generate_image` 参数面**没有** `pose`／`pose_strength`／`extend`／`loras.character`／`input_fit`／`mask_image`——**服务端有 ≠ 我当场能指定**；这类单子照旧走长路 `POST /project/generate` 或写进 prompt（与「姿势」那节 11-05 那句同口径，那节原文未动）。
+- **工具面键位（当拍工具表列全；11-20 晚间复核同）**：`generate_image` 参数面只有 prompt／negative_prompt／workflow／style／width／height／seed／options（只收 `steps`／`cfg`／`sampler_name`／`scheduler`）／job／source_image／list_routes／target_relative_path／timeout，**没有** `pose`／`pose_strength`／`extend`／`loras.character`／`input_fit`／`mask_image`／`denoise`／`face_image`——**服务端有 ≠ 我当场能指定**；这类单子照旧走长路 `POST /project/generate`（或 upscale／transform 那两个端点）或写进 prompt（与「姿势」那节 11-05 那句同口径）。逐能力对照在「能力面」那一节。
 - edit 路线自述（`list_routes` 里读到的）：输出尺寸跟着原图走（按 32 的倍数取整）；提示词写成直接指令——
   改什么、点名什么必须不动。
 
@@ -457,6 +457,116 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 - 一次改图实测：**排队约 85 秒、生成约 60～88 秒**，一张卡。**别连烧**——
   串行调度、切 workflow 卸模型（见已知坑），连排几张就是干等几轮。
 
+## 能力面：现读口、长路配方与工具面键位（腿照这一节就能调，不用再去拉自述）
+
+这一节只管**有没有这个能力、当场怎么调**；画面好坏的经验在「人像实测」与「实测补格」。
+原则：能走工具面就走工具面（见「直路」）；**只有工具面没有那个键，才走长路**。
+长路都在 `integration_test` 里发，base 从集成配置现读（别名 `image`，别硬编码 host／端口）：
+
+```python
+import json, os, urllib.request
+e = json.load(open(os.environ["ASUNA_INTEGRATION_CONFIG"], encoding="utf-8"))["endpoints"]["image"]
+BASE = "http://%s:%s" % (e["host"], e["port"])            # GET 直接读；POST 带 Content-Type: application/json
+print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30).read()))
+```
+
+### 硬口径：与角色脑的指令相抵时，停一次（一张图最多问一次）
+
+**角色脑的指令——包括它给的提示词，以及「只走 prompt」「不用 lora」这类默认——与你这一趟现读到的能力相抵时
+（尤其你探到与目标角色直接对应的 character 路线／character LoRA），停下来 `ask_character` 一次：
+说清你探到什么、它的指令挡在哪。它答完再画。不许自己选，也不许按旧默认画完当作没冲突。**
+
+为什么钉在这里：角色 LoRA 是**跟着路线默认上的**（`loras.character` 默认 0.9，本趟 dry_run 实测），
+所以「点那条角色路线」与「不用 lora」这两件事**天然冲突**——要真不用 LoRA 就得换路线，
+或走长路把 `loras.character` 调下去（工具面没这个键）。这个取舍属于点单人，不属于腿：
+点单那一侧不掌握引擎的具体能力面，腿也不替它决定要哪一个。冲突没解开就画，两种画法都算没做完交代。
+
+### 一、只读枚举口：一行命令、当拍读到的量、全量在哪
+
+**别整读 manifest**（当拍 37,046 字节一发；要哪格取哪格）。下面每个数都是当拍回执原样：
+
+- `GET /.well-known/agent-manifest.json` → 37,046 字节、17 个键。按键取：`operations`（17 个端点全表：GET 11／POST 5／DELETE 1）、
+  `route_table`（22 条路线：`selectors.domains`／`.aliases`／`.styles` 与 `pose` 标记都在这）、`characters`（**一段散文**，不是清单）、
+  `input_files`（六种参考图用途的契约）、`image_tools`（transform／upscale 契约）、`warning_codes`（13 个）、`error_codes`（19 个）、
+  `poses`、`result_contract`（job 状态与相位）、`instructions`（6 条硬约束）、`resolve`（可用选择器；`content_mode`／`input_type`／`prompt_granularity` 已废）、`service`、`quick_start`。
+  顶层常量：`protocol` `project-comfyui-agent/v1`、`api_base` `/project`、`authentication` none、`api_version` 2.0.0、`schema_version` 1。
+- `GET /project/workflows` → **422,935 字节**（22 条全量，每条带 `parameter_schema`＋`prompting`＋`agent_hints`）⇒ 只要一条就走
+  `GET /project/workflows/{workflow_id}`（本趟单条打了 4 条；参数面、必填、真实默认都在那一条里）。
+- `GET /project/routes?<resolve 那几个字段>` → resolve 的 GET 形状，同一把尺。实测 `?domain=deepseek&limit=3`：
+  `selected_workflow` 落 `deepseek-whale-girl-anima-turbo`、score 150、`selection.total_matches` 7、`fallback` false、`warnings` 空。
+- `GET /project/models` → 32 档、`ready` 全 true；`kind` 见 diffusion-model／checkpoint／text-encoder／vae／lora／ip-adapter／
+  clip-vision／controlnet／preprocessor／vision-encoder；`include_candidates=true` 才带上没用上的。**放大模型不在这 32 档里**
+  ——upscale 实跑在跑，要认那把模型只能从回执 `upscale.model` 读。`GET /project/models/{model_id}` 本趟**没打**（未实测）。
+- `GET /project/poses?q=&people=&angle=&limit=` → 一页默认 8 条、`total_matches` 196；`q=sit`→34、`q=stand`→31、`q=坐`→0。
+  条目形状 `{id, name, name_zh, category, framing, people, views{front,diag,side,high,low}, match_score}`。
+- `GET /project/inputs` → 当拍 90 个文件／83,151,167 字节；`lifecycle` 明写跨重启保留、**没有自动 TTL**，只有显式 DELETE 或人工才删
+  ⇒ 上传用唯一 basename，自己传的自己用完删。
+- `GET /project/resources` → 显存快照＋`max_pending_jobs` 32、`max_input_pixels` 16777216、`cpu_vae` true；`out_of_memory` 时把它一起报回去。
+- `GET /project/jobs/{prompt_id}` → `state`（queued／running／succeeded／failed）＋`phase`＋`outputs[].url`（相对 `/view`）＋`elapsed_ms`。
+- `GET /project/openapi.json` → 22,935 字节、`paths` 21（要精确契约时才读，平时按键取 manifest）。
+
+### 二、每个能力：工具面有没有那个键 → 没有怎么发 → 验过没有
+
+标「实测」＝本趟或旧趟真跑过那次调用／真出过图；「实读」＝只实读过服务端参数面与契约；「未实测」＝只按契约写配方，没验证过。
+
+1. **文生图** — 工具面**有**：`workflow`＋prompt／width／height／seed／options／negative_prompt。实测（多趟）。
+2. **改图（按指令改）** — 工具面**有**：`source_image`（点 `qwen-image-2.1-edit`，或不点名让服务自己挑）。实测（多趟）。
+3. **图生图（换模型风格重描）** — 工具面有 workflow＋source_image，但 **`denoise` 工具面没有键**（这族默认 0.65）⇒ 要控 denoise 走长路：
+   `POST /project/generate` `{"workflow": …, "parameters": {"prompt": …, "input_image": …, "denoise": 0.4}}`。实读，**未实测**。
+4. **真 outpaint（extend）** — 工具面**没有** `extend` ⇒ 长路 `{"workflow": "qwen-image-2.1-edit", "parameters": {"input_image": …,
+   "prompt": "只描述新区域", "extend": {"left": 256, "right": 256}}}`；输出＝原图＋扩展边，回执 `extend` 给 `output_size`。实测（见「改图与 `generate_image`」那一格）。
+5. **局部重绘（inpaint）** — 工具面**永远进不去**（没有 `mask_image`，那两条路线也不在 `list_routes` 里）。长路：必填 `input_image`＋`mask_image`
+   （`required` 就是这两个）；`mask_channel` 默认 `red`（白／红重绘、黑保留），`alpha` 走透明通道（图没透明回 `mask_alpha_missing`）；
+   `grow_mask_by` 默认 6（0–64）；`denoise` 1.0 整块替换、调低留更多原图；**这一族没有 width／height 字段**⇒输出＝源尺寸（8 的倍数）；
+   遮罩外的像素合成回原图。实读参数面，**未实测**。
+6. **人脸／角色参考（face-reference）** — 工具面**没有** `face_image`，而 `source_image` 会不会落成 `face_image` **没测过** ⇒ 稳妥走长路。
+   必填 `face_image`（任何一张清楚的人像，服务自己裁到最大脸；`input_fit=none` 才连衣服一起参考）；
+   `ipadapter_weight`：anima 那条默认 0.6、sdxl 那条默认 0.8，0.8–1.0 会把参考图的衣服与背景一起抄走；IPAdapter 不是 FaceID。实读，**未实测**。
+7. **姿势（pose）** — 工具面**没有** `pose`／`pose_strength` ⇒ 写进 prompt，或长路 `parameters.pose`（库里的姿势 id／视角 id，
+   或一张上传图的相对名）＋`pose_strength`（0–1，默认 1.0）。dry_run 实测（带 pose 时回执多一个 `pose` 对象；细节见「姿势」那一节）。
+8. **角色 LoRA（character）** — 工具面够得到**路线**（`workflow` 键），够不到**强度**：`loras.character`（范围 −2–2，**默认 0.9**）工具面没有这个键。
+   **点了角色路线＝LoRA 默认 0.9 已经上了**；要调弱走长路 `{"workflow": …, "parameters": {"prompt": …, "loras": {"character": 0.5}}}`。
+   dry_run 实测：不给 `loras` 时 `applied_parameters` 里就是 `{"character": 0.9}`；给 0.5 时 graph 里 `strength_model` 跟着变 0.5；`ignored_parameters` 空。
+9. **超分（服务端那条）** — 工具面没有 ⇒ `POST /project/images/upscale` `{"image": 输入文件名或任一 /view URL, "scale": 2}`
+   （或点名 width／height；1–4x，输出最多 16.7 MP；两个都给且形状不同会先中心裁）＋可选 `look`: anime／photo（不点名：job 产物按产出它那条路线的 look 走，
+   上传图按 photo 并回 `upscale_look_default`）。返回排队回执（`prompt_id`／`job_url`／`upscale` 对象给 `source_size`／`output_size`／`look`／`model`）
+   ⇒ 轮询 job ⇒ 产物 `outputs[].url`。队列与生成同一把尺（`max_pending_jobs` 32）。**实测**（两发，读数见「步骤 1」upscale 那一格）。
+10. **即时裁／放（transform）** — 工具面没有 ⇒ `POST /project/images/transform`（**不进队列、不用模型**，即时返回）。
+    必填 `image` ＋ `crop` 或 `resize`（都给则先裁后缩）；返回一份**新输入文件**，`name` 可以直接当 `input_image`／`face_image`／`mask_image`／`pose` 用，
+    像上传一样长期留着、用完自己 DELETE。**实测**（契约与读数见「步骤 1」transform 那一格）。
+11. **校验与像素预算（不排队、不出图、不花钱）** — `POST /project/generate` 带 `"dry_run": true`：回 `validated`、`applied_parameters`、
+    `effective_parameters`、`ignored_parameters`、`warnings`、`pose`、`extend`、`resources`，加 API 格式 graph（在 `prompt` 键里，别和 `parameters.prompt` 混）。
+    **`resources.limits.max_total_pixels` 就是那把像素预算尺**（本趟角色那条路线读到 2,359,296＝`over_pixel_budget` 那句警告的依据；
+    `basis` 自己写着是准入预算、不保证模型装得下）；判「参数被吞还是被拒」先读 `ignored_parameters` 与 `warnings`。实测（两发）。
+12. **输入文件的进出** — 上传 `POST /upload/image`（multipart：`image`＋`type=input`，boundary 拼错服务端直接 500 不带 body）；
+    列档 `GET /project/inputs`；删除 `DELETE /project/inputs/{name}` **实测**（回 `deleted: true`、`name`、`size_bytes`、`remaining_bytes`）。
+
+### 三、八条角色路线（点名画「某家娘」时的对照表；全量在 `route_table[].selectors`）
+
+触发词写进 prompt，路线填进 `workflow`（或走 `/project/routes?domain=<角色词>` 现读）；别名只列常用的几条。
+
+| 路线 | LoRA 触发词 | 能匹配上的 domain／别名（样例子集） |
+|---|---|---|
+| `deepseek-whale-girl-anima-turbo` | `deepseek_whale_girl_zipzippipe`（女仆装另有 `deepseek_maid_outfit_zipzippipe`） | `deepseek`、`deepseek whale girl`、`DeepSeek娘`、`大肥鱼`、`鲸鱼娘`、`溟月`、`DeepSeek-chan` |
+| `claude-girl-anima-turbo` | `ors scholar` | `claude girl`、`claude-chan`、`Claude娘`、`Anthropic girl` |
+| `chatgpt-girl-anima-turbo` | `Chatgpt_dragon_girl` | `chatgpt`、`gpt girl`、`ChatGPT娘`、`ChatGPT 龙娘`、`OpenAI娘` |
+| `qwen-girl-anima-turbo` | `qwen \(girl\)` | `qwen girl`、`qwen-chan`、`千问娘`、`千问` |
+| `gemini-girl-anima-turbo` | `gemini_ai` | `gemini girl`、`哈基米`、`哈基米娘`、`Gemini娘` |
+| `glm-girl-anima-turbo` | `aigirls, aigirls（glm）` | `glm girl`、`智谱娘`、`智谱清言娘`、`Zhipu girl` |
+| `grok-girl-anima-turbo` | `aigirls, aigirls（grok）` | `grok girl`、`Grok娘`、`Grok vampire girl` |
+| `kimi-girl-anima-turbo` | `aigirls, aigirls（kimi）` | `kimi girl`、`Kimi娘`、`月之暗面娘`、`Moonshot girl` |
+
+- glm／grok／kimi **共用一枚多角色 LoRA**（`ai-girls-aiseak-anima-lora`，触发词前两串就是它）；其余五条各有自己那枚。
+  这五条的 LoRA 在 `/project/models` 里有单独档（例：`deepseek-whale-girl-zipzippipe-anima-lora`，graph 里的文件名
+  `DeepSeek_WhaleGirl_ZipZipPipe_Anima2B.safetensors`），glm／grok／kimi 没有各自单独档——**现象记着，机制没扒**。
+- **表是快照**：接单时按目标现读（`/project/routes?domain=…` 一行就够），别拿这张表当唯一凭据；角色一律写成成年人，别加降龄词。
+
+### 四、两把尺的现行数量（本趟实测对过）
+
+`list_routes=yes` 18 条 vs `route_table` 22 条：**差的正是两条 inpaint（`moody-anima-inpaint`、`anima-turbo-inpaint`）
+＋两条 face-reference（`sdxl-face-reference-ipadapter`、`anima-turbo-face-reference-ipadapter`）**。
+「服务端有这条路线」不等于「我当场能点它」——这一格与「`list_routes=yes` 每条给哪些键」那节同一口径。
+
 ## edit／改图通路读数
 
 `qwen-image-2.1-edit` 这一条（一张修手单两枪实测；带 `source_image` 不点名 workflow 时，服务自己挑的也是这类通路）：
@@ -482,7 +592,7 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 
 - 参数：`parameters.pose`（字符串，maxLength 512）。值＝「A pose id from the pose library, or the name of an uploaded image whose pose should be copied.」可选 `parameters.pose_strength`（数，0–1，默认 1.0；只有路线的 parameter_schema 列了才有）。
 - 什么时候传：「Send pose when the requester asks for a specific body pose or hand gesture, or gives a pose image. Otherwise leave it out.」
-- 找库里的姿势：`GET /project/poses?q=<英文或中文姿势名>&people=1|2&angle=front|diag|side|high|low&limit=1-20`（默认 8）。库 196 条。实测 `q=sit` 返回 total_matches 34；`q=坐`（单字中文）返回 0——中文要用库里的完整词，搜不到就换英文。
+- 找库里的姿势：`GET /project/poses?q=<英文或中文姿势名>&people=1|2&angle=front|diag|side|high|low&limit=1-20`（默认 8）。库 196 条。实测 `q=sit` 返回 total_matches 34；`q=坐`（单字中文）返回 0——中文要用库里的完整词，搜不到就换英文。11-20 晚间复核：196、`q=sit`→34、`q=stand`→31、`q=坐`→0 同一批读数；手写 HTTP 时中文得先 percent-encode——非 ASCII 直接拼是客户端报错，不是服务端拒绝。
 - 返回里每条：`id`（如 `full_single_P003`）、`name`、`name_zh`、`category`、`framing`、`people`、`views`（front／diag／side／high／low 各一个视角 id，如 `full_single_P003_front`；有的姿势缺某个视角，如 P002 没有 front）。传视角 id；只传裸 pose id＝取 front，没有 front 则取第一个视角。
 - 样例（dry_run 实测通过）：`{"workflow": "anima-turbo-v1-1", "dry_run": true, "parameters": {"prompt": "masterpiece, best quality, 1girl, solo, sitting", "pose": "full_single_P003_front", "width": 512, "height": 512}}` → `validated: true`，`applied_parameters` 多出 `pose`、`pose_strength: 1.0`，回执多一个 `pose` 对象：`{source: library, id, name, angle, people_detected: 1, strength, size, adapter: anima-control-pose, skeleton_url}`。
 - 用自己上传的图当姿势：先 `POST /upload/image` 得输入文件名，把那个名字放进 `pose`；服务抽骨架，衣服、脸、场景仍由 prompt 决定。没检出人体报 `pose_not_detected`。
@@ -521,9 +631,7 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
   （`deepseek-whale-girl-anima-turbo`、`claude-girl-anima-turbo`、`chatgpt-girl-anima-turbo`、`qwen-girl-anima-turbo`、
   `gemini-girl-anima-turbo`、`glm-girl-anima-turbo`、`grok-girl-anima-turbo`、`kimi-girl-anima-turbo`，各有触发词）、
   `janku-illustrious`、`janku-v5-illustrious`、`one-obsession`。
-- **两把尺不是一把**：11-04 记的「收 pose 的路线」名单来自服务端 manifest 的 `route_table[].pose`，里面有两条 face-reference；
-  这两条不在 11-05 的 `list_routes` 清单里（inpaint 那族同样不在）。清单＝`generate_image` 用得上的路线，不等于服务端路线全集；
-  报「有没有这条路线」要先说哪把尺。
+- **两把尺不是一把（11-20 晚间实测对过）**：`list_routes=yes` 18 条 vs 服务端 `route_table` 22 条，**差的正是两条 inpaint（`moody-anima-inpaint`、`anima-turbo-inpaint`）＋两条 face-reference（`sdxl-face-reference-ipadapter`、`anima-turbo-face-reference-ipadapter`）**；`route_table[].pose` 那份「收 pose 的路线」名单里有两条 face-reference，它们都不在工具面清单里。清单＝`generate_image` 用得上的路线，不等于服务端路线全集；报「有没有这条路线」要先说哪把尺。
 
 ## 人像实测：构图决定拉链、自拍别指望手机、交图前放大复核
 
@@ -741,6 +849,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - 接到「指定角色／点名角色／有参考图可喂」这类单：第一张成图必须从参考图直喂 `generate_image` 的 `source_image`（`qwen-image-2.1-edit` 或带原图的图生图路线）长出来，不先出纯文生图。
 - 纯文生图（t2i）只用于没有既视角色的场景图。
 - 点了名的角色，参考图不在手上时，不画，先向下单人要参考图或回报缺图；不退回纯文生图。
+- 点了名的角色，如果服务端有与之对应的 character 路线或 character LoRA，而交代里写着「只走 prompt」「不用 lora」这类默认：**停一次问下单那一侧**（`ask_character`），说清探到了什么、指令挡在哪，答完再画——不许自己选一条画完、也不许按旧默认画完当作没冲突；一张图最多问一次。判据与配方在「能力面」那一节开头的硬口径。
 - 给行动腿的 brief 里管线那一句写死走哪条道：`第一张图：source_image 填 <参考图 ref 或完整 artifact_id>，走 qwen-image-2.1-edit，不走 t2i`。
 - brief 里不写「先画一张满意的基本图」「先出一张底图」「挑合适的路线」这类把选择权留给腿的话。
 - 交回前把成图对着参考图逐项看（脸、发、服饰要点），交回里写明走的路线和 `source_image` 是哪一张。

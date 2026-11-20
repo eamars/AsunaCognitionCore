@@ -16,6 +16,7 @@ scene_kinds: [home, group, dm]
 - **半身像要扩成全身**：走第六节那一格，不走 edit——edit 锁源尺寸，画不出画框外的东西。
 - **真 outpaint（往四周扩画）**：生图侧有真路——`qwen-image-2.1-edit` 的 `extend` 参数（无 mask 往外扩画幅、实测原区贴回未重绘），那是生图侧的、且工具面没有 `extend` 键（要走长路）；超分本身只放大不添画布。这一本的流程不做 outpaint，别混着答应。
 - 超分这一步在本机跑（家里那拍、或群里那一拍派给行动脑都一样）；群里开口那一轮自己不跑命令。
+- **还有一条引擎侧的超分（不在本机跑）**：生图服务端 `POST /project/images/upscale`，`{"image": 输入文件名或任一 /view URL, "scale": 2}`（1–4x，输出最多 16.7 MP；可选 `look`: anime／photo，不点名时上传图按 photo 并回 `upscale_look_default`），排队后轮询 `job_url`，产物在 `outputs[].url`；实测 480×416→960×832、`elapsed_ms` 1234、回执 `upscale.model` 是 `RealESRGAN_x4plus.pth`——与这一本第一节那条本机路同一族权重。**这一本的对外口径仍走本机 `run_sr.py`**：两条没做过质量比对，换路先测。
 
 ## 二、标准流程（对外就发这一档）
 
@@ -49,7 +50,7 @@ scene_kinds: [home, group, dm]
 
 只在要修缺角／局部时开，且知道它必然这样：
 
-- **没有 mask 参数**（参数面没有 `mask_image`，路线清单里也没有 inpaint）⇒ 它是**整图重描**，不是像素级局部改。实测逐像素 abs diff（亮度）：目标区 meanAbsDiff **10.85**、偏移>8 占 **33.01%**；非目标区 **4.99**。⇒ **「只补角」不成立**，对外不许那么讲。
+- **没有 mask 参数**（参数面没有 `mask_image`，`list_routes` 清单里也没有 inpaint——服务端有两族 inpaint 路线，但画图工具根本没有 `mask_image` 那个键，从工具面进不去；正本在 `asuna-image-generation-and-display`）⇒ 它是**整图重描**，不是像素级局部改。实测逐像素 abs diff（亮度）：目标区 meanAbsDiff **10.85**、偏移>8 占 **33.01%**；非目标区 **4.99**。⇒ **「只补角」不成立**，对外不许那么讲。
 - **输出锁源尺寸**：不传 width/height 也一样，别指望它顺手放大或改幅面。例外只有一格：服务端 `extend` 往画外添画布（输出＝原图＋扩展边）——那是添画不是改幅面，归生图那本。
 - **手型和线条会漂**，色温也跟着漂；手指数量写死在正向指令里也照样可能多一根（细节见生图那本）。
 - **CFG 1 这条路线 `negative_prompt` 无效**（服务端自己回警告）⇒ 禁令一律写成正向指令，逐项点名「保持原样不动」。
@@ -89,3 +90,5 @@ edit 那一枪的实测数在第五节（同一趟图链，底图是 4x 缩到 1
 - 全身扩展格那一格这次只钉了形状，这一版没有重跑一遍拼图＋补下半身。
 - 引擎目录、权重、耗时都是本机这台机的读数，换一台机要现读，不照抄。
 - `extend` 那格是生图侧新读数：拼图版和 extend 版没对比跑过，第六节仍钉拼图那版的形状。
+- 引擎侧那条 upscale 只量过输出尺寸与耗时（scale 2 一发），没与本机 `run_sr.py` 的产物逐像素比过；`look anime`（4x-AnimeSharp）没试过，`scale` 3／4 与点名 width／height 也没试过。
+- 画图引擎那侧的能力面（角色 LoRA、inpaint、face-reference、pose、extend、transform、dry_run 校验）正本在 `asuna-image-generation-and-display` 的「能力面」一节——判「这台机器还能对这张图做什么」去那一节现读，别在这一本里猜。

@@ -5,6 +5,7 @@
 1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译、换行是 LF（读字节数 CR，文本模式那把尺看不见 CR）；
 2. 内容要点：开口前八查、回看四条、一条边界的字面要点都在；「这条道上有哪几份技能——别编名字」那一节的
    真名单、两条规矩在（ROSTER 逐条判）；front matter 的 scene_kinds 覆盖 home／group／dm；
+   钉可以带第三节（section）：带 section 的只在指定那一节的字面里找，不带的按全文命中（旧钉行为一字不变，2026-11-21 起）。
 3. 不带别人的个人信息：禁词表（人名／群名／称呼）与字面编号（#数字）都不该出现在正文；
    这台机器的私密名单可达就真扫（命中只报类别与名单行号，词本身不打印）；配不上、或名单在却解析出 0 条有效词，都记一条红
    `leak_scan_ran`——2026-10-16 起不再「print 一行 NOTE、绿数照旧」，「没跑」不许长得像「过了」；
@@ -52,11 +53,12 @@ PRECHECKS = [
     ("precheck_attribution", "归属未定"),
     ("precheck_attribution_hold_state", "先不动那件事的状态"),
     # 第 6 查（11-20 加）：带图的消息，评论那张图之前先当场真拉一次；note 那句「图已随回合给你」不可信
-    ("precheck_image_pull_before_comment", "先当场 `read_image` 真拉一次"),
-    ("precheck_image_note_untrusted", "不用再 read_image」不可信"),
+    # 11-21（idea-500a3672）：这三枚（6／7／8）都标了 section=「开口前几查」，整块挪到别的节会红；不标 section 的旧钉仍按全文命中
+    ("precheck_image_pull_before_comment", "先当场 `read_image` 真拉一次", "开口前几查"),
+    ("precheck_image_note_untrusted", "不用再 read_image」不可信", "开口前几查"),
     # 第 7、8 查（11-21 加）：错字扫描＋「未说」当场留群笔记；关键词挑只在正文这两条出现的字面，改前旧正本里没有
-    ("precheck_typo_rescan_one_line", "只重打那一行"),
-    ("precheck_unsaid_note_in_scene", "未说：<那一拍行号>"),
+    ("precheck_typo_rescan_one_line", "只重打那一行", "开口前几查"),
+    ("precheck_unsaid_note_in_scene", "未说：<那一拍行号>", "开口前几查"),
 ]
 
 # 回看四条
@@ -209,6 +211,17 @@ def cr_bytes(paths):
     return bad
 
 
+def section_body(body, heading):
+    """正文里「## heading」那一节的字面：从那一行起，到下一个「## 」之前；没有这一节就是空串。"""
+    out, hit = [], False
+    for line in body.splitlines():
+        if line.startswith("## "):
+            hit = line[3:].strip() == heading
+        if hit:
+            out.append(line)
+    return "\n".join(out)
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results = []
@@ -244,8 +257,12 @@ def main():
         check(name, ("\n" + section) in ("\n" + body), section)
 
     for group in (TIMING, PRECHECKS, REVIEW, BOUNDARY, ROSTER):
-        for name, token in group:
-            check(name, token in body, token)
+        for item in group:
+            if len(item) > 2:                 # 带 section 的钉：只在指定那一节内找（idea-500a3672）
+                name, token, heading = item
+                check(name, token in section_body(body, heading), token + "（只在「" + heading + "」节内）")
+            else:                             # 旧钉：全文命中，行为一字不变
+                check(item[0], item[1] in body, item[1])
 
     # 边界必须写成边界：不能只留一句「发送前写对」而丢了「别拿回看验提及」
     check("boundary_names_wrong_method", "回看自己发出去的那条" in body,

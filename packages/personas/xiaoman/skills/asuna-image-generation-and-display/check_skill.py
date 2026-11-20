@@ -599,6 +599,25 @@ BLACK_HAIR = [
     ("black_hair_read_each_time", "逐次"),
 ]
 
+# 画本人这一族的交回自检·颗数那一格（2026-11-21 复盘单子 df3367cc…：点名了泪痣位置与左右仍画出两颗）。
+# 钉只钉列出的这三串字面，同一格其余字面被删不红（代价写在 CHANGELOG）。切片＝「官方定妆」那一节。
+SELF_MOLE_COUNT = [
+    ("self_mole_count_is_a_check_item", "颗数也是自检项"),
+    ("self_mole_count_only_one", "正本**只有一颗**泪痣"),
+    ("self_mole_count_presence_not_enough", "不许只报「在不在／在哪一侧」就算过"),
+]
+
+# 画本人这一族的提示词排除配饰＋交回自检·配饰那一格＋两格共用的处理口径（同一趟复盘：提示词没提项圈，
+# 模型自己长出黑色 choker ＋圆牌，是交回之后人眼看出来的）。与上面那组各钉各的：删配饰那一格只红这一组。
+SELF_ACCESSORY = [
+    ("self_accessory_negative_literal", "no choker, no necklace, no earrings"),
+    ("self_accessory_prompt_shape", "完整提示词形状"),
+    ("self_accessory_not_global_default", "不是所有画图单的默认"),
+    ("self_accessory_extra_cell", "多余配饰"),
+    ("self_defect_readout_first", "先报你亲眼看到的字面读数"),
+    ("self_defect_no_should_be_erased", "不许拿「应该抹掉了」当交回"),
+]
+
 
 def look_section_slice(body):
     """「## 官方定妆…」标题下、下一个二级标题之前的正文（2026-10-27 起黑发配方住在这里）。"""
@@ -899,6 +918,14 @@ def main():
     for name, token in BLACK_HAIR:
         check(name, token in look_slice,
               "「%s」不在「官方定妆」这一节里（切片 %d 字）" % (token, len(look_slice)))
+    # 画本人这一族的两组钉（2026-11-21）：两组各钉各的——配饰那一格被删只红 SELF_ACCESSORY 那六枚，
+    # 颗数那一格被删只红 SELF_MOLE_COUNT 那三枚（两发反证分别跑过）。切片为空（标题被改或删）两组一起红。
+    for name, token in SELF_MOLE_COUNT:
+        check(name, token in look_slice,
+              "「%s」不在「官方定妆」的泪痣颗数那一格里（切片 %d 字）" % (token, len(look_slice)))
+    for name, token in SELF_ACCESSORY:
+        check(name, token in look_slice,
+              "「%s」不在「官方定妆」的配饰那一格里（切片 %d 字）" % (token, len(look_slice)))
 
     # 人像实测那一节（2026-11-05）：标题被删 → 切片为空 → 下面几条一起红；
     # 保守字面与「判不了」那条同等承重——只留配方不写适用面，下次会拿便宜档草稿的漂移去判配方失效。

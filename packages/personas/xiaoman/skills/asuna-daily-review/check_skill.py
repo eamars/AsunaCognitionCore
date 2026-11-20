@@ -6,7 +6,7 @@
 2. 内容要点：头判据句、取数各步、四维判据 a／b／c／d、c 的五种候选形态、d 的排除凭据、报告四块（含发起统计与主动开话题读数表）、主动开话题维的判据要点、
    「改不改」三答案、四个落口、「夜间回合的边界」三拍与时间顺序都在；发起／回复归类的本机口径（`reply_to` 不可当机械锚点、归类须标「手判」）与「查空只报查过哪些面」也在；
 2b. 一份反向名单 STALE：旧口径的原句被抄回正文就红（正向断言查不出这种事）；
-2c. v3 读数与回流（V3 组）：四条读数名目、内部词只用词表正本那一把尺、④ 的数据源与禁「某群 0 出站」当证据、d 维整场只剩 owner 判「不判」、回流三样与「今日空转」都在；
+2c. v3 读数与回流（V3 组）：四条读数名目、内部词只用词表正本那一把尺、④ 的先探测再展开那一格（0 命中报「载体未启用」、不算进「数据不够」、不豁免禁拿 0 出站当证据、两跑腿号在位）、d 维整场只剩 owner 判「不判」、回流三样与「今日空转」都在；
 3. 家规：正文无日期、无来历叙述；不带别人的个人信息（禁词表、字面编号、这台机器的私密名单；
    名单配不上或 0 条有效词记红 `leak_scan_ran`，「没跑」不许长得像「过了」）；
 4. 没有占位符残留；随书 CHANGELOG.md 首条是「10-30 新建：金主委托每日自省」。
@@ -204,6 +204,16 @@ V3 = [
     ("v3_silence_shape", "`未说：`＋那一拍行号"),
     ("v3_silence_no_zero_outbound", "禁止拿「某群 0 出站」当成「自由选择不说」的证据"),
     ("v3_silence_home_not_counted", "家里不计"),
+    ("v3_silence_probe_first", "先做一发存在性探测"),
+    ("v3_silence_probe_default_all", "不设白名单"),
+    ("v3_silence_probe_only_when_hit", "探测命中 ≥1 处才跑"),
+    ("v3_silence_probe_zero_report", "载体未启用（探测：N 本笔记 0 命中）"),
+    ("v3_silence_probe_no_full_sweep", "不扫 `state_heads` 里含 group 的全表"),
+    ("v3_silence_probe_not_data_short", "不算进「数据不够」"),
+    ("v3_silence_probe_data_short_exit", "探测本身没跑成"),
+    ("v3_silence_probe_no_waiver", "0 命中不豁免这一条硬口径"),
+    ("v3_silence_run_evidence_first_leg", "task-0be9494a3433528a3338d04ace37d20f"),
+    ("v3_silence_run_evidence_second_leg", "task-1de9a53c37c1ad3916f0dc1afd9d235e"),
     ("v3_wordlist_authority", "词表正本 v1.2"),
     ("v3_wordlist_no_selfmade", "**不许自造词表**"),
     ("v3_wordlist_two_scales", "两把尺，不并"),

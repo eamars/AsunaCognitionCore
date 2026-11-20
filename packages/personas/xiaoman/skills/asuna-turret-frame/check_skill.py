@@ -4,7 +4,10 @@
 查四件事：
 1. 头：用真 YAML 解析器读（yaml.safe_load，取第一个 --- 到下一个 --- 之间），不用宽松正则；解析抛错、
    name 与目录名不一致、description 为空、值里带 ASCII「冒号＋空格」，各记一条红。没有 PyYAML 记红（没真查不许像过了）。
-2. 正本要点的字面都在（五个读口、控制面全在 POST、不自报固件版本、认机器三样、同一枚流、原位会漂、基线现读）；
+2. 正本要点的字面都在（五个读口、控制面全在 POST、不自报固件版本、认机器三样、同一枚流、原位会漂、基线现读；
+   11-21 起另加两组：DATE 钉第二节「`Date` 头是真 UTC＋时区现读别背常数」那一格，
+   FRAME 钉第一节「取帧那一趟的交回形状＋当场发得出去」那三条命令句。两组各钉各的——
+   删掉哪一格只红那一组的钉，互为反证，不合成一发；一枚钉只钉它那半句字面，同一块里另半句被删不红）；
 3. 不带别人的个人信息：私密名单命中只报类别和名单行号；名单配不上或 0 条记红；
    另扫「像 IP 的字面」，技能里不写设备地址；
 4. 换行是 LF（读字节数 CR）、脚本能编译（compile 在内存里查，只查语法）。
@@ -38,6 +41,18 @@ PINS = [
     ("pin_no_old_baseline", "不许拿上一次记的那组数当原位"),
     ("pin_no_drift_as_mine", "不把漂移记成自己干的"),
     ("pin_yaml_colon_rule", "不写 ASCII 冒号加空格"),
+    # DATE 组（11-21）：第二节 `Date` 头／时区那一格。旧字面「Date 偏了约 5 小时」是按 UTC+8
+    # 换算错的产物，这三枚钉的就是改后的新形状：真 UTC ＋ 那句是我的假事实 ＋ 现读时区别背常数。
+    ("pin_date_header_true_utc", "`Date` 头是真 UTC"),
+    ("pin_date_old_five_hours_is_my_math", "换算才得出的**假事实**"),
+    ("pin_tz_read_now_no_constant", "换算前先现读本机时区，别背常数"),
+    # FRAME 组（11-21）：第一节取帧那一趟的交回形状那三条命令句（绝对路径＋共用存储、
+    # artifact_id＋kind、当拍 speak picture 不许隔拍）只管这一本取帧这一族。
+    ("pin_frame_return_scope_only_this", "只管这一本取帧这一族"),
+    ("pin_frame_abs_path_and_sharing", "交回必须带帧在盘上的绝对路径，并写明那块存储是不是长期共用"),
+    ("pin_frame_artifact_id_and_kind", "交回必须报 `artifact_id` ＋ `kind`"),
+    ("pin_frame_send_same_turn", "`read_image` 之后当拍用 `speak` 的 picture，不许隔拍"),
+    ("pin_frame_refusal_literal", "不在 image_artifacts_from_program 里"),
 ]
 IP_LIKE = re.compile(r"(?<![\w.])\d{1,3}(?:\.\d{1,3}){3}(?![\w.])")
 

@@ -570,6 +570,10 @@ REGISTER_SECTION = [
     ("reg_late_ack_journal", "late_acks.jsonl"),
     ("reg_platform_readback", "get_friend_msg_history"),
     ("reg_two_independent_rows", "两条独立"),
+    # 11-22 补：那两枚源码读数的子项（「本机已有那张图…」节内）只钉这一枚字面。同一格里
+    # 「恰好只剩首尾两枚在实现侧无解释」「未在 11-19 那批复现」与另一枚子项的 EDITS_OFFERED／
+    # 两处过滤都不在这枚钉的面上——删掉那半句不红，代价写在 CHANGELOG。
+    ("reg_offer_cap_constant", "MAX_ITEMS_OFFERED"),
 ]
 
 
@@ -1019,7 +1023,13 @@ def main():
                              ("pin_batch_edit_no_size", "IMAGE_OPTION_NOT_IN_WORKFLOW"), ("pin_batch_crop_single", "先裁底图的单人格"),
                              ("pin_batch_no_latent_sheet", "latent 图生图"), ("pin_batch_framing_centre", "构图重心"),
                              ("pin_batch_outpaint", "outpaint"), ("pin_batch_one_pass_text", "并进同一个 pass"),
-                             ("pin_batch_self_portrait_recipe", "裁眼区放大")):
+                             ("pin_batch_self_portrait_recipe", "裁眼区放大"),
+                             # 11-22 同批补三枚（11-12 那批钉没覆盖这三格）：「交回与登记」的压图档位顺序、同组 offer_file 路径形状、
+                             # 以及「有既视角色」组里新并的「先现读 LoRA 自述」那一格。一枚只钉得住那半句字面，
+                             # 同一格其余字面被删不红；代价写在 CHANGELOG。
+                             ("pin_batch_dither_no_effect", "dither 没生效"),
+                             ("pin_batch_offer_file_path_shape", "PATH_DENIED"),
+                             ("pin_batch_lora_self_readout", "先现读那份 LoRA")):
         check(pin_name, needle in batch_slice, "「实测补格」节里找不到：" + needle)
 
     # 黑边族（与 asuna-image-upscale 第五节同一口径）：只报现象、别当机制。判据限定在黑边族所在那一格

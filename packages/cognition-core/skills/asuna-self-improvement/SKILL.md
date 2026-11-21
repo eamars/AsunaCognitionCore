@@ -68,6 +68,7 @@ description: 改进她自己的唯一做法（ADR-011）：改什么走哪一层
 **如果写完要推 GitHub**：再加一句“临时 clone／临时提交点那条道不经仓里的推送闸，走它就当没过闸，先跑 `check_staged_secrets.py --personal --paths <要推的文件>`”，并按上「推 GitHub」一节交代报号口径。
 
 - **往候选根新建文件优先用 `development_run` 里的 python 写**：`development_write` 新建文件那份回执只当「写请求收到」，不当「文件存在」——写完必须 `development_read` 回读一次核到，才算写上。这一格只管新建；改一份已存在的文件，11-21 这趟是用 `development_run` 里的 python 改的，改后 `development_read` 读回一致。来路：想法本 `idea-3f69388752f8e618f9d0737691f00890`（11-21 04:26 实测两枚假成功：候选根 `_si_probe.py`、技能目录 `_wtest.txt`——回执写了 written＋sha，盘上视图里都没有过；11-21 这趟在候选根现读那两条路径都 MISSING，`development_files` 的 `deleted` 也是空的，看着像什么都没发生过）。
+- **编辑脚本优先在 `development_run` 里内联（`python3 -c`）跑完就走；真要落成文件，用完当场删——包根／候选根不许留 `.py`**：上面那条只管「新建的文件要回读核到」，没管「留下的文件要当场删」，这一条补在那一格之后。理由：发布快照是整棵候选根，留下的文件会被下一次发布带进快照并出现在 `changed_files` 里，只有再下一次发布才洗得掉，下一个人会把它当成别人的改动。来路：11-21 core v14 那趟（发布 14:37）把编辑脚本 `_edit_v14.py` 落在人格包候选根（11-22 现读 8,968 B、mtime 11-21 14:28:41），11-22 01:12 那本人格包发布的 `changed_files` 因此多出一格，11-22 才当场删掉。
 
 ## 读自己的项目
 

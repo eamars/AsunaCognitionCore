@@ -846,6 +846,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
   - 同一趟读到：那条路上能**悄悄**少掉一行的只有两处过滤——`size` 不在 `0 < size ≤ 8 MiB` 内，或 `sha256` 不是 64 位十六进制；另有一处不占那 6 格但会改变清单形状：改别人图那一批（`edits_back_to`，上限 `EDITS_OFFERED`＝3）是并到清单**前面**的。这两格都是源码读数，**没在 11-19 那批 6 张上复现过**，别拿它们当那两枚的成因。
 - 上限 `0 < size ≤ 8 MiB`，超了回执 `registered: false / reason=ATTACHMENT_OVER_LIMIT`（文件照旧在工作区）；魔数认 png／jpeg／webp／gif ⇒ **JPEG 走这条进得了清单**；字节根本不是图就返回 `None` —— 那是「没东西可登记」，不是失败。
 - **发不出去时的补救不是重画，是拿盘上源文件重新登记一次**：零网络、字节原样，新 id 当拍立刻发（`created_at=now` 排第 1，见上面「清单怎么排」那条）。要证「还是同一份」，比的是**我交给登记的那手字节**的 sha 与盘上源文件一致——这只证到送进去之前；库里那行还要再剥一次，带文字块的 PNG 别硬报「库里的 sha 与源文件一致」（剥法见下面「代价」那一小节）。
+- **想拿一个「算我自己画的」产物号，把一张已有图再过一遍生图服务这条路不存在。** 带 `source_image` 的产物一律登记成 **`edit:` 前缀**——生成器把 `source(ref)` 自带的 register 顶掉默认值，于是 `produced` 恒为 `false`，群那一拍必拒。**工具面 options 只声明 `steps`／`cfg`／`sampler_name`／`scheduler`，`denoise` 传不进去** ⇒ 采样关不掉，「照原图描一遍保住像素」也不成立。⇒ 可行路只有 **`register_imported_image(source='integration:…')`** 这一条零网络重登记。（来路：2026-11-21 08:49 一趟腿的实测——先烧了两枪生图才从代码里读出这件事；那两枪的像素差读数出自当趟工具记录，**我本人没有复核过**。）
 
 ### 代价：登记会剥掉 PNG 的文字块，sha 跟着变
 - 像素和其余块一个字节不动，但 `tEXt`／`iTXt`／`zTXt` 被剥 ⇒ **sha 变了、size 少了**（少的字节＝文字块长度 + 12，那 12 是块头块尾开销：4 字节长度＋4 字节类型＋4 字节 CRC）。

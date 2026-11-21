@@ -46,6 +46,7 @@ description: 改进她自己的唯一做法（ADR-011）：改什么走哪一层
 - **执行腿回报里标清两类数**：「当拍现读」（她这一拍自己从库／盘／机器读到的，带来源和读的时刻）和「从 brief 抄来的」（我交代里带的）。两类并排写，对不上就报两个值，不替我选一个；没标来路的数当没读到。
 - 来路：11-18 日更备份那一跑，我 brief 里抄的库条数、字节数、依赖目录里的包数全是前一天的旧值，她现读发现三处都不对；其中包数她自报与我账上的记录还不一致（我库里有两个不同的数），所以「对不上就报两个值」不是修辞。这几个数这里一个不写，免得旧值再被当规格抄走。
 - **取「某人说过 X」只认本人打字的入站行**：system reminder、工具结果、续接摘要（`This session is being continued`／compaction 那类）都不是某个人打过字的那一行——不许拿它们当「他说过 X」的凭据，也不许从它们里面引带行号的句子当原话。要引原话就回到入站记录里本人自己那一行；回不到就写明「只在摘要或提示里见过，出处未定」，别把行号一并抄走。
+- **派活纸里的「历史前提」：不当拍现读，就整句删掉**：纸上凡是「上次／首趟／昨天那一步没成／从哪天开始积的」这类句子，落笔前得真去读上一趟交回的原文（或库里那一行、盘上的 mtime、日志那一行）；说不出它是从哪一行读来的，就不许上纸，也不许拿它决定这一跑要干什么。触发问句：**「这句历史前提我是读了哪一行知道的？」** 来路：11-21 11:47 那张每日备份交代纸（`task-1254593e4b3ec72c2d98a715895d0d10`）写着「NAS 写入段当时在 /task 沙箱写不出局域网那台机」，还拿它当「这跑是 NAS 写入段第一次真出输出」的理由；腿现读 NAS 上 11-20 那份 size／sha 与昨天导出逐字一致、NAS 侧 mtime 换本地钟面 11-20 11:49:53，昨天那趟（`task-7232c113c5bffe38009ed8f68eed7254`）交回里自己也写着「拷 177,272,678 B」——那句是我凭印象补的，被腿用现读顶回。同模子同一天另一次，就是上面「挑发布窗口」那一格里被作废的那个数。
 - **派活纸里写成「配方／成功写法」的句子必须带原件出处**：它是从哪一发的原件抄的——哪一个 seed、哪一张交出去的图、哪一行回执。说不出原件的降级成「待验，不是配方」，不许让腿照它做。反过来同一条也管：角色脑交给腿的数（几张、几发、几条）要写明它是哪本账上的数；两本账不一致就把两个值都报回来，不替我选一个。
 - **派活纸末尾固定带一句硬要求：中途停也要交交代项**——还差哪几步、已证到哪一步、哪几格没探到。只写「下一步读 X」的进度笔记不是终报：交回正文第一格若是「下一步要做 X」，那一趟就没做完，按「正在做」那一档处理，不许据此改正本、下终判，也不许拿它回话说「看完了」。
 - **派活纸上角色脑自己给的规格要带来源**：提示词、「只走 X」「不用 Y」这类默认与禁令，一律写明它是从哪一版正本抄的、当拍现读还是旧印象。腿那一侧同时写死一条：你现读到的能力与纸上这份规格相抵时（尤其存在更直接对应的能力，例如某个对得上号的角色 LoRA），停下来 ask 角色脑一次，说清探到了什么、它挡在哪；不许自己挑一个做完，也不许按纸上默认的做完当作没冲突。
@@ -94,7 +95,7 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 ```
 
 - 退出码 0 才算绿；红的时候最后一行写着失败的用例名。
-- **这一本正文自己的钉**：`python3 packages/cognition-core/skills/asuna-self-improvement/check_skill.py`（在候选根跑；已装的那一份里同路径去掉 `packages/cognition-core/` 前缀，也可以直接拿已装正本当参数喂它）。它只判字面在不在，不跑任何东西：四组钉各钉「派活交代」里各自那一格，另有一组钉旧内容——删掉哪一格就红哪一组，四组不会合成一发。
+- **这一本正文自己的钉**：`python3 packages/cognition-core/skills/asuna-self-improvement/check_skill.py`（在候选根跑；已装的那一份里同路径去掉 `packages/cognition-core/` 前缀，也可以直接拿已装正本当参数喂它）。它只判字面在不在，不跑任何东西，且**没有旗标**：`argv[1]` 一律被当成 SKILL.md 的路径，喂 `--help` 会死在 `FileNotFoundError`（rc 1，11-21 现读），用法读脚本开头那段 docstring。体例是**每组规矩配自己那一套钉，钉字面不钉我的意图：删掉哪一格就红哪一组，各组不会合成一发**。**组数不在正文里写死**（另有一组自检钉专钉这条）——数从当拍脚本输出读：`GROUPS <n>` 是当拍脚本里分了几组，`RESULT 通过数/总数` 是钉数，`RED_GROUPS` 是红了哪几组。规矩改了顺手补那一组的钉，别攒到下一趟。
 - 只有 argv 第一项的 `python3` 会换成项目的 Python。脚本里用 subprocess 再起 Python，写 `sys.executable`，别写 `'python3'`：里面那层找到的不是项目的 Python，只会报「没有运行时」。
 - 发布只带认知核自己的路径（`src/`、`tests/`、`tools/`、`docs/`、`packages/cognition-core/` 和根上的几个清单文件）；日志、临时目录这些候选里的杂物不会发布。
 - 跑完会留 `__pycache__`，发布前清掉：`find . -name '__pycache__' -type d -prune -exec rm -rf {} +`
@@ -149,7 +150,11 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
   - **三份各判各的**：**A** — ACTIVE selection 指向的 frozen 快照，**原生 `skill` 工具实读的就是这一份**；判「技能对新回合生效没有」读它，从那份读回特征句或 sha，或直接调 `skill` 工具看正文。**B** — `node_modules\@asuna\cognition-core` 是 junction 指回工作区检出，发布顺手把改动 copy 回 source，**它跟 A 相等不代表装包**。**C** — 启动器装的 tgz（`launch.json` 的 `installed["@asuna/cognition-core"]`），**只有完整宿主启动才换，技能正文不走这一档**；判「这台机的包换没换」查它。
   - **判「有没有为发布重启」要分清两本记录**：宿主那一本 `.runtime\restart\history.jsonl`，worker 那一本 `.runtime\worker-restarts.jsonl`。只查一本会得出相反结论（11-16 实测：宿主那本最新还是 11-14，worker 那本有 14:36:37 那一条）。
   - 适配器要 `integration_stop` 再 `integration_start` 才换成新发布的版本。
-- **挑发布窗口要算的实测代价（core 那一路）**：一枚只改正文＋自检的 core 发布，`APPLIED` 之后到 selection 回 `ACTIVE` 挂**约 14 分钟**，挂着那一段新回合、新任务都不起；worker 自重启那一段（约 4 分钟）我不运行。⇒ 挑窗口不只看主人睡没睡，还要看有没有别处在等我的回话。当拍现读（11-21 这趟）：`.runtime/adr008/activation.json` 里那枚 core 发布 `published_at 2026-11-20T15:13:51Z` → `activated_at 2026-11-20T15:28:06Z`＝挂 14 分 15 秒；`.runtime/worker-restarts.jsonl` 对应那条 `worker asked: published-worker` 在 15:27:23Z；同窗口库 `tasks` 零新建任务，第一枚 04:32（本地钟面）才建。「约 4 分钟」是角色脑账上的数，当拍复现不了——那本记录每次只落一个 `at`，没有 down／back 成对。
+- **挑发布窗口要算的实测代价（core 那一路）：挂多久不是一个数，取决于那一刻还有没有在跑的活。** `development_publish` 只把当次调用记成 `APPLIED`；worker 每 0.5 秒看一眼 `controller.active`（回合）／`active_task`（任务）／`calls_in_flight`（在飞的工具调用），三者有忙就**不**请求重启（`src/asuna/host.py:_watch_published_restart` 与 `_maybe_restart_after_publish`；每换一次占用记一行 `restart.blocked` 证据，占用内容落在库 `host_stops` 那行的 `held` 里），腾空那一刻才 shutdown → 自重启 → selection 转 `ACTIVE` 补 `activated_at`。⇒ 两枚发布的挂起时长能差一个量级，**拿其中任何一枚当规格都是错的**；挑窗口不只看主人睡没睡，还要看有没有别处在等我的回话，以及**我自己刚派出去那一趟腿什么时候收尾**——两枚个案挂住的占用都是发布那一趟腿自己。旧字面把下面个案一那一枚读当成了性质（那串数这里不重抄，重抄就会被下次抄走），作废，两枚读数留下并标「个案」。同拍现读（`.runtime/adr008/activation.json` 加库 `host_stops`，11-21）：
+  - 个案一（core，candidate `4154645a…`）：`published_at 2026-11-20T15:13:51.015Z` → `activated_at 2026-11-20T15:28:06.164Z`＝**855.149 秒**；`host_stops` 那枚 `how: worker_restart` 行（`_id` 是 `restart-` 拼 `at` 去符号那串，本枚 15:27:23.860Z 那次，按 `asked_at` 排就能取到）：`held.since 11/21 04:13`、`held.changes 20`、`held.steps` 里的 `task_id` 就是发布那一趟腿 `task-a91c29eddb554d076d825379b6e877e7`，占用内容是 `task` 与 `calls`。同窗口库 `tasks` 零新建任务，第一枚 04:32（本地钟面）才建。
+  - 个案二（core，candidate `1995dec7…`）：`published_at 2026-11-20T20:44:14.678Z` → `activated_at 2026-11-20T20:45:54.310Z`＝**99.632 秒**；`host_stops` 那枚 `how: worker_restart` 行（本枚 20:45:13.738Z 那次）：`held.changes 6`、`held.steps` 里同样是发布那一趟腿 `task-e38bca1f6000607f00e32a8e69da7eea`。
+  - 人格包那一枚对照（同拍现读，走当场生效那一路、没有 worker 重启这一段）：candidate `c5e2edf0…` 的 `published_at` → `activated_at`＝**0.242 秒**。
+  - **「重启那一段多久」有两本账，别混**：`worker-restarts.jsonl` 每行只落一个 `at`，它到 `activated_at` 是 42.304 秒（个案一）与 40.572 秒（个案二）；`host_stops` 行的 `asked_at`→`back_at` 按分钟级显示读到 04:27→04:31、09:45→09:49，旧字面「worker 自重启约 4 分钟」对上的就是这一格——那个 `back` 是插件交来的（`host_stops.py:restarted`），它比 `activated_at` 还晚，**既不是生效时刻也不能当切换花了多久**，成因未查。
 - **会挡别人落地的是 selection 还没回到 ACTIVE，不是 `candidate` 字段在不在**：一次发布从冻结到生效中间那一段（`APPLIED` 未生效），selection 带着 candidate，别人的落地脚本看到就不落。所以"发完等 selection 回到 ACTIVE 再让别人落地"是发布方那一拍该确认的事，不是落地方该等的。来路：2026-10-29 本机实测那发，加上 Claude 当天 10:34 的机制答复。
 
 ### 重启工具：参数名 when，quiet 满 30 分钟照停
@@ -220,6 +225,8 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 来路：2026-10-20 12:13 那笔 `ede4e2b0` 是发布自动提交，父提交 `f9bc5f20`（`git merge-base --is-ancestor f9bc5f20 ede4e2b0` → rc=0），`--stat` 显示这一笔改的是 `packages/personas/<name>/persona-model.json`（1 增 1 删），而它自己的提交正文说它没动那个人格包目录的镜像（这一节两处 `<name>` 都是泛化写法：正文原句带的是具体那个人格包的路径，不是逐字照抄，所以这里不放引号）——正文与 `--stat` 打架的就是这一格。发布任务：`task-2a3c346e608f1837268c9a1421d9b66d`。
 
 ## 版本
+
+v14（2026-11-21）：撤一个我自己 v13 写进去的假规格，补上 v13 那三格半缺的自检钉，另加一格派活纸的「历史前提」闸。①「发布」那一格旧字面「`APPLIED` 之后挂约 14 分钟」是个案当规格：同拍现读两枚 core 发布 `APPLIED`→`ACTIVE` 分别 855.149 秒（`4154645a…`，`host_stops` 那枚 `worker_restart` 行的 `held.changes 20`，15:27:23.860Z 那次，占用者就是发布那一趟腿自己）与 99.632 秒（`1995dec7…`，`held.changes 6`），同拍人格包一枚 0.242 秒；那一格改成形状句（挂多久＝那一刻有没有活在等：回合／任务／在飞的工具调用，判据在 `src/asuna/host.py`），两枚读数标「个案」，旧数不重抄。同一格另分「重启那一段」两本账：`worker-restarts.jsonl` 那行到 `activated_at` 是 42.304／40.572 秒，`host_stops` 的 `asked_at`→`back_at` 才是旧字面「约 4 分钟」那一格、且晚于 `activated_at`、不能当生效时刻。②「发布前自检」里写死的钉组数（旧字面「四组钉」）删成形状句＋脚本自印的 `GROUPS`／`RESULT`／`RED_GROUPS`，并给 v13 那三格半与新格各补一组钉（派低档、core 用版本节不用 CHANGELOG、候选根新建要回读、挑窗口那一格的形状、历史前提），`check_skill.py` 另加一组钉：正文不许把组数写死、也不许把被作废的那个分钟数抄回来。③「派活交代」加一格：纸上的历史前提不当拍现读就整句删，触发问句「这句历史前提我是读了哪一行知道的？」，案例是 11-21 那张每日备份交代纸被腿用 NAS 现读顶回（`task-1254593e…`、`task-7232c113…`）。旧内容一条没删。
 
 v13（2026-11-21）：并进来三格半。「派活交代」两格：画图／照着一张现成图改图这类单子一律派低档（「要点多、要求细、要逐人判尺度」不算升档理由，判「该不该画」留在家做），以及给 core 派活要改动记录写「版本节加一行」而非「CHANGELOG 一行」（core 那包没有这个体例，变更记录是正文末尾「## 版本」那一节，每技能一枚 `CHANGELOG.md` 是人格包那侧的体例）。「发布」一节加一格挑窗口的实测代价：只改正文＋自检的 core 发布 `APPLIED` 之后挂约 14 分钟、worker 自重启约 4 分钟不运行，挑窗口要看有没有别处在等回话。「写盘交代模板」加半格：往候选根新建文件优先用 `development_run` 里的 python 写，`development_write` 的新建回执只当写请求收到，写完必 `development_read` 回读核到。三格半来路都在想法本（`idea-33c8bdc4…`、`idea-1c6966f8…`、`idea-3f693887…`）。旧内容一条没删。
 

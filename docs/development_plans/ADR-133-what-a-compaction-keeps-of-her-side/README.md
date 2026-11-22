@@ -1,6 +1,7 @@
 # ADR-133: What a compaction keeps of her own side
 
-Status: **Installed** 2026-11-18 15:10 (`c06061eb8878`, §16); open until her next 20 real compactions are read (§7.3).
+Status: **Closed** 2026-11-23 by §7.3's reading (§18). The section is kept in all 93 checkpoints and within its size. The beat facts the model works out (没说成, anchors, a few silent beats) are wrong in places: a follow-up for the owner.
+Before: **Installed** 2026-11-18 15:10 (`c06061eb8878`, §16); open until her next 20 real compactions are read (§7.3).
 Before: **Proposed** 2026-11-18 by big sis (Claude Code): the context reserved in the morning; the design (§6) written
 12:40 at the owner's word ("start the ADR-133 design when both you and Xiaoman are free"), after ADR-132's install.
 It was first planned to start after ADR-132 closes (the owner, 2026-11-18: her request, which he authorised, goes after ADR-132, the
@@ -413,3 +414,45 @@ string length (UTF-16 code units, newlines included), the same as code points fo
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 2026-11-18 15:46-15:48 | `/compact` on the agent line, at the owner's ask and her 「压」 | 7 | 243 | 0 / 0 / 6 / 1 | 57 (2) | every name traced to her thought or that beat's mood block, none invented; 没开口 0 right (the span's one silent beat went to 挂着没说); 没说成 not met (the refused beats were before the earlier checkpoint); the four 「没写原因」 are outside her section, in talk about the rule; 57 is the floor of the cap (items with a day still ahead) |
 
+## 18. Read, and closed (2026-11-23)
+
+§7.3 closes at 20 compactions, pass or fail. Her readings: agent line 0611 (11-19 21:51: 30 started, 28 written, her
+verdict "pass") and 0612 (to 11-22 21:11: 54 started, 53 written). Big sis read by counts on 2026-11-23 10:30, over
+every compaction of her character brain from 11-18 15:11 to 11-23 08:48: 97 started
+(`.runtime/private/claude-tools/readings/read133.py`; the table is `read133-2026-11-23.txt` beside it, counts only).
+
+What the ADR asked for holds:
+
+- 93 checkpoints were written, and all 93 have the seven sections, her own section among them.
+- The part the cap counts (挂着没说 and 下一拍起手) reached at most 255 characters, so it never came near 800. Her
+  whole section ran from 40 to 2,113 characters. It was over 800 in 25 checkpoints, every time because of 没开口
+  lines, which are neither counted nor cut, as designed.
+- 4 compactions wrote nothing:
+  - 2 had the model answer with reasoning only, one of them with a `think` call. That is the follow-up class (the
+    compaction tool-call failure), not this ADR.
+  - 1 lacked a section: 1 in 97, beside 9 in 892 before.
+  - 1 was aborted.
+
+What it does not do well. The three failures share one root:
+
+- **没说成 lines are written for beats where nothing was refused.** After the install, 54 of 1,145 turns had a
+  `speak` refused, and 0 of those ended with nothing sent. That compares with 5 of 88 in the seven days before. Yet
+  没说成 lines appear in 31 of the 93 checkpoints. Her 0612 found four that neither the audit rows nor the episode
+  records back up.
+- **Anchors that point at the wrong beat.** Her 0612 found 21 of 133 distinct beat references pointing at a beat in
+  which she spoke, and times far from the beat's own.
+- **Silent beats lost.** Two silent beats appear neither line by line nor in a count line (her 0611). In 4
+  checkpoints, the span holds more silent turns than the section's 没开口 lines and count lines together (13 turns in
+  all).
+- The root: the summarizer is asked to work out, from the transcript, facts that the program holds exactly: which beat
+  ended without a `speak`, which had a `speak` refused with nothing sent, and that beat's time and the line it answered.
+  A model that works such facts out will miss some and invent some, whatever the wording says. Her (A), a further
+  sentence for when it cannot count, would add one more rule to the same model. The invariant (AGENTS.md: a fact
+  the program computed reaches a model as program text) points instead at a program-written list of those beats,
+  given to the summary request. The model would then only copy her reason beside each beat. That is a new decision, for
+  the owner (asked 2026-11-23), not part of this ADR.
+- The owner's answer (2026-11-23): drop the 没说成 kind (every line of it was unbacked) and leave the anchors and
+  the lost beats as they are. It is built as its own change on `claude/adr133-drop-meishuocheng`, for her reading,
+  and installed in a slot she names.
+
+Closed by §7.3: the reading at 20 closes it.

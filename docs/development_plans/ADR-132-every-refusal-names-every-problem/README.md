@@ -1,6 +1,7 @@
 # ADR-132: Every refusal names every problem, for every tool
 
-Status: **Installed** 2026-11-18 11:58 (`a56cb644476a`, §9); open until §6's third reading (2,000 of her real calls).
+Status: **Closed** 2026-11-23 by §6's third reading (§10): (a), (b) and (c) pass on her first 2,000 real calls after the install.
+Before: **Installed** 2026-11-18 11:58 (`a56cb644476a`, §9); open until §6's third reading (2,000 of her real calls).
 Proposed 2026-11-16 by big sis (Claude Code), at the owner's ask (The ask). Drafted for the owner and for her reading. Every count in §3 covers 2026-11-02 18:55 to 2026-11-16 18:55 and was read 2026-11-16 18:30-18:57 from her profile, read-only (session files
 through their structure only; audit rows by tool name and code only). Times on this page are local time.
 
@@ -221,3 +222,27 @@ Her verdict: install `8b7098fc8b47`, the branch's tip, read by her own read-only
   field states its cost in its ADR and raises the number.
 - Open: §6's third reading, once her character brain has made 2,000 calls after 11:58:39.
 
+## 10. The third reading, and closed (2026-11-23)
+
+Read by big sis 2026-11-23 10:40 from the session files of her character brain (`tool/call` and `tool/result` of
+agentPreset asuna-xiaoman; a refusal's text tested for the program's own wordings, never printed;
+`.runtime/private/claude-tools/readings/read132.py`). Her reading (agent line 0612, 11-22 21:11) read the audit rows
+over all 4,790 calls made by then. The window is §6's: the first 2,000 calls after 11:58:39, which end 2026-11-19
+23:40:45. 142 of them were refused.
+
+- (a) **pass**: 0 missing-field refusals in a turn with no accepted `think` before them (all 5 came after one);
+  THINK_FIRST was named in 34 refusals. The case the reading watches did not occur on real traffic; the staged case
+  (§8) is its proof. Her literal "fail" looked for the code `THINK_FIRST` in the refusal's text: a code never stands in
+  her words (ADR-060). The row carries it in `code`, and the refusal carries the THINK_FIRST sentence.
+- (b) **pass**: 5 missing-field refusals in 2,000 calls (`note` 3, `write_document` 2); the limit was 10. Her 51
+  added ARGS_UNDECLARED, ARGS_ENUM and ARGS_TYPE to ARGS_MISSING; those are not missing fields. Her 78 「心里话那一类」
+  was her clock's own ruler, not §6's.
+- (c) **pass**: 0 guard (layer 0) refusals for a missing field (DSH's `missing required property`). 1 guard refusal of
+  another kind in the window (`plan`, 11-19 02:28, a wrong type: F4's sentinel). Her "cannot be checked" read the
+  audit rows, which by design have no row for the guard (ADR-108, §3). The guard's refusals are counted from the
+  session files.
+- After the window, to 2026-11-23 10:10 (5,303 calls): guard missing-field refusals still 0, and every missing-field
+  refusal came after an accepted `think`. Her audit count (ARGS_MISSING 11 to 11-22 21:11) and this count (9 by the
+  「缺 …」 wording) were not reconciled. Neither moves the reading, which is the window's.
+
+Closed by §6: at 2,000 calls the reading closes it.

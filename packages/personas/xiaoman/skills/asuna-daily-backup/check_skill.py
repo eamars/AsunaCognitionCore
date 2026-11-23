@@ -40,14 +40,16 @@ BODY_PINS = [
     ("pin_wording_smb_readback", "措辞只到「SMB 读回一致」"),
     ("pin_wording_no_nas_self_check", "不许写「NAS 自己校验过」"),
     ("pin_path_from_base_directory", "`Base directory` 为准，现读，不抄旧号"),
-    ("pin_untested_writes_named", "没有对 NAS 真写、真删跑过"),
-    ("pin_first_run_watch_output", "**第一趟真用它的人盯第一份输出。**"),
+    # 11-23 第二趟：第六节按现场更正，跟着重命名两枚钉（旧钉钉的是已被现场推翻的断言）
+    ("pin_nas_delete_never_run", "NAS 侧删除至今没真跑过一次"),
+    ("pin_first_nas_delete_watch_output", "**第一次真删 NAS 的那趟盯整份输出**"),
     ("pin_weekly_cap_four_script_no_clear", "最多 4 份（我这侧的规矩）。脚本不清它。"),
     ("pin_probe_not_cleared", "`probe-<日期>.txt` 不清"),
     # 11-23 加：三格新口径各一枚（拆掉对应段要能红）
     ("pin_weekly_rename_steps_written", "星期日那一份怎么变成 `-weekly`"),
     ("pin_interpreter_from_sys_executable", "解释器只认 `sys.executable`"),
     ("pin_delete_report_shape_named", "删除段的报法"),
+    ("pin_nas_sidecar_goes_with_snapshot", "不留孤儿 sidecar"),
 ]
 SCRIPT_PINS = {
     "backup_push.py": ["require_lan_host", "--verify-only", "SMB 读回"],

@@ -196,7 +196,8 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `turn_kind`
 - def `exposed` — What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the conversation's list (abilities).
 - def `writes_at_home` — Whether a turn writes her own documents at home, as _turn_rules and exposed give write_document: a home turn, not the program's consult or time-up, not opened by a note from outside (`first`, the note that opened it), with write_document no
-- def `toolbox` — The tools her conversation lists, the same in each of its turns (what the model is shown).
+- def `toolbox` — The tools her conversation lists, the same in each of its turns until a setting changes (what the model is shown): its abilities without the tools switched off here.
+- def `switched_off` — The tools switched off in this conversation now: the task tools where the owner set the place off, and the tools of her own switches here.
 - def `abilities` — What her conversation lists, by option, the same in each of its turns: decided by its place, its channel and the configuration, never by the turn's kind or context.
 - def `instead_words` — The sentence naming what does the job here, or '' when nothing in this turn does.
 - def `not_now` — Why her conversation's tool or option `name` is not in this turn, when it can be used, and what does the job here.

@@ -1041,11 +1041,11 @@ class ContextBuilder:
             from . import dice as _dice
             occurrence=str(event.get('event_id') or '').split(':',1)[-1]
             context['dice_review_from_program']=_dice.review(self.store,persona,occurrence,moment)
-        # ADR-052: her switches: at home all of them (and those that ended lately), elsewhere the ones on here.
-        from . import switches as _switches
-        switched=(_switches.home_block(self.store,persona,moment) if session_class==visibility.OWNER_PRIVATE
-                  else _switches.here_block(self.store,scene['_id'],moment))
-        if switched:context['switches_from_program']=switched
+        # Her switches, at home only: all of them, and those that ended lately (ADR-052, ADR-135 D2).
+        if session_class==visibility.OWNER_PRIVATE:
+            from . import switches as _switches
+            switched=_switches.home_block(self.store,persona,moment)
+            if switched:context['switches_from_program']=switched
         if scene.get('kind')=='group':
             from . import waiting as _waiting
             still=_waiting.block(self.store,[scene['_id']],moment,persona)
@@ -1271,8 +1271,10 @@ class ContextBuilder:
                 'note':UNDERSTANDING_NOTE}
         from .grants import workspace_grant
         grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
+        from .role_tools import switched_off
         context['action_capabilities_from_program']={
-            'available':bool(grant),'route':'用 delegate 把事交给行动脑；补话、接着做或叫停用 task（message、stop）。文件、网页、沙箱、原话检索和看图都是行动脑的事。',
+            # not where the task tools are switched off here: they are not in the list (ADR-135 D2)
+            'available':bool(grant) and 'delegate' not in switched_off(self.store,{'scene_id':scene['_id']}),'route':'用 delegate 把事交给行动脑；补话、接着做或叫停用 task（message、stop）。文件、网页、沙箱、原话检索和看图都是行动脑的事。',
             'cancellation_available':True,
             'network':'行动脑可以按需搜索公共网页并读取页面。',
             'delivery':('程序自动执行委托，结果作为独立事件返回当前场景（外面托的写 for，结果回家里）；等待时仍可聊天。'

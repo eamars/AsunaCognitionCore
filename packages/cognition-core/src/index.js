@@ -132,6 +132,8 @@ export const START_RETRY_SECONDS = [5, 15, 45, 135, 300];
 // How long a span the worker could not record waits before it is handed over again (ADR-101).
 export const HANDOVER_SECONDS = 300;
 const HANDOVER_KEYS = 64;               // hand-over failures remembered as said (handOver)
+// A call an outside conversation does not list: the program's plain sentence, which names nothing (ADR-135 D8).
+const NOT_DONE = '这一步没有做。';
 // A tool's own refusal comes back from the worker written for the brain that called it. A lost connection
 // (the worker exited or is restarting) is not, and its text names this machine's files: say what it means instead.
 const WORKER_DOWN = 'ASUNA_WORKER_UNAVAILABLE: 处理工具的后台进程这会儿断开了（它会自己重启），这次调用没有完成——不是参数的问题；'
@@ -1387,7 +1389,9 @@ export class CognitionCore {
       // An old name of hers runs where the tool it was merged into is listed (role_tools.RENAMED).
       if (lane === 'character' && exposed.has(this.roleAliases?.[exec.name])) return undefined;
       const usable = [...exposed].join('、') || '（没有）';
-      // The action brain: the broker's own sentence for this tool (ADR-053), so both layers say the same.
+      // In an outside conversation the refusal names no tool (ADR-135 D2). The action brain: the broker's own sentence
+      // for this tool (ADR-053), so both layers say the same.
+      if (lane === 'character' && this.state(exec.agent.session.id).current?.outside === true) return NOT_DONE;
       return lane === 'character' ? `这个对话里没有 ${exec.name} 这个工具；有的是：${usable}。用其中一个，或者不用工具接着说。`
         : this.state(exec.agent.session.id).refusals?.[exec.name]
           ?? `CAPABILITY_DENIED: 这个任务没有 ${exec.name}：这件任务交的时候没给它。不是参数的问题，重试也一样：要用它就在报告里写明，让说话的那一半在给它的地方另交一件。`;

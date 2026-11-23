@@ -21,7 +21,7 @@ import time
 import uuid
 
 from . import clock
-from . import sandbox_backend, channel_kinds, errands, tool_watch
+from . import sandbox_backend, channel_kinds, errands, tool_watch, visibility
 from .host import RuntimeHost
 from .config import DATA, ROOT, database_lock, redact_text, echoed
 from .evidence import Evidence, sha
@@ -320,6 +320,9 @@ class NativeLane:
                        'lane': self.lane, 'phase': phase, 'text': text, 'system': system,
                        'episode_id': ep['_id'], 'binding': record, 'title': self.child_title(task, role_id, ep),
                        **({'tools': list(tools)} if tools is not None else {}),
+                       # An outside conversation's refusal of a tool it does not list names nothing (ADR-135 D2).
+                       **({'outside': (ep.get('manifest') or {}).get('session_class') != visibility.OWNER_PRIVATE}
+                          if self.lane == 'character' else {}),
                        **({'trigger': kwargs['trigger']} if kwargs.get('trigger') else {}),
                        **({'context': kwargs['context'], 'tail': kwargs['tail'], 'ceiling': kwargs.get('ceiling')}
                           if 'context' in kwargs else {}),

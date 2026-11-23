@@ -1,14 +1,14 @@
 """Her switches (ADR-052): mute a group, turn tools off in a conversation, block a person.
 
 Each switch ends by itself: after 24 hours unless she gives another number of hours (at most a week), so a switch she
-forgot never turns into her being inconsistent with someone who did nothing. The program keeps them and says where
-one is on: the switched conversation lists its own switches, her home lists them all and the ones that ended lately.
+forgot never turns into her being inconsistent with someone who did nothing. The program keeps them and lists them at
+home only: every one that is on, and the ones that ended lately.
 She sets them with tools she has: mute with `group_focus`, block with `watch` op `block` (the person speaking to her),
 tools off and an early end with `set_policy`.
 
 - Muted: the group rests (focus.active is false: only words addressed to her wake her, no first word from her, no
   summaries) and she does not visit it; it stays in her heartbeat marked muted.
-- Tools off: the conversation keeps listing them (the tool list stays stable), and a call is refused saying so.
+- Tools off: they leave the conversation's tool list while the switch is on (role_tools.switched_off).
 - Blocked: that account's lines are kept and searchable but wake her nowhere and do not count as addressed to her.
 """
 from __future__ import annotations
@@ -138,12 +138,6 @@ def blocked(store, person_id, moment=None):
 def _item(row):
     what = WORDS[row['kind']] + '：' + row['label'] + ('（%s）' % '、'.join(row['tools']) if row.get('tools') else '')
     return {'id': row['_id'], 'what': what, 'until_at': row['until'], **({'why': row['why']} if row.get('why') else {})}
-
-
-def here_block(store, scene_id, moment=None):
-    """switches_from_program in the switched conversation: what she switched here from home, and until when."""
-    rows = [row for row in on(store, scene_id=scene_id, moment=moment) if row['kind'] != 'block']
-    return {'items': [_item(row) for row in rows], 'note': NOTE} if rows else None
 
 
 def home_block(store, persona, moment=None):

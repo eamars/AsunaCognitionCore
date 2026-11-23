@@ -852,8 +852,7 @@ def exposed(store, ep):
     """What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the
     conversation's list (abilities)."""
     listed = abilities(store, ep)
-    from . import switches
-    off = switches.tools_off(store, ep['scene_id'])          # ADR-052: still listed (a stable list), not usable
+    off = switched_off(store, ep)
     return [name for name in dict.fromkeys(_turn_rules(store, ep)) if name in listed and name.split('.')[0] not in off
             and not (ep.get('errand') and name in STEERING)]
 
@@ -869,12 +868,12 @@ def writes_at_home(store, ep, first=None):
     """Whether a turn writes her own documents at home, as _turn_rules and exposed give write_document: a home turn,
     not the program's consult or time-up, not opened by a note from outside (`first`, the note that opened it), with
     write_document not switched off in its conversation. Where her choice of what to let go is shown (ADR-117 L3)."""
-    from . import notes, switches
+    from . import notes
     if turn_kind(ep) in (CONSULT, TASK_TIME):
         return False
     if (ep.get('manifest') or {}).get('session_class') != visibility.OWNER_PRIVATE or notes.outside_class(store, ep, first):
         return False
-    return 'write_document' not in switches.tools_off(store, ep['scene_id'])
+    return 'write_document' not in switched_off(store, ep)
 
 
 def _turn_rules(store, ep):
@@ -991,8 +990,22 @@ LOCAL_CHAT = ('visit', 'promote_memory', 'credential')
 
 
 def toolbox(store, ep):
-    """The tools her conversation lists, the same in each of its turns (what the model is shown)."""
-    return list(dict.fromkeys(name.split('.')[0] for name in abilities(store, ep)))
+    """The tools her conversation lists, the same in each of its turns until a setting changes (what the model is
+    shown): its abilities without the tools switched off here."""
+    off = switched_off(store, ep)
+    return [name for name in dict.fromkeys(name.split('.')[0] for name in abilities(store, ep)) if name not in off]
+
+
+def switched_off(store, ep):
+    """The tools switched off in this conversation now: the task tools where the owner set the place off, and the
+    tools of her own switches here. They leave its list (ADR-135 D2); the list changes when a switch is set or ends
+    or the setting changes, never from turn to turn."""
+    from . import switches
+    from .grants import tasks_off
+    off = set(switches.tools_off(store, ep['scene_id']))
+    if tasks_off(store.config, ep['scene_id']):
+        off.update(name.split('.')[0] for name in WITH_ACTION)
+    return off - set(switches.KEEP)
 
 
 def abilities(store, ep):
@@ -1114,11 +1127,6 @@ def not_now(store, ep, name):
 
 
 def _why_not_now(store, ep, name):
-    from . import local_time, switches
-    off = switches.tools_off(store, ep['scene_id']).get(name.split('.')[0])
-    if off:
-        return ('%s 是你在家里给这个对话关掉的（到 %s 自己恢复）；要提前用，回家用 set_policy 的 switch_off 结束它（id 是 %s）。'
-                % (name.split('.')[0], local_time.stamp(off['until'], local_time.her_zone(store)), off['_id']))
     kind = turn_kind(ep)
     if kind == CONSULT:
         return CONSULT_ONLY_THINKING if thinking_mode(store.config) else CONSULT_ONLY

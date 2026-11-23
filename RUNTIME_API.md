@@ -168,6 +168,7 @@ A channel is `deployment.channels.<kind>`: its id is the platform kind of an ins
 | `token` | bearer token: ASCII, at least 24 characters, unique across channels |
 | `routes` | route id → route |
 | `blocked_senders`, `blocked_groups` | platform accounts and groups refused at intake and in the outbox (`INVALID_CHANNEL_BLOCK_LIST` when not account ids) |
+| `tasks` | conversation → `off` or `on`, keyed `group:<id>` or `dm:<id>`: a conversation set to `off` lists no task tools (`delegate`, `task`), whatever her own switches say; one not named is `on`. A key that names no conversation of the channel (listed or admitted) stops the start (`CHANNEL_TASKS_PLACE_UNKNOWN`), and so does a value other than `on` or `off` (`INVALID_CHANNEL_TASKS`) (`src/asuna/grants.py` `tasks_off`) |
 
 | Route field | Meaning |
 |---|---|

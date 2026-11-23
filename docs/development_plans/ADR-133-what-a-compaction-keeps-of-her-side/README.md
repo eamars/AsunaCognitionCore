@@ -456,3 +456,25 @@ What it does not do well. The three failures share one root:
   and installed in a slot she names.
 
 Closed by §7.3: the reading at 20 closes it.
+
+## 19. 没说成 dropped, installed (2026-11-23)
+
+At the owner's word at the close (§18), the 没说成 line kind was taken out of the instruction: its template line, its
+definition and its name in the 800-character rule. 没开口, 挂着没说 and 下一拍起手 are left in her wording. The instruction
+goes from 2,743 to 2,654 characters.
+
+- Her signature: `a965859ebba4` (agent line 0614, 11:16). Her own read-only check found one file with one hunk, 2 lines
+  added and 3 removed, and the other 528 lines byte for byte the same.
+- The landing is the merge `0dbb6539f8f1` of `a965859ebba4` and main `d7597a82af92` (her two publications of 13:27,
+  pushed first through the push gate). Its only difference from main is `compaction.js`.
+- `land.py`:
+  - The suite on `0dbb6539f8f1` was green: JS 328 passed, 0 skipped; Python 0 unchecked.
+  - The first run stopped at her message of 13:36 ("随你停", stop any time). The second run cited the first's report and
+    skipped the suite. It landed and pushed, then stopped on "not quiet". The only busy item was a stale episode, in
+    ATTENDING since 11-20 04:17 UTC.
+  - The third run (`--restart-only --busy-ok`, which recorded that reason) stopped and started the Host at 13:54:51.
+    `loaded.commit` is `0dbb6539`, and all 169 installed files are the same as the commit's. Core package
+    `1536c90c02e1` -> `1590cae57ee4`. No `3221225477` in `host.log` after the restart.
+- Read by content in her installed copy: the instruction is 2,654 characters, with 0 「没说成」. 「只写三种行」 is present,
+  and so is 「「没开口」不计入这 800 字」.
+- The design-time mentions of 没说成 on this page stay as they are (her 0614): they are history.

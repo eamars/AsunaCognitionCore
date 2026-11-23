@@ -381,6 +381,15 @@ ADR-030: the program's watchdog over handovers between the brains.
 - def `cause` — Why the result is lost, for the card: report, turn or restart.
 - def `status_words` — What she reads about one task: where its run and its result stand.
 
+## `unfinished`
+
+[src/asuna/unfinished.py](../../src/asuna/unfinished.py)
+
+What a restart leaves unfinished (ADR-134): every input that ends ends its turn, and a cut turn is resumed or ended.
+
+- def `without_turn` — The input `episode` ends without a turn, as `result_state` says.
+- def `cut` — The Host's stop cut the turn `ep` (not finished).
+
 ## `reasons`
 
 [src/asuna/reasons.py](../../src/asuna/reasons.py)

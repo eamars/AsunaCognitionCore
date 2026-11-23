@@ -9,7 +9,7 @@ import time
 import traceback
 import uuid
 
-from . import handover
+from . import handover, unfinished
 from .config import redact_text as redact
 from .ingress import episode_id, persist_input, input_state
 from .router import FairQueue
@@ -429,12 +429,12 @@ class Chat:
                         raise PermissionError('INPUT_POLICY_STALE')
                     if source.get('absorbed_by'):
                         # An earlier turn here had this line in view: she answered it there, or chose not to.
-                        input_state(self.app.store, episode, 'COMPLETE', result_state='SEEN_IN_TURN')
+                        unfinished.without_turn(self.app.store, episode, 'SEEN_IN_TURN')
                         continue
                     from . import notes
                     if notes.read_elsewhere(self.app.store, event, episode):
                         # The same for her own note: a finished turn here already read it (ADR-091 D1).
-                        input_state(self.app.store, episode, 'COMPLETE', result_state='SEEN_IN_TURN')
+                        unfinished.without_turn(self.app.store, episode, 'SEEN_IN_TURN')
                         continue
                     if event.get('channel'):
                         from .channels import route_for_scene, route_members
@@ -446,13 +446,13 @@ class Chat:
                     input_state(self.app.store, episode, 'PROCESSING')
                     if self._proactive_stale(event, episode):
                         # P5：入队时闸门还开着，真要开口时已经不该插这句——不建 episode、不调模型。
-                        input_state(self.app.store, episode, 'COMPLETE', result_state='PROACTIVE_HELD')
+                        unfinished.without_turn(self.app.store, episode, 'PROACTIVE_HELD')
                         continue
                     previous = episode_records.get(self.app.store, episode)
                     from . import errands
                     why = errands.skipped(event, source, previous)
                     if why:
-                        input_state(self.app.store, episode, 'COMPLETE', result_state=why)
+                        unfinished.without_turn(self.app.store, episode, why)
                         self.app.store.audit(episode, 'errand.' + why.split('_')[1].lower(), {'scene_id': event['scene_id']},
                                              'scene:' + event['scene_id'])
                         continue
@@ -512,19 +512,27 @@ class Chat:
                     self.emit(f'[系统] 本轮未完成；请查看本轮执行详情中的原始错误。原记录：{self.app.evidence.root.resolve()}')
                     continue
                 try:
-                    input_state(self.app.store, episode, 'FAILED', failure=error)
-                    self.app.store.audit(episode, 'chat.error', {'traceback': error}, 'scene:' + event['scene_id'])
                     ep = episode_records.get(self.app.store, episode)
-                    if not ep and not self.stopping.is_set():
+                    from .coordinator import RESUMABLE
+                    cut = self.stopping.is_set() and ep and ep['state'] in RESUMABLE
+                    if not cut:
+                        input_state(self.app.store, episode, 'FAILED', failure=error)
+                    self.app.store.audit(episode, 'chat.error', {'traceback': error}, 'scene:' + event['scene_id'])
+                    if cut:
+                        # The Host's stop cut her turn (ADR-134 D2): its input stays for the resume at the start; cut
+                        # a second time, it ends and is told like any failed turn.
+                        ep, ended = unfinished.cut(self.app.store, ep, error)
+                        if ended:
+                            self._report_fault(ep, ep['failure'])
+                    elif not ep and not self.stopping.is_set():
                         # Failed before the turn was kept (its preparation): reported like any failed turn, so her
                         # next turn here says so (ADR-119 F1); the message itself is not delivered again.
                         self._report_fault({'_id': episode, 'scene_id': event['scene_id'], 'persona': self.settings['persona'],
                                             'episode_kind': event.get('episode_kind') or 'external'}, error)
-                    if ep and ep['state'] not in ('COMMITTED', 'WAITING_TASK', 'FAILED_PROTOCOL'):
-                        episode_records.save(self.app.store, {**ep, 'state': 'INTERRUPTED' if self.stopping.is_set() else 'FAILED_RUNTIME',
-                                             'failure': error}, expected=ep['revision'], stream=episode)
-                        if not self.stopping.is_set():
-                            self._report_fault(ep, error)
+                    elif ep and ep['state'] not in ('COMMITTED', 'WAITING_TASK', 'FAILED_PROTOCOL'):
+                        episode_records.save(self.app.store, {**ep, 'state': 'FAILED_RUNTIME', 'failure': error},
+                                             expected=ep['revision'], stream=episode)
+                        self._report_fault(ep, error)
                 except Exception:
                     self.app.evidence.record('chat.persistence_error', {'episode_id': episode,
                         'traceback': redact(traceback.format_exc(), self.app.config)})

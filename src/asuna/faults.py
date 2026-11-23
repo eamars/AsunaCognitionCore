@@ -36,7 +36,8 @@ UNREAD = '开发者收件箱里还有 %d 条没被读过'
 CAUSES = {'MALFORMED_RESPONSE': '模型回来的工具参数不成形', 'TRANSPORT': '连不上模型', 'TIMEOUT': '模型超时没回',
           'CONTEXT_WINDOW_EXCEEDED': '对话太长，模型装不下', 'PI_AI_ERROR': '模型服务报错',
           'INVALID_REQUEST': '模型拒收了这次请求', 'NO_ADAPTER': '没有能用的模型',
-          'INVALID_TURN_OUTPUT': '收尾的检查三次没过'}
+          'INVALID_TURN_OUTPUT': '收尾的检查三次没过',
+          'TURN_CUT_TWICE': '两次被停机截断，程序不再续它'}          # her wording (agent line 0624, ADR-134 D2)
 # INVALID_TURN_OUTPUT when the turn's tool calls had passed the hard line, so every further call ended the turn and
 # no ending could pass (ADR-128 D2, her words, agent line 0433).
 CAPPED = '工具次数已经用完，收尾过不去'

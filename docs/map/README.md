@@ -277,6 +277,7 @@ From an input to her words: queueing, context, her tools, the checks, publishing
 - [`lines`](../../src/asuna/lines.py) — Her own open/close of a peer line (ADR-013 §6).
 - [`chat`](../../src/asuna/chat.py) — Shared local controller reused by the native Web host; there is no terminal adapter.
 - [`handover`](../../src/asuna/handover.py) — ADR-030: the program's watchdog over handovers between the brains.
+- [`unfinished`](../../src/asuna/unfinished.py) — What a restart leaves unfinished (ADR-134): every input that ends ends its turn, and a cut turn is resumed or ended.
 - [`reasons`](../../src/asuna/reasons.py) — The reasons behind her actions: what she did after each thought, and the thought behind each action.
 
 ### [Groups and people](people.md)

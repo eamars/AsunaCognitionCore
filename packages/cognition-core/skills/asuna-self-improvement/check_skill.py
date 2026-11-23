@@ -24,6 +24,10 @@ empty file. F and G pin the two cells v13 added in 派活交代, H the half-cell
 added in 写盘交代模板, I the 挑发布窗口 cell as v14 rewrote it (its retracted
 number must stay out), J the 历史前提 cell v14 added, K the hardcoded group
 count v14 removed from 发布前自检.
+L, M and N pin the three closing checks v18 wrote right after 这一本正文自己的钉: new
+prose ships its own pin in the same pass, the falsification breaks each newly written
+block, and pins are renamed when a rule is overturned -- including pins that are meant
+to redden once a fact advances.
 """
 import hashlib
 import os
@@ -101,6 +105,25 @@ GROUPS = [
      "absent": [r"[\d一二两三四五六七八九十]组钉"], "needles": [
         "这一本正文自己的钉",
         "组数不在正文里写死",
+    ]},
+    # v18: 改技能的收尾三格（发布前自检 那一节，紧挨「这一本正文自己的钉」那条）
+    {"name": "L_NEW_PROSE_NEEDS_A_PIN", "section": "发布前自检", "absent": [], "needles": [
+        "那个绿本身不证明有护栏",
+        "新口径当趟配钉",
+        "钉名 ＋ 那段正文里能照抄的字面",
+        "这一格没护栏",
+        "不许拿自检全过当绿灯",
+    ]},
+    {"name": "M_FALSIFY_EACH_NEW_BLOCK", "section": "发布前自检", "absent": [], "needles": [
+        "反证拆到新写的每一段",
+        "红的那枚钉要和那段对得上",
+        "只拆老字面能红，不算验过新块",
+    ]},
+    {"name": "N_PINS_EXPIRE_AND_RENAME", "section": "发布前自检", "absent": [], "needles": [
+        "改正文就同时改钉",
+        "到期变红",
+        "那是设计好的提醒，不是自检坏了",
+        "第一次真跑之后就该红",
     ]},
 ]
 

@@ -44,6 +44,10 @@ BODY_PINS = [
     ("pin_first_run_watch_output", "**第一趟真用它的人盯第一份输出。**"),
     ("pin_weekly_cap_four_script_no_clear", "最多 4 份（我这侧的规矩）。脚本不清它。"),
     ("pin_probe_not_cleared", "`probe-<日期>.txt` 不清"),
+    # 11-23 加：三格新口径各一枚（拆掉对应段要能红）
+    ("pin_weekly_rename_steps_written", "星期日那一份怎么变成 `-weekly`"),
+    ("pin_interpreter_from_sys_executable", "解释器只认 `sys.executable`"),
+    ("pin_delete_report_shape_named", "删除段的报法"),
 ]
 SCRIPT_PINS = {
     "backup_push.py": ["require_lan_host", "--verify-only", "SMB 读回"],

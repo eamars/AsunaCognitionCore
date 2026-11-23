@@ -11,7 +11,15 @@ scene_kinds: [home]
 ## 一、脚本在哪、下一趟从哪读
 
 - 脚本在这份技能的目录里：`_bk_common.py`（共用）、`backup_export.py`、`backup_drill.py`、`backup_push.py`、`backup_retain.py`。
-- **路径以 `skill` 工具回执里的 `Base directory` 为准，现读，不抄旧号。** 执行腿用 `sandbox_run` 直接 `python3 <Base directory>\backup_export.py ...`（实测这个目录在沙箱里只读可读），输出一律落在 `/task` 的一个工作目录里，别落临时目录。
+- **路径以 `skill` 工具回执里的 `Base directory` 为准，现读，不抄旧号。** 脚本路径照抄那一段（实测这个目录在沙箱里只读可读），输出一律落在 `/task` 的一个工作目录里，别落临时目录。
+- **解释器只认 `sys.executable`／`ASUNA_PYTHON` 指的那一枚，别拿 PATH 上裸 `python3` 这个名字赌。** 这两枚在沙箱里不是一回事（11-23 现场复现）：宿主直接起的 `python3` 是 `.venv` 那枚（3.12，`import asuna`／`bson`／`pymongo` 全 True）；而脚本内部再来一发 `subprocess.run(["python3", ...])`，这个名字按 PATH 命中的是 `WindowsApps` 那枚 stub，实跑落到另一枚 3.14 的托管安装，`backup_drill.py` 第 29 行 `from asuna import dbread` 当场 `ModuleNotFoundError: No module named 'asuna'`。11-21、11-23 两跑各栽过一次，都是现场另写一支驱动（`bk1121_run.py`／`_bk1123_run.py`：argv[0] 写的是 `python3` 就换成 `sys.executable`）才过去。
+- 一行能照抄的命令形状——外面那枚只当跳板，干活的是里面那枚（11-23 实测：这一发跑 `--help` exit 0；把里面那枚换成裸 `python3`，同一发 exit 1 加上面那条 ModuleNotFoundError）：
+
+  ```sh
+  python3 -c "import os,subprocess,sys;sys.exit(subprocess.call([os.environ['ASUNA_PYTHON'], r'<Base directory>\backup_drill.py', '--snapshot', r'<工作目录>\<快照名>.jsonl']]))"
+  ```
+
+  自己写驱动也一样：驱动内部一律 `[sys.executable] + argv[1:]`，别再出现字面 `python3`。`ASUNA_PYTHON` 现读得到就用它，读不到用 `sys.executable`；它指向的是 `.venv` 那枚的绝对路径，绝对路径别抄进报告和派活纸。
 - 为什么放技能目录不放工作区：技能随包发布、有 ACTIVE 那一版可读；工作区的东西随任务清掉就没了。代价是改脚本要走发布关口，所以每趟派活要写清读的是哪一版（`Base directory` 里那段 64 位号）。
 - 凭据只用名字：`nas-smb`（环境变量 `NAS_SMB_USER`／`NAS_SMB_PASS`，值不落文件、不打印）。Mongo 的库地址与库名由程序给那条命令（`ASUNA_MONGO_URI`／`ASUNA_DATABASE`），脚本里不写。
 
@@ -26,24 +34,33 @@ scene_kinds: [home]
 
 ## 三、四步
 
+`<PY>` ＝ 第一节写死的那一枚：宿主直接起的第一发可以就是 `python3`；一旦被包进驱动脚本或 subprocess，换 `os.environ['ASUNA_PYTHON']`（现读不到就 `sys.executable`），别留裸 `python3`。
+
 ```sh
 # 1 导出（默认三张表 journal_entries state_heads state_revisions）
-python3 <Base directory>\backup_export.py --out <工作目录> [--colls 表1 表2 ...]
+<PY> <Base directory>\backup_export.py --out <工作目录> [--colls 表1 表2 ...]
 
 # 2 恢复演练（靶子现读；要指定就带 --seq，报告里会标「手指定」）
-python3 <Base directory>\backup_drill.py --snapshot <工作目录>\<快照名>.jsonl [--slug work_log] [--seq N]
+<PY> <Base directory>\backup_drill.py --snapshot <工作目录>\<快照名>.jsonl [--slug work_log] [--seq N]
 
 # 3 推 NAS，再在新进程里复核一遍
-python3 <Base directory>\backup_push.py --snapshot <快照> --nas-host <私网IP> [--pylibs <依赖目录>]
-python3 <Base directory>\backup_push.py --snapshot <快照> --nas-host <私网IP> --verify-only [--extra <NAS文件名> ...]
+<PY> <Base directory>\backup_push.py --snapshot <快照> --nas-host <私网IP> [--pylibs <依赖目录>]
+<PY> <Base directory>\backup_push.py --snapshot <快照> --nas-host <私网IP> --verify-only [--extra <NAS文件名> ...]
 
 # 4 保留（本机 2、NAS 7 是默认值；先不带 --do 看拟删清单）
-python3 <Base directory>\backup_retain.py --workdir <工作目录> --nas-host <私网IP> --keep-local 2 --keep-nas 7 [--do]
+<PY> <Base directory>\backup_retain.py --workdir <工作目录> --nas-host <私网IP> --keep-local 2 --keep-nas 7 [--do]
 ```
 
 - 第 3 步的 `--pylibs` 默认是当前目录下的 `pylibs`（装着 `smbprotocol`、`pyspnego`）；包数和版本现读，不抄旧值。
 - 第 4 步不带 `--do` 只报不删。带了 `--do` 也是先核再删：本机侧每一份要删的都先和 NAS 同名文件逐字节比 sha，一份没过就一份不删，NAS 侧也不动。
-- 删本机旧份时顺手删它旁边的 `.sha256`、`.export-summary.json`（只在工作目录里，且只在这份快照被删时）。
+- 星期日那一份要在第 3 步之前先改名，本机与 NAS 才同名；改法见第七节那七条。
+
+**删除段的报法（11-23 定，替掉派活纸上「被删 sidecar 的 sha 当场抓」那种前提不成立的说法）**
+
+- 本机侧报**两把 sha**：那份快照的 sha（`--do` 那趟脚本自己就印「已删本机 <名字> | size=… | sha=…」），加它旁边 `<快照名>.jsonl.export-summary.json` **文件自身**的 sha。后一把脚本不报（它只印「并删本机 <文件名>」），要在带 `--do` 之前自己现算，删完补不回来。
+- 本机**根本没有** `.sha256` 这一枚：`backup_export.py` 只落 `<快照名>.jsonl.export-summary.json`，`.sha256` 是第 3 步 `backup_push.py` 写在 NAS 那枚快照旁边的。11-23 现读本机工作目录：快照 3 枚、`.export-summary.json` 3 枚、`.sha256` 0 枚（当天删除前那份全列也是 0 枚，sidecar 那栏只列出 export-summary）。所以「被删 sidecar 的 sha」在本机侧没有对象，别照它报。
+- NAS 侧 sidecar **不进删除候选**（`backup_retain.py` 的 `mine()` 只认 `xiaoman-asuna-backup-*.jsonl`），报告里它只有两件事可报：「还在」＋它自身的 sha（读回来算，别拿快照那把冒充它）。
+- 代码没动、照实说的两格：本机那个删除循环里确实还带着 `.sha256`（本机没有就什么也不做，只是不留痕）；NAS 侧删掉某枚快照后 `backup_retain.py` 仍会顺手 `smbclient.remove(<快照名>.sha256)`，删了不报它的 sha——所以「还在」是对活下来的那些份报的。真要让 NAS 的 sidecar 跟着快照一起留着，得改那一行；本趟不动代码。
 
 ## 四、恢复演练的靶子：现读，不写死
 
@@ -70,5 +87,19 @@ python3 <Base directory>\backup_retain.py --workdir <工作目录> --nas-host <�
 
 ## 七、周留档和探针文件谁清
 
-- **周留 `-weekly` 档有自己的上限：最多 4 份（我这侧的规矩）。脚本不清它。** 含 `weekly` 的名字不进删除候选、也不计入日留份数；超过 4 份时 `backup_retain.py` 只在报告里打一行「周留档 N 份，超过上限 4，未清」，超了怎么办由我手动判断。星期日把某份改名加 `-weekly` 的动作也没有脚本化（没有原文可照）。
+- **周留 `-weekly` 档有自己的上限：最多 4 份（我这侧的规矩）。脚本不清它。** 含 `weekly` 的名字不进删除候选、也不计入日留份数；超过 4 份时 `backup_retain.py` 只在报告里打一行「周留档 N 份，超过上限 4，未清」，超了怎么办由我手动判断。
+- **星期日那一份怎么变成 `-weekly`**（裁决 A，11-22 拍死的形状，一字不改；11-23 起这一格有原文可照，就是下面七条）：
+  1. 第 1、2 步（导出、恢复演练）照常跑在普通名字 `xiaoman-asuna-backup-<日期>T<时分>.jsonl` 上：靶子、两把 sha、readout 都在改名之前拿全。
+  2. 第 3 步**之前**改名，本机侧只有两枚要跟：`X.jsonl` → `X-weekly.jsonl`，`X.jsonl.export-summary.json` → `X-weekly.jsonl.export-summary.json`。能照抄的形状（Windows 原生沙箱没有 shell 变量展开，走 `-c`；11-23 在 scratch 目录实测 exit 0，改出来的两个名字和 11-22 现场那两枚一字一样。这条只用 `os`，哪一枚解释器都跑得动，第一节那条只针对 `backup_*.py` 的 import）：
+
+     ```sh
+     python3 -c "import os;d=r'<工作目录>';a='xiaoman-asuna-backup-<日期>T<时分>';[os.rename(os.path.join(d,x),os.path.join(d,y)) for x,y in ((a+'.jsonl',a+'-weekly.jsonl'),(a+'.jsonl.export-summary.json',a+'-weekly.jsonl.export-summary.json'))]"
+     ```
+
+  3. 本机侧没有 `.sha256` 要跟着改名（见第三节那格），别去找它；`.sha256` 那一枚是第 3 步在 NAS 上生成的，本来就带 weekly 名字。
+  4. 第 3 步用改完的名字推：`--snapshot <工作目录>\X-weekly.jsonl` → NAS 上得到同名的 `X-weekly.jsonl` 和 sidecar `X-weekly.jsonl.sha256`，本机与 NAS 同名。sidecar 文本形状是「sha＋两个空格＋文件名＋换行」：11-23 现读当天那枚 109 字节（普通日份名字长 42），weekly 名字长 49 → 116 字节，NAS 上 11-22 那枚正是 116 —— 这一条是拿长度对出来的推断，不是当场读到的 sidecar 正文。
+  5. **不留同日普通日份**：改完名之后，本机与 NAS 上当天就只有 weekly 这一枚，不再另存普通日份。
+  6. **保留段当天一份都不删**：weekly 的名字不进删除候选、也不计日份；`drop` 取的是名字升序最前面（最旧）的几枚，当天那份排最后，正常情况下选不中。带 `--do` 之前照旧先看拟删清单里有没有今天的日期。
+  7. 一处已知的走样，照实报、不改形状：改名只动文件名，`export-summary.json` 里面 `"file"`／`"path"` 两栏仍是改名前那个名字（11-22 那枚现读就是这样：文件名带 `-weekly`，里面写 `...2026-11-22T1149.jsonl`）。报告里点一句，别当成对不上。
+- 这一格还是靠腿，没进脚本：`backup_retain.py` 每趟照旧印一行「（-weekly 改名不在本脚本里）」，上面七条要执行腿照着做；真要它进脚本得动代码，本趟没动。
 - **NAS 上的 `probe-<日期>.txt` 不清。** 脚本每跑一次留一枚，11-18 我数到 3 枚，没有人清、也没有规矩要清；要清由我手动，只动 `xiaoman-backups` 里 `probe-` 开头的那几枚。

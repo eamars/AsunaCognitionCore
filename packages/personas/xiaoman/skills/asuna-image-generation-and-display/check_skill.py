@@ -75,9 +75,16 @@ scope_key 那一格在不在（scope 字面值从 `scenes` 读、`source` 前缀
 「人像实测」那一节（标题在 SECTIONS，节内保守字面「坐直＋拉链拉到下巴＋领口折起来」、反例构图「趴床／前倾／斜倚」、
 英文写法 `zipper pulled up to chin`、自拍那条「手臂伸出画外」与「手机进画」当可选项、局部放大复核的三块裁图与 `resize`、
 人物小平面那条 `no graphic` 与路线限制）押在该节切片里；11-05 现读字段面押在全篇
-（回执 `warnings` 要看、参数面没有 `pose`／`pose_strength`、`list_routes` 每条给哪些键那一小节、
+（回执 `warnings` 要看、`list_routes` 每条给哪些键那一小节；「参数面没有 `pose`／`pose_strength`」那枚钉 11-23 已反转，见下面 11-23 这段）、
 「两把尺不是一把」——manifest `route_table` 与工具 `list_routes` 不是一个名单）。
 切片为空不等于查过，标题被删那几条一起红。
+
+2026-11-23 起工具面收 loras／pose／pose_strength 三键加 poses 查询（core 改动同趟发布），这本同步三块：
+① 新节「直路速查：loras／pose／poses」（标题进 SECTIONS 末尾，老编号不动），节内 12 条字面压在该节切片里：先看当拍工具表再用、别默认写 character、
+角色 LoRA 的完整调用形状与 0 是关掉、拒绝码 IMAGE_LORA_NOT_IN_WORKFLOW、poses 搜索形状与中文 0 命中换英文、view id 填 pose、改图不能同时传 pose、
+回执核对的 people_detected 与 job= 续取没有 pose 这格。② 原来那枚 field_no_pose_param 钉（「没有 pose／pose_strength」）改钉「直接收 pose／pose_strength」；
+③ STALE_CLAIMS 加三条旧说法（调弱 LoRA 工具面够不到、能不能传姿势：不能、工具面没这个键），散文里裸写回来才红；description 再加一枚「提到 loras 与 poses」。
+一枚钉只钉得住那半句字面：同一格里其余字面被删不红，代价写在 CHANGELOG。
 
 2026-11-06 起再补一节判据（「只画一次」——金主拍板「一张图只画一次，崩了就崩了，不要修」，
 主人同日 15:26 补定交付端三条）：节标题进 SECTIONS，节内 20 条字面押在该节切片里——生产端四条
@@ -318,6 +325,7 @@ SECTIONS = [
     "## 本机已有那张图怎么进可发清单",
     "## 人像实测：构图决定拉链、自拍别指望手机、交图前放大复核",
     "## 只画一次（一单一画，崩了不修）",   # 2026-11-06 新增：一单一画、崩了不修
+    "## 直路速查：loras／pose／poses",       # 2026-11-23 新增：追加在末尾，老编号不动（与下面 QUICK_HEADING 同字）
 ]
 
 # 已经过期的说法：出站图片能力上线后、DECIDE 退役后不能再这么写（只看散文，反引号里的引用不算）
@@ -351,6 +359,10 @@ STALE_CLAIMS = [
     # 不带反引号把名字写回散文（当现行工具在用）才红；反引号里的引用不算。
     "attach_image",
     "stay_silent",
+    # 2026-11-23：工具面已经收 loras／pose／pose_strength／这三种旧说法不带反引号写回散文（当现行事实）才红。
+    "调弱 LoRA 工具面够不到",
+    "能不能传姿势：不能",
+    "工具面没这个键",
 ]
 
 # 人像实测（2026-11-05 落正文；11-04 四张人像实测 + 11-05 一趟便宜档复核）。
@@ -374,11 +386,42 @@ PORTRAIT = [
 # 11-05 现读字段面（押全篇：这几条住在「直路」与「姿势」两节，判的是「别把工具面当服务端面」）。
 FIELD_SURFACE = [
     ("field_warnings_read", "出图 ≠ 参数被接受"),
-    ("field_no_pose_param", "没有 `pose`／`pose_strength`"),
+    ("field_pose_param_on_tool", "直接收 `pose`／`pose_strength`"),   # 11-23 反转：原钉是「没有」
     ("field_list_routes_keys", "每条给哪些键"),
     ("field_two_rulers", "两把尺不是一把"),
     ("field_job_is_resume", "超时续取"),
 ]
+
+
+# 直路速查（2026-11-23 工具面收 loras／pose／poses）：押在这一节的切片里，这些是下次能直接照抄的调用形状。
+QUICK_HEADING = "## 直路速查：loras／pose／poses"
+QUICK = [
+    ("quick_check_tool_table_first", "先判这节能不能用"),
+    ("quick_tool_table_is_the_gate", "当拍工具表"),
+    ("quick_lora_id_not_hardcoded", "别默认写 `character`"),
+    ("quick_lora_call_shape", '"loras": {"character": 0.4}'),
+    ("quick_lora_zero_is_off", '{"character": 0}'),
+    ("quick_lora_unknown_id_code", "IMAGE_LORA_NOT_IN_WORKFLOW"),
+    ("quick_poses_search_shape", '"poses": "sit"'),
+    ("quick_chinese_zero_hit_use_english", "中文 0 命中就换英文词"),
+    ("quick_pose_call_shape", '"pose": "full_single_P012_front"'),
+    ("quick_edit_cannot_take_pose", "pose_unsupported"),
+    ("quick_receipt_people_detected", "people_detected"),
+    ("quick_job_pickup_has_no_pose", "续取只取图"),
+]
+
+
+def quick_section_slice(body):
+    """「## 直路速查…」标题下、下一个二级标题之前的正文。"""
+    out, taking = [], False
+    for line in body.splitlines():
+        if line.startswith("## 直路速查"):
+            taking = True
+        elif taking and line.startswith("## "):
+            break
+        if taking:
+            out.append(line)
+    return "\n".join(out)
 
 
 # 只画一次（2026-11-06 金主拍板「一张图只画一次，崩了就崩了，不要修」，主人 15:26 补定交付端三条）。
@@ -948,6 +991,14 @@ def main():
     for name, token in ONCE:
         check(name, token in once_slice,
               "「%s」不在「只画一次」这一节里（切片 %d 字）" % (token, len(once_slice)))
+
+    # 直路速查（2026-11-23）：标题在 SECTIONS 里查；这里查节内 12 条字面。切片为空不等于查过，标题被删那几条一起红。
+    quick_slice = quick_section_slice(body)
+    check("quick_section_present", bool(quick_slice), "「直路速查」一节切不出正文（标题被改或删）")
+    for name, token in QUICK:
+        check(name, token in quick_slice, "「%s」不在「直路速查」这一节里（切片 %d 字）" % (token, len(quick_slice)))
+    check("description_mentions_loras_and_poses", "loras" in desc and "poses" in desc,
+          "frontmatter description 没提 loras／poses（工具面 11-23 起直接收）")
 
     check("display_relative_markdown_image", bool(RELATIVE_IMAGE.search(body)))
     check("display_no_absolute_image_path", not ABSOLUTE_IMAGE.search(body))

@@ -22,6 +22,8 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024        # the namespace's file-size cap and the
 DEFAULT_TIMEOUT, MIN_TIMEOUT, MAX_TIMEOUT = 180, 30, 300
 PROMPT_CHARS = 8000
 SOURCE_REF_CHARS = 512
+POSE_ANGLES = ('front', 'diag', 'side', 'high', 'low')
+POSE_QUERY_CHARS, POSE_REF_CHARS, LORA_MAX = 80, 512, 12
 OPTION_RULES = {'steps': ('int', 1, 100), 'cfg': ('number', 0, 30),
                 'sampler_name': ('name', None, None), 'scheduler': ('name', None, None)}
 
@@ -39,7 +41,12 @@ GENERATE_IMAGE_TOOL = {
                     'artifact.artifact_id, compare it with what was asked, and draw again (better prompt or another '
                     'workflow) when it is wrong. To edit a picture, give source_image (its ref or artifact_id, as '
                     'read_image takes it) and say the change in the prompt; list_routes marks the routes that take '
-                    'one. The picture is registered as your own image, so a later turn can '
+                    'one. Before drawing: list_routes=yes also shows each route\'s loras ({id: default strength}) and '
+                    'whether it takes pose; then poses=<words> searches the pose library without drawing '
+                    '(poses_people, poses_angle, poses_limit optional) and returns view ids for pose. '
+                    'loras={id: strength} (-2..2, 0 turns it off; unlisted ids are refused), pose=<view id>, '
+                    'pose_strength 0..1 only where the route lists it; the reply carries pose (null if none). '
+                    'The picture is registered as your own image, so a later turn can '
                     'send it with a message; show it in a report as a relative Markdown image. Returns the '
                     'workflow and its prompting guidance, seed, size, bytes and SHA-256 actually written, or the '
                     'service\'s real refusal.'),
@@ -54,6 +61,14 @@ GENERATE_IMAGE_TOOL = {
                                'properties': {'steps': {'type': 'integer'}, 'cfg': {'type': 'number'},
                                               'sampler_name': {'type': 'string'},
                                               'scheduler': {'type': 'string'}}},
+                   'loras': {'type': 'object', 'additionalProperties': True,
+                             'description': 'LoRA strengths {id: -2..2}; ids and defaults per route in list_routes=yes'},
+                   'pose': {'type': 'string', 'description': 'a view id (or pose id) from poses=<words>'},
+                   'pose_strength': {'type': 'number'},
+                   'poses': {'type': 'string', 'description': 'search the pose library, draws nothing'},
+                   'poses_people': {'type': 'integer'},
+                   'poses_angle': {'type': 'string'},
+                   'poses_limit': {'type': 'integer'},
                    'job': {'type': 'string'},
                    'source_image': {'type': 'string'},
                    'workflows': {'type': 'boolean'},
@@ -112,6 +127,31 @@ def validate(args):
                                                           '要画图就不写 list_routes。' % _given(args['workflows']))
         request['list'] = True
         return request, None
+    pose_keys = [k for k in ('poses_people', 'poses_angle', 'poses_limit') if args.get(k) is not None]
+    if args.get('poses') is not None:
+        query = args['poses']
+        if not isinstance(query, str) or not query.strip() or len(query) > POSE_QUERY_CHARS:
+            return None, _error('INVALID_POSES', note='poses 要写一个 1..%d 字的搜索词（先试英文，如 sit；中文常常查不到），%s。'
+                                                      % (POSE_QUERY_CHARS, _given(query)))
+        search = {'q': query.strip()}
+        if args.get('poses_people') is not None:
+            if not _int(args['poses_people'], 1, 2):
+                return None, _error('INVALID_POSES_PEOPLE', note='poses_people 只能是 1 或 2，%s。' % _given(args['poses_people']))
+            search['people'] = args['poses_people']
+        if args.get('poses_angle') is not None:
+            if args['poses_angle'] not in POSE_ANGLES:
+                return None, _error('INVALID_POSES_ANGLE', allowed=list(POSE_ANGLES),
+                                    note='poses_angle 只能是 %s 之一，%s。' % ('、'.join(POSE_ANGLES), _given(args['poses_angle'])))
+            search['angle'] = args['poses_angle']
+        if args.get('poses_limit') is not None:
+            if not _int(args['poses_limit'], 1, 20):
+                return None, _error('INVALID_POSES_LIMIT', note='poses_limit 要是 1..20 的整数，%s；不写服务给 8 条。' % _given(args['poses_limit']))
+            search['limit'] = args['poses_limit']
+        request['pose_search'] = search
+        return request, None
+    if pose_keys:
+        return None, _error('POSES_FILTER_WITHOUT_QUERY', keys=pose_keys,
+                            note='%s 是 poses=<搜索词> 的过滤项，单独写没有用；要搜姿势就把 poses 写上，要画图就去掉它们。' % '、'.join(pose_keys))
     job = args.get('job')
     if job is not None:
         if not isinstance(job, str) or not re.fullmatch(r'[0-9A-Za-z-]{8,64}', job):
@@ -167,6 +207,27 @@ def validate(args):
                 return None, _error('INVALID_OPTION', option=key, note='%s，%s；照 list_routes=yes 里这条路线声明的取值写。'
                                                                      % (OPTION_WORDS[key], _given(value)))
         request['options'] = dict(options)
+    loras = args.get('loras')
+    if loras is not None:
+        if (not isinstance(loras, dict) or len(loras) > LORA_MAX
+                or not all(isinstance(k, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,63}', k) for k in loras)):
+            return None, _error('INVALID_LORAS', note='loras 要是对象 {LoRA id: 强度}，例如 {"character": 0.4}；id 照 list_routes=yes '
+                                                      '里这条路线的 loras 抄，%s。' % _given(loras))
+        for key, value in loras.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not -2 <= value <= 2:
+                return None, _error('INVALID_LORA_STRENGTH', lora=key, note='loras 里每个强度要是 -2..2 的数（0 是关掉），%s 的值%s。'
+                                                                              % (key, _given(value)))
+        request['loras'] = dict(loras)
+    pose = args.get('pose')
+    if pose is not None:
+        if not isinstance(pose, str) or not pose.strip() or len(pose) > POSE_REF_CHARS:
+            return None, _error('INVALID_POSE', note='pose 要写 poses=<搜索词> 返回的 view id（或 pose id），%s。' % _given(pose))
+        request['pose'] = pose.strip()
+    strength = args.get('pose_strength')
+    if strength is not None:
+        if isinstance(strength, bool) or not isinstance(strength, (int, float)) or not 0 <= strength <= 1:
+            return None, _error('INVALID_POSE_STRENGTH', note='pose_strength 要是 0..1 的数，%s；只有 list_routes=yes 里写着 pose_strength 的路线收它。' % _given(strength))
+        request['pose_strength'] = strength
     source = args.get('source_image')
     if source is not None and (not isinstance(source, str) or not 4 <= len(source) <= SOURCE_REF_CHARS):
         return None, _error('INVALID_SOURCE_IMAGE', note='source_image 是一张图的 ref（图旁标的 att-…）或 artifact_id'
@@ -225,7 +286,12 @@ def generate(args, *, runner, workspace, protected=(), register=None, now=None, 
             return {k: v for k, v in report.items() if v is not None} or _error(
             'IMAGE_LIST_FAILED', note='生图服务没列出路线，也没给原因；' + AGAIN + '。')
         return {'workflows': report.get('workflows') or [],
-                'note': '按 best_for/not_for 挑路线，用它要的 style 和语言写提示词（多数要英文）；画时把 workflow 填上；标着 source_image 的路线是改一张图的，写上 source_image。'}
+                'note': '按 best_for/not_for 挑路线，用它要的 style 和语言写提示词（多数要英文）；画时把 workflow 填上；标着 source_image 的路线是改一张图的，写上 source_image；路线带 loras 就按它列的 id 写 loras={id: 强度}（不写按默认强度自动用上），pose 为 true 的路线才收 pose（先 poses=<搜索词> 取 view id）。'}
+    if request.get('pose_search'):
+        if not report.get('listed'):
+            return {k: v for k, v in report.items() if v is not None} or _error(
+                'IMAGE_POSES_FAILED', note='生图服务没给出姿势清单，也没给原因；' + AGAIN + '。')
+        return {k: v for k, v in report.items() if k != 'listed' and v is not None}
     if not report.get('generated'):
         return {k: v for k, v in report.items() if v is not None} or _error(
             'IMAGE_GENERATION_FAILED', note='生图服务没画出来，也没给原因；' + AGAIN + '。')
@@ -253,6 +319,10 @@ def generate(args, *, runner, workspace, protected=(), register=None, now=None, 
              'seed': report.get('seed'), 'width': report.get('width'), 'height': report.get('height'),
              'elapsed_ms': report.get('elapsed_ms'), 'target_relative_path': relative, 'bytes': len(body),
              'sha256': hashlib.sha256(body).hexdigest(), 'media_type': 'image/' + ('jpeg' if kind == 'jpg' else kind)}
+    if report.get('loras') is not None:
+        value['loras'] = report['loras']
+    if report.get('pose_strength') is not None:
+        value['pose_strength'] = report['pose_strength']
     if report.get('warnings'):
         value['warnings'] = report['warnings']
     if report.get('guidance'):
@@ -265,6 +335,9 @@ def generate(args, *, runner, workspace, protected=(), register=None, now=None, 
             outcome = {'registered': False, 'reason': (type(exc).__name__ + ': ' + str(exc))[:120]}
         if isinstance(outcome, dict) and outcome:
             value['artifact'] = outcome
+    value = {k: v for k, v in value.items() if v is not None}
+    if not request.get('job'):                    # 续取只取图，回执里没有提交时的 pose：那一发不报 null，免得误读成「没用姿势」
+        value['pose'] = report.get('pose')      # 没用姿势就如实是 null：画完拿它核对姿势真用上没有
     value['note'] = ('画面还没人看过：先用 read_image 传 artifact.artifact_id 亲眼看一遍，对照要求；不对就按 guidance '
                      '改提示词或换 workflow 再画。报告里用相对路径的 Markdown 图片展示；artifact_id 是可以随消息发出去的那张。')
-    return {k: v for k, v in value.items() if v is not None}
+    return value

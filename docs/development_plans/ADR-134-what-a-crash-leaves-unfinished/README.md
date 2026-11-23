@@ -29,13 +29,15 @@ class.
   | state | kind | input | its time (UTC) |
   | --- | --- | --- | --- |
   | `ATTENDING` | external | `COMPLETE`, result `PROACTIVE_HELD`, hold `foreground_busy` | 2026-11-20 04:17 |
-  | `INTERRUPTED` | external | none | 2026-09-20 04:41 |
-  | `INTERRUPTED` | external | none | 2026-09-20 07:39 |
+  | `INTERRUPTED` | external | row present, no state field | 2026-09-20 04:41 |
+  | `INTERRUPTED` | external | row present, no state field | 2026-09-20 07:39 |
   | `INTERRUPTED` | external | `FAILED` | 2026-09-21 20:23 |
   | `INTERRUPTED` | external | `FAILED` | 2026-09-25 01:02 |
   | `INTERRUPTED` | scheduled | `FAILED` | 2026-10-26 19:43 |
 
-  None of the six will ever run again. Two readers treat a resumable episode as work still in hand:
+  None of the six will ever run again, and none owes anyone. Her reading (0622) found no `speak` and no outbound
+  line in any of them. Four were in her home conversation, on fixture inputs, and one was a plan's scheduled turn of
+  10-27. Two readers treat a resumable episode as work still in hand:
   `memory_tiers.py` and `handover.py`. The quiet gate reads `ATTENDING`.
 
 ## 2. Root cause
@@ -97,6 +99,14 @@ come back only through their inputs, so they are exposed to both breaks.
   input is put back, and `advance` resumes the turn with its recorded tool results, as `RESUMABLE` already says. A
   failure while the Host is not stopping is unchanged: the input `FAILED` and the episode `FAILED_RUNTIME`, told as a
   fault.
+  - The resumed turn says it is resumed. That wording exists already (`_notice`): 「这一回合上次没做完（不是新的消息；
+    接着把原来的事做完）」. The tool calls that took effect before the cut follow it, so they are not repeated.
+  - Her condition (0622): the resumed turn has in view the lines that came in between the cut and the start, so it
+    does not answer from the moment of the cut. Staged case (c) shows whether today's resume already carries them.
+    If it does not, the build adds them the way a running turn gets new lines, and that is shown again.
+  - If the Host stops again while a resumed turn is running, the turn is `INTERRUPTED` again and resumed again. A
+    resumed turn that fails while the Host is running is `FAILED_RUNTIME` and told. Neither is written with D1's
+    `ended_by`, so a cut turn never reads as "the program chose not to run it" (her 0622).
 - **D3. The six end once.** At install, the six episodes in §1 are written `SUPPRESSED` with `ended_by`
   `ADR-134 D3`, each with an audit row. This is a one-off step that names their ids in the build. It is not a sweep
   that runs at every start: a sweep would hide the next break instead of naming it.
@@ -116,9 +126,23 @@ come back only through their inputs, so they are exposed to both breaks.
   quiet.
 - Real traffic, by count and not by date: read after the next 10 Host stops of any kind following the install. It
   passes when, after each start, no episode is left in `RESUMABLE` with its input `COMPLETE` or `FAILED` (counted from
-  the episode and input rows). At 10 stops the reading closes it, pass or fail.
+  the episode and input rows). The reading also counts the `SUPPRESSED` episodes with an `ended_by`, and their audit
+  rows. Today there are 0 of either (her 0622), so the reading counts what is actually written in the database rather
+  than trusting the code. At 10 stops the reading closes it, pass or fail.
 
 ## 6. For her and the owner
+
+Her answers (agent line 0622, 15:11):
+
+1. `SUPPRESSED` with `ended_by` reads right, and better than `ATTENDING`. The result state tells her at a glance
+   whether anyone is owed. It also separates, for the first time, "the program ended it" from "I dropped out".
+2. For D2: resume the turn with its recorded results rather than end it. The resumed turn should have the lines that
+   came in between in view and a visible mark that it is resumed, and a failure of the resumed turn is never written
+   with D1's words.
+
+D3: no objection, after reading each of the six.
+
+Asked before:
 
 - Her: whether `SUPPRESSED` with `ended_by` reads right in her own records for a turn that never ran. Whether D2's
   resumed turn (after a stop, with its tool results kept) is what she wants, or whether a cut turn should end and be

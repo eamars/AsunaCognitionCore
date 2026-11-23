@@ -83,6 +83,7 @@ come back only through their inputs, so they are exposed to both breaks.
 | F2 | A stop cuts a turn: the episode `INTERRUPTED`, its input `FAILED`, never resumed | D2 |
 | F3 | The six left by F1 and F2 before this ADR stay resumable for good | D3 |
 | F4 | A reader that waits on resumable episodes (the quiet gate, `memory_tiers`, `handover`) waits on a dead one | gone with D1-D3; no reader is changed |
+| F6 | A turn caught by every stop stays `INTERRUPTED` with its input `PROCESSING`, beyond §5's count | D2 (the second cut ends it), her 0623 |
 | F5 | A crash between writing an episode and writing its input's `PROCESSING` (the input still `ACCEPTED`) | not a break: the input is put back and the episode advanced; checked by D4's staged case |
 
 ## 4. Decisions (proposed)
@@ -104,9 +105,17 @@ come back only through their inputs, so they are exposed to both breaks.
   - Her condition (0622): the resumed turn has in view the lines that came in between the cut and the start, so it
     does not answer from the moment of the cut. Staged case (c) shows whether today's resume already carries them.
     If it does not, the build adds them the way a running turn gets new lines, and that is shown again.
-  - If the Host stops again while a resumed turn is running, the turn is `INTERRUPTED` again and resumed again. A
-    resumed turn that fails while the Host is running is `FAILED_RUNTIME` and told. Neither is written with D1's
-    `ended_by`, so a cut turn never reads as "the program chose not to run it" (her 0622).
+  - A resumed turn that fails while the Host is running is `FAILED_RUNTIME` and told. It is told the way every failed
+    turn has been since 2026-10-19 (`faults.turn_failed`). The developer gets a note, and her next turn in that
+    conversation opens with her own line from ADR-127 N1: 「你在这里 %s 那一回合没跑成：是程序出了错（%s），不是你做错了
+    什么。」, then what of it went out (「发出去 %d 句」, or 「那一拍你没说出口一个字…」). 20 turns have shown such a line
+    so far. Most of today's 108 `FAILED_RUNTIME` turns are older than that line.
+  - **A turn cut a second time ends** (her 0623: a turn caught by every stop would otherwise stay `INTERRUPTED`, with
+    its input `PROCESSING`, for good). On the second cut, the episode becomes `FAILED_RUNTIME` and its input `FAILED`,
+    with the cause `TURN_CUT_TWICE`. It is told through the same line, and the cause's readable word is hers to write
+    (`faults.CAUSES`).
+  - Neither branch is written with D1's `ended_by`, so a cut turn never reads as "the program chose not to run it"
+    (her 0622).
 - **D3. The six end once.** At install, the six episodes in §1 are written `SUPPRESSED` with `ended_by`
   `ADR-134 D3`, each with an audit row. This is a one-off step that names their ids in the build. It is not a sweep
   that runs at every start: a sweep would hide the next break instead of naming it.
@@ -120,7 +129,10 @@ come back only through their inputs, so they are exposed to both breaks.
     is `COMPLETE`, and no model request is made;
   - (b) an errand cut by a restart ends `SUPPRESSED` with `ERRAND_INTERRUPTED`, and home hears what it sent, as
     today;
-  - (c) a turn cut by a stop is resumed at the start and ends `COMMITTED`, with its recorded tool calls not run again;
+  - (c) a turn cut by a stop is resumed at the start and ends `COMMITTED`, with its recorded tool calls not run again,
+    and the lines that came in between in view;
+  - (c2) a turn cut twice ends `FAILED_RUNTIME` with `TURN_CUT_TWICE`, and the next turn there opens with the fault
+    line;
   - (d) a crash before the input's `PROCESSING` (F5): the episode is advanced at the start.
 - Installed and read by content: the six are `SUPPRESSED` with their audit rows, and the quiet gate opens when she is
   quiet.

@@ -1,6 +1,7 @@
 # ADR-134: What a crash leaves unfinished
 
-Status: **Proposed** 2026-11-23 by big sis (Claude Code), at the owner's word ("Yes please start", 2026-11-23 14:5x,
+Status: **Installed** 2026-11-23 16:05 (`99ea57d5429d`, §8); open until §5's reading after the next 10 Host stops.
+Before: **Proposed** 2026-11-23 by big sis (Claude Code), at the owner's word ("Yes please start", 2026-11-23 14:5x,
 after big sis proposed it as the one task of the day). Everything in §1 was read 2026-11-23 14:20-15:10 from the code
 on `main` (`7abb07feb935`) and from her profile, read-only: episode and input rows by state, kind and time only.
 Times on this page are local time unless marked UTC.
@@ -213,3 +214,26 @@ Staged 15:30-15:40 in an isolated profile `asuna-demo134`: the branch's code, it
 - **At the landing (15:5x):** the suite stopped on `test_runtime_manifest`. The new module was missing from
   `packages/cognition-core/runtime-manifest.json`: packing had written it during the staging, and the teardown
   reverted it as a staging leftover. The manifest was regenerated and committed, and she signed again.
+
+## 8. Installed (2026-11-23 16:05)
+
+Her signature: `99ea57d5429d` (agent line 0628, 15:58). It replaces her `b99f4a14a536` (0626), which the suite stopped
+(§7). Her own read-only check found the code byte for byte the same in the two commits.
+
+- `land.py`:
+  - The suite on `99ea57d5429d` was green: Python 1150 passed, JS 328, 0 unchecked; integration 132 passed.
+  - The prepared start passed. It landed and pushed.
+  - The restart ran on its own (`--restart-only --busy-ok`, which recorded the reason): the only busy item was the
+    stale `ATTENDING` episode that D3 ends. The Host stopped and started at 16:05:00, and `loaded.commit` is
+    `99ea57d5`.
+  - All 170 installed files are the same as the commit. Core package `7e79b01b25a6` -> `22b1ede3e786`. No
+    `3221225477` in `host.log` after the restart.
+- Read by content in her installed copy: `unfinished.py` is present; `chat.py` calls `without_turn` 4 times and `cut`
+  once; `faults.CAUSES` has her 「两次被停机截断，程序不再续它」.
+- D3, written 16:06 at the owner's word (2026-11-23), by `.runtime/private/claude-tools/adr134_d3.py --write`. Each of
+  the six went from its old state to `SUPPRESSED`, with `ended_by` `ADR-134 D3` and one `episode.ended_without_turn`
+  audit row. After it, her database had 0 episodes in `ATTENDING`, `PREPARED`, `TURN` or `INTERRUPTED`, 6 `SUPPRESSED`
+  with an `ended_by`, and 6 audit rows. The quiet gate opened by itself at 16:06 (busy 0), for the first time since
+  11-20.
+- Open: §5's reading after the next 10 Host stops of any kind from 16:05.
+

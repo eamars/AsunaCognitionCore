@@ -115,6 +115,28 @@ def guidance(workflow):
     return {key: clip(item) for key, item in value.items() if item}
 
 
+LORAS_NOTE = '不写就按这个强度自动用上（默认 0 的这条默认关）；调低就弱一些，写 0 就关掉；只认这里列的 id'
+
+
+def lora_defaults(workflow):
+    """{id: default strength} of the LoRAs this workflow declares (parameter_schema loras.properties), else None."""
+    declared = ((workflow.get('parameter_schema') or {}).get('properties') or {}).get('loras')
+    props = declared.get('properties') if isinstance(declared, dict) else None
+    if not isinstance(props, dict) or not props:
+        return None
+    return {name: (spec.get('default') if isinstance(spec, dict) else None) for name, spec in props.items()}
+
+
+def pose_info(workflow):
+    """{'pose': bool, 'pose_strength': default} read from parameter_schema; the strength only where it is declared."""
+    props = (workflow.get('parameter_schema') or {}).get('properties') or {}
+    value = {'pose': 'pose' in props}
+    strength = props.get('pose_strength')
+    if value['pose'] and isinstance(strength, dict):
+        value['pose_strength'] = strength.get('default')
+    return value
+
+
 def list_workflows(service):
     listing = service.json('GET', '/project/workflows')
     out = []
@@ -124,7 +146,9 @@ def list_workflows(service):
             out.append({'workflow': workflow.get('id'), 'description': clip(workflow.get('description') or '', 200),
                         **({'source_image': 'required' if needs_source(workflow) else 'optional'}
                            if takes_source(workflow) else {}),
-                        **guidance(workflow)})
+                        **guidance(workflow),
+                        **({'loras': lora_defaults(workflow), 'loras_note': LORAS_NOTE} if lora_defaults(workflow) else {}),
+                        **pose_info(workflow)})
     return out
 
 
@@ -216,14 +240,46 @@ def forget(service, name):
         return False
 
 
+def search_poses(service, query):
+    """GET /project/poses: each pose with its id, names, people and view ids (nothing is drawn)."""
+    from urllib.parse import urlencode
+    found = service.json('GET', '/project/poses?' + urlencode(query))
+    poses = [{'id': p.get('id'), 'name': clip(p.get('name') or '', 120), 'name_zh': clip(p.get('name_zh') or '', 120),
+              'people': p.get('people'), 'views': p.get('views')}
+             for p in found.get('results') or () if isinstance(p, dict)]
+    value = {'query': query['q'], 'total_matches': found.get('total_matches'), 'poses': poses,
+             'usage': '把 views 里你要的角度的 view id 填进 pose；没列的角度这条没有；只有 list_routes=yes 里 pose 为 true 的路线收 pose，'
+                      '还要在 prompt 里写出姿势（坐姿、跪姿光靠骨架常画成站着）。'}
+    if not poses:
+        value['note'] = ('没有命中：' + ('中文词常查不到，换英文词（如 sit）再查一次；' if any(ord(c) > 127 for c in query['q']) else '')
+                         + '还是没有就不传 pose，把姿势写进 prompt。')
+    return value
+
+
+def lora_check(wanted, workflow):
+    """A LoRA id the workflow does not declare is refused here, with the ids it does."""
+    declared = ((workflow.get('parameter_schema') or {}).get('properties') or {}).get('loras')
+    props = declared.get('properties') if isinstance(declared, dict) else None
+    if not isinstance(props, dict) or declared.get('additionalProperties') is True:
+        return
+    unknown = sorted(name for name in wanted['loras'] if name not in props)
+    if unknown:
+        raise Failure('IMAGE_LORA_NOT_IN_WORKFLOW', workflow=workflow.get('id'), loras=unknown, allowed=sorted(props),
+                      defaults=lora_defaults(workflow),
+                      note='这条路线没有 %s 这个 LoRA；可用的 id 是 %s，照着写 loras={id: 强度}。'
+                           % ('、'.join(unknown), '、'.join(sorted(props)) or '（没有）'))
+
+
 def parameters(request, workflow, source_name=None):
     """Only the fields the workflow declares; anything else is refused here, as the service would."""
     wanted = {'prompt': request['prompt'], 'batch_size': 1, **({SOURCE_PARAMETER: source_name} if source_name else {})}
-    for key in ('negative_prompt', 'width', 'height', 'seed'):
+    for key in ('negative_prompt', 'width', 'height', 'seed', 'loras', 'pose', 'pose_strength'):
         if key in request:
             wanted[key] = request[key]
     wanted.update(request.get('options') or {})
     allowed = ((workflow.get('parameter_schema') or {}).get('properties') or {})
+    if 'loras' in wanted and 'loras' in allowed:
+        lora_check(wanted, workflow)
     unknown = sorted(key for key in wanted if key not in allowed and key != 'batch_size')
     if unknown:
         raise Failure('IMAGE_OPTION_NOT_IN_WORKFLOW', workflow=workflow.get('id'), options=unknown,
@@ -256,6 +312,8 @@ def run(request, service, *, clock=time.monotonic, sleep=time.sleep):
     report = {}
     if request.get('list'):
         return {'workflows': list_workflows(service)}
+    if request.get('pose_search'):
+        return search_poses(service, request['pose_search'])
     sweep(service)
     if request.get('job'):
         report['prompt_id'] = request['job']
@@ -267,9 +325,11 @@ def run(request, service, *, clock=time.monotonic, sleep=time.sleep):
         queued = service.json('POST', '/project/generate', {'workflow': name, 'client_id': 'asuna',
                                                             'parameters': parameters(request, workflow, uploaded)})
         effective = queued.get('effective_parameters') or queued.get('applied_parameters') or {}
+        applied = queued.get('applied_parameters') or {}      # loras and pose_strength are listed here, not in effective
         report.update({'workflow': name, 'prompt_id': queued.get('prompt_id'),
                        'seed': effective.get('seed'), 'width': effective.get('width'),
-                       'height': effective.get('height'),
+                       'height': effective.get('height'), 'pose': queued.get('pose'),
+                       'loras': applied.get('loras'), 'pose_strength': applied.get('pose_strength'),
                        'warnings': [warning(w) for w in queued.get('warnings') or ()][:5],
                        'guidance': guidance(workflow)})
         if not report['prompt_id']:
@@ -343,7 +403,7 @@ def main(argv):
             raise Failure('ENDPOINT_NOT_CONFIGURED', endpoint=str(endpoint)[:80])
         service = Service(entry.get('host') or '127.0.0.1', entry['port'], 30)
         value = run(request, service)
-        print(json.dumps({('listed' if 'workflows' in value else 'generated'): True, **value}, ensure_ascii=False))
+        print(json.dumps({('listed' if 'workflows' in value or 'poses' in value else 'generated'): True, **value}, ensure_ascii=False))
     except Failure as failure:
         print(json.dumps({'generated': False, **failure.report}, ensure_ascii=False))
     except Exception as exc:                       # 任何意外都如实报成失败，不冒充成功

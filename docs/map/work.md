@@ -382,6 +382,8 @@ Trusted one-shot image generation, run only inside the managed integration names
   - `json`
 - def `clip`
 - def `guidance` — How this workflow wants to be prompted and what it is for, in the service's own words.
+- def `lora_defaults` — {id: default strength} of the LoRAs this workflow declares (parameter_schema loras.properties), else None.
+- def `pose_info` — {'pose': bool, 'pose_strength': default} read from parameter_schema; the strength only where it is declared.
 - def `list_workflows`
 - def `text_to_image`
 - def `takes_source` — The workflow declares the uploaded picture it works from (parameter_schema input_image).
@@ -390,6 +392,8 @@ Trusted one-shot image generation, run only inside the managed integration names
 - def `choose_workflow` — The named workflow when it is ready and fits the request (a source picture or none); otherwise the service's own choice: an edit route for a source picture, a text-to-image one without.
 - def `upload` — The source picture uploaded under its content name; returns the name the workflow takes as input_image.
 - def `forget` — The uploaded source removed from the service again; a failure is said, never raised.
+- def `search_poses` — GET /project/poses: each pose with its id, names, people and view ids (nothing is drawn).
+- def `lora_check` — A LoRA id the workflow does not declare is refused here, with the ids it does.
 - def `parameters` — Only the fields the workflow declares; anything else is refused here, as the service would.
 - def `warning` — A service warning in its own words: its code and message, and the sizes when it changed the source (input_downscaled, input_first_frame, over_pixel_budget…).
 - def `first_view`

@@ -333,3 +333,127 @@ def test_a_route_that_needs_a_picture_this_tool_cannot_give_is_not_listed_and_is
         edit(monkeypatch, tmp_path, service, workflow='demo-inpaint')
     assert failure.value.report['error'] == 'IMAGE_WORKFLOW_NEEDS_MORE_PICTURES'
     assert failure.value.report['needs'] == ['mask_image'] and not service.deleted, 'refused before any upload'
+
+
+CHARACTER = {**T2I, 'id': 'demo-character', 'parameter_schema': {'properties': {
+    **T2I['parameter_schema']['properties'],
+    'loras': {'type': 'object', 'additionalProperties': False,
+              'properties': {'character': {'type': 'number', 'minimum': -2, 'maximum': 2, 'default': 0.9}}},
+    'pose': {'type': 'string'}, 'pose_strength': {'type': 'number', 'minimum': 0, 'maximum': 1, 'default': 1.0}}}}
+NO_STRENGTH = {**T2I, 'id': 'demo-pose-only', 'parameter_schema': {'properties': {
+    **T2I['parameter_schema']['properties'], 'pose': {'type': 'string'}}}}
+POSE_USED = {'source': 'library', 'id': 'full_single_P003_front', 'angle': 'front', 'people_detected': 1,
+             'skeleton_url': '/view?filename=s.png&subfolder=_poses&type=input'}
+
+
+class PoseService(FakeService):
+    def __init__(self, **kw):
+        super().__init__(workflows=(T2I, CHARACTER, NO_STRENGTH), **kw)
+        self.pose_reply = POSE_USED
+
+    def json(self, method, path, body=None):
+        if path.startswith('/project/poses'):
+            self.calls.append((method, path, body))
+            return {'query': 'sit', 'total_matches': 1, 'results': [
+                {'id': 'full_single_P003', 'name': 'Sitting', 'name_zh': 'x', 'category': 'sitting', 'people': 1,
+                 'views': {'front': 'full_single_P003_front'}}]}
+        value = super().json(method, path, body)
+        if path == '/project/generate':
+            sent = body['parameters']
+            value['applied_parameters'] = {k: sent[k] for k in ('loras', 'pose_strength') if k in sent}
+            value['pose'] = self.pose_reply if 'pose' in sent else None
+        return value
+
+
+def test_loras_pose_and_strength_are_checked_for_type_and_range_only():
+    ok, error = gen.validate({'prompt': 'x', 'loras': {'character': 0.4}, 'pose': 'full_single_P003_front', 'pose_strength': 0.5})
+    assert error is None and ok['loras'] == {'character': 0.4} and ok['pose'] == 'full_single_P003_front'
+    assert gen.validate({'prompt': 'x', 'loras': {'character': 0}})[1] is None, 'zero is a valid strength: it turns it off'
+    for args, code in (({'loras': [1]}, 'INVALID_LORAS'), ({'loras': {'character': 3}}, 'INVALID_LORA_STRENGTH'),
+                       ({'loras': {'character': True}}, 'INVALID_LORA_STRENGTH'), ({'loras': {'a b': 1}}, 'INVALID_LORAS'),
+                       ({'pose': 5}, 'INVALID_POSE'), ({'pose_strength': 1.5}, 'INVALID_POSE_STRENGTH'),
+                       ({'poses_angle': 'x'}, 'POSES_FILTER_WITHOUT_QUERY')):
+        assert gen.validate({'prompt': 'x', **args})[1]['error'] == code, args
+
+
+def test_loras_and_pose_are_forwarded_whole_and_the_receipt_says_what_the_service_applied(monkeypatch, tmp_path):
+    service = PoseService()
+    report = run(service, request(workflow='demo-character', loras={'character': 0.4}, pose='full_single_P003_front',
+                                  pose_strength=0.7), monkeypatch, tmp_path)
+    queued = next(body for _m, path, body in service.calls if path == '/project/generate')
+    assert queued['parameters']['loras'] == {'character': 0.4} and queued['parameters']['pose'] == 'full_single_P003_front'
+    assert queued['parameters']['pose_strength'] == 0.7
+    assert report['pose']['people_detected'] == 1 and report['loras'] == {'character': 0.4} and report['pose_strength'] == 0.7
+    plain = run(PoseService(), request(workflow='demo-character'), monkeypatch, tmp_path)
+    assert plain['pose'] is None, 'no pose used is said as null'
+
+
+def test_the_receipt_keeps_pose_null_when_no_pose_was_used(tmp_path):
+    good = {'report': {**GOOD['report'], 'pose': None}, 'body': PNG}
+    value = gen.generate({'prompt': 'x'}, runner=FakeRunner(good), workspace=tmp_path)
+    assert 'pose' in value and value['pose'] is None
+    used = {'report': {**GOOD['report'], 'pose': POSE_USED, 'loras': {'character': 0.4}}, 'body': PNG}
+    (tmp_path / 'second').mkdir()
+    value = gen.generate({'prompt': 'x'}, runner=FakeRunner(used), workspace=tmp_path / 'second')
+    assert value['pose']['people_detected'] == 1 and value['loras'] == {'character': 0.4}
+    (tmp_path / 'third').mkdir()
+    picked = gen.generate({'job': 'job-0001-abcd'}, runner=FakeRunner(good), workspace=tmp_path / 'third')
+    assert 'pose' not in picked, 'a job pick-up carries no pose, so it must not say null'
+
+
+def test_a_lora_id_the_route_does_not_declare_is_refused_with_the_ids_it_has(monkeypatch, tmp_path):
+    service = PoseService()
+    with pytest.raises(script.Failure) as failure:
+        run(service, request(workflow='demo-character', loras={'nope': 0.5}), monkeypatch, tmp_path)
+    report = failure.value.report
+    assert report['error'] == 'IMAGE_LORA_NOT_IN_WORKFLOW' and report['allowed'] == ['character'] and report['loras'] == ['nope']
+    assert report['defaults'] == {'character': 0.9} and 'character' in report['note']
+    with pytest.raises(script.Failure) as failure:
+        run(service, request(workflow='demo-t2i', loras={'character': 0.5}), monkeypatch, tmp_path)
+    assert failure.value.report['error'] == 'IMAGE_OPTION_NOT_IN_WORKFLOW' and failure.value.report['options'] == ['loras']
+    with pytest.raises(script.Failure) as failure:
+        run(service, request(workflow='demo-pose-only', pose_strength=0.5), monkeypatch, tmp_path)
+    assert failure.value.report['options'] == ['pose_strength']
+    assert not any(path == '/project/generate' for _m, path, _b in service.calls)
+
+
+def test_the_route_list_reads_loras_and_pose_from_the_schema_not_from_a_fixed_table(monkeypatch, tmp_path):
+    listed = {w['workflow']: w for w in run(PoseService(), gen.validate({'workflows': True})[0], monkeypatch, tmp_path)['workflows']}
+    assert listed['demo-character']['loras'] == {'character': 0.9} and 'loras_note' in listed['demo-character']
+    assert listed['demo-character']['pose'] is True and listed['demo-character']['pose_strength'] == 1.0
+    assert listed['demo-pose-only']['pose'] is True and 'pose_strength' not in listed['demo-pose-only']
+    assert listed['demo-t2i']['pose'] is False and 'loras' not in listed['demo-t2i']
+
+
+def test_the_pose_search_draws_nothing_and_returns_ids_names_people_and_views(monkeypatch, tmp_path):
+    value, error = gen.validate({'poses': 'sit', 'poses_people': 1, 'poses_angle': 'front', 'poses_limit': 3})
+    assert error is None and value['pose_search'] == {'q': 'sit', 'people': 1, 'angle': 'front', 'limit': 3}
+    service = PoseService()
+    report = run(service, value, monkeypatch, tmp_path)
+    assert report['poses'][0]['views'] == {'front': 'full_single_P003_front'} and report['poses'][0]['people'] == 1
+    assert report['poses'][0]['id'] == 'full_single_P003' and report['total_matches'] == 1
+    path = next(path for _m, path, _b in service.calls if path.startswith('/project/poses'))
+    assert path == '/project/poses?q=sit&people=1&angle=front&limit=3'
+    assert not any(p == '/project/generate' for _m, p, _b in service.calls)
+    assert gen.validate({'poses': ''})[1]['error'] == 'INVALID_POSES'
+    assert gen.validate({'poses': 'x', 'poses_limit': 99})[1]['error'] == 'INVALID_POSES_LIMIT'
+    host = gen.generate({'poses': 'sit'}, runner=FakeRunner({'report': {'listed': True, 'query': 'sit', 'poses': []}, 'body': b''}),
+                        workspace=tmp_path)
+    assert host == {'query': 'sit', 'poses': []} and not list(tmp_path.iterdir())
+
+
+def test_a_pose_search_with_no_match_says_what_to_try_next(monkeypatch, tmp_path):
+    class Empty(PoseService):
+        def json(self, method, path, body=None):
+            if path.startswith('/project/poses'):
+                return {'query': 'x', 'total_matches': 0, 'results': []}
+            return super().json(method, path, body)
+    report = run(Empty(), gen.validate({'poses': '坐'})[0], monkeypatch, tmp_path)
+    assert report['poses'] == [] and 'sit' in report['note']
+
+
+def test_the_tool_description_points_at_list_routes_then_poses():
+    text = gen.GENERATE_IMAGE_TOOL['description']
+    assert 'list_routes=yes also shows each route' in text and 'poses=<words>' in text
+    assert {'loras', 'pose', 'pose_strength', 'poses', 'poses_people', 'poses_angle', 'poses_limit'} <= set(
+        gen.GENERATE_IMAGE_TOOL['parameters'])

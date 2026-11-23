@@ -160,3 +160,47 @@ Asked before:
   resumed turn (after a stop, with its tool results kept) is what she wants, or whether a cut turn should end and be
   told to her instead.
 - The owner: nothing beyond the go to build. D3 writes six rows in her live database once, at install.
+
+## 7. Built and staged (2026-11-23)
+
+Built on `claude/adr134-crash-leftovers`:
+
+- `src/asuna/unfinished.py`, with `without_turn` (D1) and `cut` (D2).
+- The four exits in `chat._work`, and the stop branch of its exception path.
+- Her cause word in `faults.CAUSES` (`TURN_CUT_TWICE`: 「两次被停机截断，程序不再续它」, agent line 0624).
+- `tests/test_unfinished.py`, three tests on the in-memory store: a held input ends the turn it had made; an input
+  with no turn, or a finished one, only completes; a first cut keeps the input, and a second ends the turn with her
+  cause.
+- The tests near it (chat, faults, errands, proactive, host, recovery, the project map) pass: 108.
+
+Staged 15:30-15:40 in an isolated profile `asuna-demo134`: the branch's code, its own database
+`asuna_v2_demo_adr134`, a stub model, no `DEEPSEEK_API_KEY`, and the demo agent line on its own port. Torn down
+15:41: the database dropped; the profile, config, junction, launch entry and stub removed.
+
+- **(c) passes: a turn cut by a stop resumes.**
+  - The stub held her first request, and the demo Host was stopped as land.py stops hers (the process tree
+    killed). The episode was left `TURN`, with its input `PROCESSING`.
+  - At the start, her turn ran again with 「这一回合上次没做完」 in its request.
+  - A line posted after the start was in the resumed turn's next request. That is her condition (0622), and today's
+    resume already meets it.
+  - The turn ended `COMMITTED`, its input `COMPLETE`.
+- **(a) passes: an input that ends without a turn ends the turn it had made.**
+  - A held turn was cut the same way. While the Host was down, the 11-20 state was made in the demo database (造的):
+    the episode `ATTENDING`, its input absorbed by another turn.
+  - At the start, recovery put the input back. The exit ended it: the episode `SUPPRESSED` with `ended_by`
+    `SEEN_IN_TURN`, the input `COMPLETE` `SEEN_IN_TURN`, and one audit row
+    `episode.ended_without_turn {ended_by: SEEN_IN_TURN, was: ATTENDING}`.
+  - The stub saw no model request for it.
+- **(c2) could not be staged, and what that says about D2.**
+  - Killing only the demo's DSH process took its worker with it. The launcher started it again, and the turn was
+    resumed as in (c), with no cut counted.
+  - A stop that kills the process tree, land.py's included, leaves `TURN` / `PROCESSING`, which recovery resumes. A
+    worker restart waits for the running turn (`test_restart_waits_for_active_action_but_not_durable_queue`).
+  - D2's branch, a turn that fails while the worker is stopping in-process, is therefore narrow today. It is how
+    the five `INTERRUPTED` episodes of 09-20 to 10-26 were left. Their input was written `FAILED` against an episode
+    promised a resume. D2 removes that contradiction where it is written, and its unit test shows both cuts.
+- **(b) and (d), corrected.**
+  - (b): an errand needs two conversations and a group. Its exit calls the same `without_turn` that (a) showed, so
+    (b) stands on (a) and the unit test.
+  - (d)/F5 cannot occur. `_work` writes the input `PROCESSING` before the router makes the episode, so an episode
+    never exists beside an `ACCEPTED` input.

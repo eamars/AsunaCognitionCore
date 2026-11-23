@@ -204,3 +204,12 @@ Staged 15:30-15:40 in an isolated profile `asuna-demo134`: the branch's code, it
     (b) stands on (a) and the unit test.
   - (d)/F5 cannot occur. `_work` writes the input `PROCESSING` before the router makes the episode, so an episode
     never exists beside an `ACCEPTED` input.
+- **A known limit (her 0626):** a hand-back turn on a task's result, cut by a stop, is still written `INTERRUPTED`
+  with no `cuts` (`chat.py`, the `_feedback_task` branch).
+  - It is not §2's contradiction: it has no input row written `FAILED`, and it is resumed when the result is handed
+    over again (`tasks.feedback` advances `INTERRUPTED`).
+  - ADR-030's hand-back ladder bounds its retries (the short version, then give up), not D2's count.
+  - §5's reading counts it apart, as a hand-back turn left `INTERRUPTED` after a start.
+- **At the landing (15:5x):** the suite stopped on `test_runtime_manifest`. The new module was missing from
+  `packages/cognition-core/runtime-manifest.json`: packing had written it during the staging, and the teardown
+  reverted it as a staging leftover. The manifest was regenerated and committed, and she signed again.

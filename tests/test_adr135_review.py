@@ -128,9 +128,12 @@ def test_the_same_recall_in_another_outside_conversation_does_not(recalling):
 
 def test_at_home_the_recall_meets_it_too_with_where_it_was_asked(recalling):
     stranger_asks(recalling)
+    recalling.tools.coordinator.context.recall = lambda *a, **k: {'coverage_from_program': '造的：想不起'}
     found = recalled(recalling, '路由器口令', scene='dm-a', person='A', cls=visibility.OWNER_PRIVATE)['expired']
     g1 = recalling.store.collection('scenes').get('g1')
     assert [(item['tried']['text'], item['where']) for item in found] == [(ASK, People(recalling.store, None).scene_title(g1))]
+    assert 'coverage' not in recalled(recalling, '路由器口令', scene='dm-a', person='A', cls=visibility.OWNER_PRIVATE)
+    assert recalled(recalling, '天气', scene='dm-a', person='A', cls=visibility.OWNER_PRIVATE)['coverage']
 
 
 def test_the_words_shown_with_an_expired_ask_are_never_matched(recalling):

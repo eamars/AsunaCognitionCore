@@ -2138,7 +2138,7 @@ class RoleTools:
             'expired': len(expired), 'turn_kind': turn_kind(ep), 'place': place(self.store.config, self.store, scene, ep['person_id'])},
             ep['scope_key'])
         result = {'query': query, 'memories': recalled.get('memories') or []}
-        if recalled.get('coverage_from_program'):
+        if recalled.get('coverage_from_program') and not expired:      # an expired ask is what came back, not 想不起
             result['coverage'] = recalled['coverage_from_program']
         if recalled.get('held_back_from_program'):
             result['held_back'] = recalled['held_back_from_program']

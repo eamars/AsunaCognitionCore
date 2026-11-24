@@ -89,8 +89,11 @@ def test_c_at_home_she_writes_a_group_s_notes_by_its_name(reach):
     from asuna.documents import DocumentStore
     from asuna.group_admin import notes_slug
     from asuna.people import People
+    from asuna.records import scenes as scene_records
     store = reach.store
-    name = People(store, PERSONA).scene_title(store.collection('scenes').get('g1'))
+    scene_records.next_seq(store, 'g1', name='造的群')    # a name of its own, as a named line writes it
+    name = People(store, PERSONA).scene_title(scene_records.get(store, 'g1'))
+    assert name == '群聊「造的群」'
     call(reach, home(reach, ['write_document']), 'write_document', {**NOTES, 'group': name})
     sections = (DocumentStore(store, PERSONA).read(notes_slug('g1'))[1] or {}).get('sections') or []
     assert [section['heading'] for section in sections] == ['造的']
@@ -123,3 +126,24 @@ def test_her_review_carries_the_task_it_is_about(reach):
     since, before = guard.review_window(store, '今天')
     [item] = guard.review(store, PERSONA, since, before)['items']
     assert item['tried']['task_id'] == 'task-review'
+
+
+def test_at_home_task_stop_is_offered_while_a_task_of_any_conversation_runs(reach):
+    from asuna import role_tools
+    store = reach.store
+    ep = store.collection('episodes').get(home(reach, []))
+    assert 'task.stop' not in role_tools.exposed(store, ep)
+    outside_task(store)
+    assert 'task.stop' in role_tools.exposed(store, ep)
+    assert 'task.stop' not in role_tools.exposed(store, store.collection('episodes').get(outside(reach, [])))
+
+
+def test_a_group_name_two_groups_share_is_refused(reach):
+    store = reach.store
+    from asuna.people import People
+    titles = {People(store, PERSONA).scene_title(store.collection('scenes').get(g)) for g in ('g1', 'g2')}
+    if len(titles) == 1:                                  # untitled groups read alike
+        refusal = denied(reach, home(reach, ['write_document']), 'write_document', {**NOTES, 'group': titles.pop()})
+        assert list(refusal.codes) == ['GROUP_AMBIGUOUS']
+    else:
+        pytest.skip('the fixture groups have names of their own')

@@ -1022,6 +1022,9 @@ def _turn_rules(store, ep):
     if tasks and not outside and task_records.many(store, [task['_id'] for task in tasks],
                                                    states=['READY', 'RUNNING']).first(fields=['_id']):
         names.append('task.stop')
+    elif (cls == visibility.OWNER_PRIVATE and not outside and not ep.get('errand')
+          and task_records.in_states(store, ['READY', 'RUNNING']).first(fields=['_id'])):
+        names.append('task.stop')      # at home, a task of any of her conversations (ADR-135 landing 9)
     if context.get('stickers_from_program') or context.get('stickers_review_from_program')             or context.get('sticker_candidates_from_program'):
         names.append('sticker')
     scene_kind = (scene_records.get(store, ep['scene_id'], fields=['kind']) or {}).get('kind')
@@ -2819,9 +2822,13 @@ class RoleTools:
         from .people import People
         people = People(self.store, ep['persona'])
         wanted = ' '.join(str(name).split())
-        groups = {people.scene_title(scene): scene['_id'] for scene in scene_records.of_kind(self.store, 'group')}
+        groups = {}
+        for scene in scene_records.of_kind(self.store, 'group'):
+            groups.setdefault(people.scene_title(scene), []).append(scene['_id'])
+        if len(groups.get(wanted) or ()) == 1:
+            return groups[wanted][0]
         if wanted in groups:
-            return groups[wanted]
+            raise Refused('叫「%s」的群不止一个，分不出是哪一个；这一次写不了。' % echoed(name), ['GROUP_AMBIGUOUS'])
         raise Refused('没有叫「%s」的群；group 照抄这些里的一个：%s。' % (echoed(name), '、'.join(sorted(groups)) or '（没有群）'),
                       ['GROUP_UNKNOWN'])
 

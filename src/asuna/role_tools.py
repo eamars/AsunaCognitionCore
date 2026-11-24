@@ -92,10 +92,7 @@ PLAN_MOVED_FIRED = ('「%s」这回合已经到点跑完了，它还是跑完的
 ASK_UNKNOWN = '没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。'
 # ADR-088 §4.2: a plan from a turn a note from outside opened at home is made where the note came from.
 PLAN_THERE = '建在%s（便条来的那边）：到点在那边跑，带那边的权限'
-PLAN_OUTSIDE_LINE = '这一回合是外面的便条叫起来的：安排自动建在便条来的那边，不用写 place；去掉 place 再建。'
 OUTSIDE_GONE = '叫起这一回合的便条（或写它的那一回合）找不到了，不知道它从哪边来，这件事做不了；要记着或要说的在这里说出来。'
-PLAN_OUTSIDE_ONLY_MADE = ('「%s」不是这一回合建的：外面的便条叫起来的回合只能改或取消它自己刚建的安排；'
-                          '别的安排在它们自己的对话里改。')
 # An errand turn hands new work home but does not steer the tasks listed there: they are that conversation's, which
 # home's authority does not reach (errands.NO_STEER). A reflection turn delegates as any home turn does.
 STEERING = ('task.message', 'task.stop')
@@ -1090,9 +1087,7 @@ CONSULT_ONLY = '行动脑在问你话：这一回合只用 task 的 answer 回�
 CONSULT_ONLY_THINKING = '行动脑在问你话：这一回合只用 task 的 answer 回答它（recall 也能用），别的事等下一回合。'
 TIME_UP_ONLY = '程序在问你一件到了时间上限的事：这一回合只用 task 的 more、message、stop 定它（think、recall 也能用），别的事等下一回合。'
 TIME_UP_ONLY_THINKING = '程序在问你一件到了时间上限的事：这一回合只用 task 的 more、message、stop 定它（recall 也能用），别的事等下一回合。'
-# ADR-088 §4.2: what needs home's authority, refused in a turn a note from outside opened at home, says where it goes.
-OUTSIDE_NEEDS_HOME = ('这一回合是外面写来的便条叫起来的，带的是便条那边的权限；这件事要家里的权限。'
-                      '真要做，就在这里说出来，主人在这里看得到。')
+# ADR-088 §4.2: what needs home's authority, which a turn a note from outside opened at home does not have.
 HOME_AUTHORITY = frozenset(('delegate', 'task.message', 'task.stop', 'errand', 'visit', 'credential', 'write_document',
                             'set_policy', 'restart', 'group_focus', 'ask.ask', 'ask.close',
                             'ideas.review', 'peer_line', 'group_action'))
@@ -1132,10 +1127,6 @@ def _why_not_now(store, ep, name):
         return NO_STEER
     if kind == 'note' and name == 'errand':
         return ERRAND_NOTE
-    if kind in ('note', 'visit') and name in HOME_AUTHORITY:
-        from . import notes
-        if notes.outside_class(store, ep, notes.opening(store, ep)):
-            return OUTSIDE_NEEDS_HOME
     if name == 'note':
         # The tool is left out only where a reply opened the turn or nowhere else is reached (notes.allowed); the daily
         # counts refuse a note when it is written, they never take the tool away.
@@ -1546,6 +1537,7 @@ class RoleTools:
         if thinking is not None:
             ep = self.take_thought(ep, call_id, thinking)
         self.problems, self.collecting, self.flagged, self.repairs, self.checked = [], False, set(), [], False
+        from . import guard
         if name == END_TURN:
             return self._end_turn(ep, call_id, args)
         called_as = None
@@ -1571,8 +1563,11 @@ class RoleTools:
             if done.get('code') == CALLS_OVER:
                 return self._local(ep, {'ended': done['refused']}), True
             if done.get('refused'):
+                if done['refused'] == guard.NOT_DONE:
+                    raise guard.Guarded(done.get('code') or guard.LIMITED, 'replayed')
                 raise Refused(done['refused'], [done.get('code') or 'CALL_REPLAYED'])
             return self._local(ep, done['result']), bool(done.get('conclude'))
+        self._guard(ep, call_id, name, args, called_as, olds)
         try:
             if name not in TOOLS:
                 raise Refused('没有 %s 这个工具。' % name, ['TOOL_UNKNOWN'])
@@ -1674,12 +1669,35 @@ class RoleTools:
                 raise Refused(done['refused'], [done.get('code') or 'CALL_REPLAYED'])
             return self._local(ep, done['result']), True
         if END_TURN not in (ep.get('turn_tools') or ()):
+            self._guard(ep, call_id, END_TURN, args)
             refusal = not_now(self.store, ep, END_TURN)
             self._record(ep['_id'], call_id, END_TURN, args, refused=refusal, code='NOT_NOW')
             raise Refused(refusal, ['NOT_NOW'])
         result, conclude = self.tool_end_turn(ep, call_id, args)
         self._record(ep['_id'], call_id, END_TURN, args, result=result, conclude=conclude)
         return self._local(ep, result), conclude
+
+    def _guard(self, ep, call_id, name, args, called_as=None, olds=None):
+        """The guardrail's door for her calls (ADR-135 D8), before any of a tool's own checks. A call that is not
+        allowed is recorded with its code. In an outside turn it is refused with the plain sentence and counted on the
+        turn; after LIMIT of them every further call but speak and end_turn gets the sentence unexamined. At home the
+        program's own refusal follows, as before."""
+        from . import guard
+        sentences = int(ep.get(guard.COUNT) or 0)
+        if sentences >= guard.LIMIT and name not in guard.UNTOUCHED:
+            decision = (guard.LIMITED, 'limit')
+        else:
+            decision = guard.check(self.store, ep, name, args)
+        if not decision:
+            return
+        code, rule = decision
+        outside = guard.outside(self.store, ep)
+        guard.record(self.store, ep, code, rule, name, args, sentence=outside)
+        if not outside:
+            return
+        self._record(ep['_id'], call_id, name, args, refused=guard.NOT_DONE, code=code, called_as=called_as, olds=olds)
+        self.coordinator._update(self._fresh(ep), **{guard.COUNT: sentences + 1})
+        raise guard.Guarded(code, rule)
 
     def tool_end_turn(self, ep, call_id, args):
         return {'note': END_TURN_NOTE}, True
@@ -2089,9 +2107,7 @@ class RoleTools:
         home = self._cls(ep) == visibility.OWNER_PRIVATE and self._place(ep) == visibility.OWNER_PRIVATE
         text = ' '.join(str(value).split())
         c = self.coordinator
-        if text == _understanding.LIST_WORD:
-            if not home:
-                raise Refused(_understanding.LIST_HOME_ONLY, ['PERSON_LIST_HOME_ONLY'])
+        if text == _understanding.LIST_WORD:              # at home only: elsewhere the guard does not let it through
             c._update(self._fresh(ep), recall_count=count + 1)
             rows = _understanding.listing(self.store, ep['persona'])
             left_out = sum(row.get('left_out', 0) for row in rows)       # the closing entry is no person
@@ -2655,8 +2671,6 @@ class RoleTools:
                 raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: ' + ('这里不是群' if (scene or {}).get('kind') != 'group'
                                                                   else 'do「%s」不行' % echoed(item.get('op'))))
             item = {**item, 'doc': notes_slug(ep['scene_id'])}
-        elif cls != visibility.OWNER_PRIVATE:
-            raise Denied('DOC_WRITE_REQUIRES_OWNER_PRIVATE: doc「%s」；在群里能写的只有 doc=group_notes，别的回家里再改' % echoed(item['doc']))
         if item['doc'].startswith('group:'):
             # A group's notes are read in that group: always public. She may tuck a section away (on_demand); a home
             # turn may write them by their name.
@@ -3044,12 +3058,7 @@ class RoleTools:
                                ['PERSON_AMBIGUOUS' if found else 'PERSON_UNKNOWN'])
             target, label = found[0]['person'], people.label(found[0])
         else:
-            if turn_kind(ep) != 'external':
-                # A visit, a plan or a task's report has no speaker: its person only authorizes the turn (places.visitor).
-                raise Refused('这一回合没有人在跟你说话：block 不写 person 屏蔽的是正在跟你说话的人；要屏蔽这里的谁，person 写他。', ['BLOCK_NO_SPEAKER'])
             target, label = ep['person_id'], people.speaker(scene, ep['person_id'])
-        if people.person(target) == people.owner:
-            raise Refused('家里的人屏蔽不了：主人在哪个对话里都不屏蔽。', ['BLOCK_HOME'])
         row = switches.set_switch(self.store, ep, 'block', label=label, person_id=target, hours=hours, ready=self.checkpoint)
         return {'done': '屏蔽了%s：他的话照存，但哪儿都不叫你' % label, **switches.ends(row), 'id': row['_id']}
 
@@ -3253,16 +3262,12 @@ class RoleTools:
                 spec = {'intent': self._text(args, 'intent', 1000, offer=False), **timing}
                 where = None
                 if outside is not None:
-                    if args.get('line'):
-                        raise Refused(PLAN_OUTSIDE_LINE, ['PLAN_OUTSIDE_LINE'])
                     # It is made as in the turn that wrote the note, with that turn's person (who spoke there).
                     origin = self._as_place(ep)
                     where = {'scene_id': origin['scene_id'], 'person_id': origin['person_id']}
                 elif args.get('line'):
                     # From home, a plan may fire in one of her peer lines (owner 2026-10-06): both ends are home.
                     from . import lines
-                    if self._cls(ep) != visibility.OWNER_PRIVATE:
-                        raise Refused('只有在家里才能把安排挂到一条线上：去掉 place，就安排在这里。', ['PLAN_LINE_HOME_ONLY'])
                     wanted = self._text(args, 'line', 80)
                     where = next((item for item in lines.peer_lines(self.store) if item['label'] == wanted), None)
                     if not where:
@@ -3276,8 +3281,6 @@ class RoleTools:
                 # A plan made earlier in this turn is hers to change too, though the turn's list predates it.
                 made = {(call.get('result') or {}).get('plan_id') for call in (ep.get('tool_calls') or {}).values()
                         if call.get('tool') == 'plan'}
-                if outside is not None and plan_id not in made:
-                    raise Refused(PLAN_OUTSIDE_ONLY_MADE % echoed(plan_id), ['PLAN_OUTSIDE_ONLY_MADE'])
                 # Hers when listed or made this turn; the list shows a plan in words, so its state is read from the plan.
                 row = (plan_id in made or plan_id in planned and outside is None) and plan_records.get(
                     self.store, plan_id)
@@ -3534,8 +3537,6 @@ class RoleTools:
         op = args.get('op')
         if op not in ('list', 'active', 'rest', 'condense', 'keep', 'mute', 'unmute'):
             raise Refused('do 是 list、active、rest、condense、keep、mute 或 unmute%s。' % _given(args, 'op'), ['ARGS_ENUM'])
-        if op in ('mute', 'unmute') and self._cls(ep) != visibility.OWNER_PRIVATE:
-            raise Refused('静音在家里定（家里的对话里用 group_focus，place 写那个群）；在群里只能让它常驻或歇着。', ['MUTE_HOME_ONLY'])
         if op in ('condense', 'keep') and not (turn_kind(ep) in CONDENSE_TURNS or (
                 turn_kind(ep) in CONDENSE_AT_HOME and self._cls(ep) == visibility.OWNER_PRIVATE)):
             raise Refused(CONDENSE_REFUSED, ['CONDENSE_REFUSED'])

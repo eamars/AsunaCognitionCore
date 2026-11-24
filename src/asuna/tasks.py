@@ -836,6 +836,8 @@ class ToolBroker:
                              '重试也一样：停下，在报告里写做到了哪里')
             task,sandbox=self.bindings[session]
             current=self.service.valid(task)
+            from . import guard
+            guard.guard_task(self.store,current,tool,args)       # ADR-135 D8: the doing side's door, before any check
             if tool not in current['allowed_capabilities'] or (tool in DEVELOPMENT_NAMES and not current.get('development_grant')):
                 raise Denied(capability_refusal(self.store,current,tool))
             if integration_gated(tool):

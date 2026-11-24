@@ -90,7 +90,6 @@ ENTRY_MAX = 8                        # people in one turn's entry: the trigger a
 EXPLICIT = ('mentioned_account', 'reply_to_character', 'catchup_mention')    # a waiting line addressed to her
 LIST_WORD = '名单'
 NOT_WRITTEN = '还没写过'
-LIST_HOME_ONLY = '「名单」只在家里列：那张表会把你别的对话里的人带进一个外面的人能写字的回合；回家里 recall 的 person 写「名单」。'
 
 
 def layers(store, scene, person_id):

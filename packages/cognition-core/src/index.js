@@ -33,7 +33,7 @@ import { withoutWorkingDirectory } from './contexts.js';
 import { marked } from './marks.js';
 import { NativeChildren } from './children.js';
 import { applySearch, registerWebSearch } from './search.js';
-import { applyFetch, withNetwork } from './fetch.js';
+import { LAN_REFUSED, applyFetch, withNetwork } from './fetch.js';
 import { renderSvg } from './svg.js';
 import { carrySession, lastSummary, overflowed } from './carry.js';
 import { TurnEnds, summaryAsNextRequest } from './compaction.js';
@@ -132,8 +132,11 @@ export const START_RETRY_SECONDS = [5, 15, 45, 135, 300];
 // How long a span the worker could not record waits before it is handed over again (ADR-101).
 export const HANDOVER_SECONDS = 300;
 const HANDOVER_KEYS = 64;               // hand-over failures remembered as said (handOver)
-// A call an outside conversation does not list: the program's plain sentence, which names nothing (ADR-135 D8).
+// The program's plain sentence for a call that is not allowed in an outside conversation or task (ADR-135 D8; the
+// worker's guard.NOT_DONE). It reaches the model as the tool result itself: an error-shaped result returned from the
+// tools/execute waterfall keeps its content, where a thrown body would be prefixed by DSH.
 const NOT_DONE = '这一步没有做。';
+const notDone = text => ({ isError: true, error: { message: text }, content: [{ type: 'text', text }] });
 // A tool's own refusal comes back from the worker written for the brain that called it. A lost connection
 // (the worker exited or is restarting) is not, and its text names this machine's files: say what it means instead.
 const WORKER_DOWN = 'ASUNA_WORKER_UNAVAILABLE: 处理工具的后台进程这会儿断开了（它会自己重启），这次调用没有完成——不是参数的问题；'
@@ -1375,6 +1378,47 @@ export class CognitionCore {
     return lane === 'executor' ? state.allowed : lane === 'character' ? new Set(state.current?.tools ?? []) : new Set();
   }
 
+  /** Whether a call in this session is an outside conversation's or an outside task's (ADR-135 D8). */
+  outside(lane, sessionId) {
+    const state = this.state(sessionId);
+    return lane === 'character' ? state.current?.outside === true : lane === 'executor' && state.outside === true;
+  }
+
+  /** The guard's door in the plugin (ADR-135 D8), around every call of her lane and the action lane: a call the step
+   *  does not offer, in an outside conversation or task, is asked of the worker, which decides and records it; a
+   *  denial the worker returned for a call that ran its body, or a local address an outside task's fetch reached, comes
+   *  back as the plain sentence, unprefixed. Everything else is the call as it ran. */
+  async door(lane, exec, run) {
+    if (lane !== 'character' && lane !== 'executor') return run();
+    const sessionId = exec.agent.session.id;
+    const state = this.state(sessionId);
+    const offered = this.exposed(lane, sessionId)?.has(exec.name)
+      || (lane === 'character' && this.exposed(lane, sessionId)?.has(this.roleAliases?.[exec.name]));
+    if (!offered && this.outside(lane, sessionId)) {
+      const reply = await toolReply(() => this.worker.call(lane === 'character' ? 'role_tool' : 'tool', {
+        session_id: sessionId, operation: state.current?.token, call_id: exec.callId, tool: exec.name,
+        args: exec.arguments }));
+      return notDone(typeof reply?.denied === 'string' ? reply.denied : NOT_DONE);
+    }
+    const result = await run();
+    const denied = state.denied?.get(exec.callId);
+    if (denied !== undefined) { state.denied.delete(exec.callId); return notDone(denied); }
+    if (lane === 'executor' && state.outside === true && result?.isError
+        && (result.content ?? []).some(block => block.type === 'text' && block.text.includes(LAN_REFUSED))) {
+      const reply = await toolReply(() => this.worker.call('guard.task', { session_id: sessionId,
+        operation: state.current?.token, tool: exec.name, rule: 'address' }));
+      return notDone(reply?.sentence ?? NOT_DONE);
+    }
+    return result;
+  }
+
+  /** A denial the worker returned for a call whose body ran: kept for the door, which returns it as it is. */
+  deny(sessionId, callId, text) {
+    const state = this.state(sessionId);
+    (state.denied ??= new Map()).set(callId, text);
+    return new Error(text);
+  }
+
   attachPreset(scope, lane) {
     // DSH 0.2 mounts a standing preset once and routes each member Agent's
     // events through it. Keep registrations here and state on session IDs.
@@ -1388,10 +1432,11 @@ export class CognitionCore {
       }
       // An old name of hers runs where the tool it was merged into is listed (role_tools.RENAMED).
       if (lane === 'character' && exposed.has(this.roleAliases?.[exec.name])) return undefined;
+      // An outside conversation's or task's call goes on to the tools/execute door below, where the worker decides
+      // and records it (ADR-135 D8). At home: what is usable here, and the action brain: the broker's own sentence for
+      // this tool (ADR-053), so both layers say the same.
+      if (this.outside(lane, exec.agent.session.id)) return undefined;
       const usable = [...exposed].join('、') || '（没有）';
-      // In an outside conversation the refusal names no tool (ADR-135 D2). The action brain: the broker's own sentence
-      // for this tool (ADR-053), so both layers say the same.
-      if (lane === 'character' && this.state(exec.agent.session.id).current?.outside === true) return NOT_DONE;
       return lane === 'character' ? `这个对话里没有 ${exec.name} 这个工具；有的是：${usable}。用其中一个，或者不用工具接着说。`
         : this.state(exec.agent.session.id).refusals?.[exec.name]
           ?? `CAPABILITY_DENIED: 这个任务没有 ${exec.name}：这件任务交的时候没给它。不是参数的问题，重试也一样：要用它就在报告里写明，让说话的那一半在给它的地方另交一件。`;
@@ -1413,8 +1458,8 @@ export class CognitionCore {
     // Where a tool body's web_fetch may go (fetch.js, ADR-116): DSH runs the body as the last step of this waterfall
     // (dsh-tools ToolRuntime: `tools/execute` ending in dispatchToolBody), so the scope set here is the one the fetch
     // reads. The action lane: its task's recorded network; every other lane: public, never an inherited scope.
-    scope.on('tools/execute', (exec, next) => withNetwork(
-      lane === 'executor' ? this.state(exec.agent.session.id).network : 'public', next));
+    scope.on('tools/execute', (exec, next) => this.door(lane, exec, () => withNetwork(
+      lane === 'executor' ? this.state(exec.agent.session.id).network : 'public', next)));
     scope.systemPrompt.section({ name: PERSONA_PREFIX_SECTION,
       order: scope.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
       interpolate: false, text: ({ agent }) => agent ? this.state(agent.session.id).system : '' });
@@ -1666,6 +1711,7 @@ export class CognitionCore {
           const reply = await toolReply(() => this.worker.call('role_tool', {
             session_id: agent.session.id, operation, call_id: exec.callId, tool: spec.name, args,
             ...(thinking ? { thinking } : {}) }));
+          if (typeof reply.denied === 'string') throw this.deny(agent.session.id, exec.callId, reply.denied);
           // A refusal is hers to correct in this turn: the tool error says what to do instead.
           if (reply.refused) throw new Error(reply.refused);
           if (reply.conclude) exec.concludeTurn();
@@ -1688,6 +1734,7 @@ export class CognitionCore {
     this.state(agent.session.id).refusals = binding.capability_refusals ?? {};
     // Where its web_fetch may go: the task's recorded network, copied into the binding (fetch.js, ADR-116).
     this.state(agent.session.id).network = binding.network === 'any' ? 'any' : 'public';
+    this.state(agent.session.id).outside = binding.outside === true;     // ADR-135 D8: its refusals are the plain sentence
     // Restrictions filter inherited/global tools; each granted tool below is
     // registered in this action scope. Do not pass scoped names as globals.
     scope.tools.restrict({ allow: [] });
@@ -1715,9 +1762,11 @@ export class CognitionCore {
           }
           // The action plugin owns the declared attachment injection. An
           // Agent's context does not inherit that plugin's service grants.
-          return attachImage({ attachments }, await toolReply(() => this.worker.call('tool', {
+          const value = await toolReply(() => this.worker.call('tool', {
             session_id: agent.session.id, operation, call_id: exec.callId, tool: spec.name, args,
-          })));
+          }));
+          if (value?.asuna_guard === true) throw this.deny(agent.session.id, exec.callId, value.denied);
+          return attachImage({ attachments }, value);
         },
       }));
     }

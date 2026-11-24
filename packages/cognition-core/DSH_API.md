@@ -17,6 +17,7 @@ The DSH services, hooks, events, APIs, UI facilities and file formats the core p
 | `workspaceRegistry` (`create`, `list`, `insertBefore`, `delete`, `archiveSession`, `unarchiveSession`) | her workspaces (Local and one per channel), archiving and unarchiving conversations | `navigation.js` `organizeNativeWorkspaces`; `index.js` `openAgent` |
 | `workspaceController`, `storageDomain`, `subagents` | injected by the core plugin; `subagents` catalogues her action tasks as DSH subagents | `index.js` `inject`; `children.js` |
 | `tools` (`register`, `guard`, `restrict`) | register her role tools and the action tools, refuse a tool a session may not use, tool-free presets | `index.js` `attachPreset`; `attend.js`; `appraiser.js`; `recovery.js` |
+| `tools/execute` waterfall | the guard's door: an error-shaped result (`isError`, `error`, `content`) returned from it reaches the model with its content as given, where a thrown tool body is prefixed `Error: `; it runs before a tool the step does not offer is looked up | `index.js` `door` |
 | `systemPrompt` (`section`, `getSectionOrder`) | her persona prefix, identity and the web search section | `index.js` `attachPreset`; `search.js` |
 | `llm` (`listProviders`, `listModels`, `resolveModelInfo`, `stream`) | the settings card's catalog, route checks, her compaction engine | `api.js`; `index.js` `resolveRoutes`; `compaction.js` |
 | `tokenMeter` | a conversation's size in DSH's own measure, for condensing | `index.js` `conversationSize` |

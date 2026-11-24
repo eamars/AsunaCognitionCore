@@ -407,3 +407,22 @@ The reasons behind her actions: what she did after each thought, and the thought
 - def `thought` — Her thought as she wrote it (the excerpt mark if ever cut), or one from the model's thinking as `shown`; None.
 - def `for_call` — The thought behind the call in that turn whose result carries field=value (a plan, a task), or None.
 - def `for_message` — The thought behind a line she delivered: her last thought in the turn that spoke it, or None.
+
+## `guard`
+
+[src/asuna/guard.py](../../src/asuna/guard.py)
+
+The guardrail (ADR-135 D8): whether a call is allowed, decided from stored facts before any handler runs.
+
+- class `Guarded` — A call of hers the guard did not allow, in an outside turn: its words are the sentence, its code the row's.
+- class `TaskGuarded` — A task's call the guard did not allow, in an outside task: its words are the sentence.
+- def `authority` — The class her turn acts with (RoleTools._cls): home's on an errand, the origin's in a home turn a note from outside opened, else its conversation's.
+- def `place` — The class of the conversation her turn is in.
+- def `opened_from_outside` — The note from outside that opened this home turn ({} when it is gone), or None (RoleTools._outside).
+- def `outside` — Whether her turn is an outside one: its conversation is outside, or a note from outside opened it at home.
+- def `task_outside` — Whether a task is an outside one: given in a conversation that is not one of the owner's own.
+- def `check` — (code, rule) when this call of hers is not allowed here and now, else None.
+- def `check_task` — (code, rule) when a task's call reaches outside its grant, else None: a tool it was not given, an integration tool without its profile, a credential outside a home task.
+- def `record` — One audit event for her call that was not allowed: the reason, for us; `sentence`: whether she got the plain sentence (an outside turn) or the program's own refusal (home).
+- def `guard_task` — The doing side's door (ToolBroker.call): a call that reaches outside the task's grant is recorded, and in an outside task refused with the plain sentence (TaskGuarded); in a home task the broker's own refusal follows.
+- def `deny_task` — One audit event for a task's call that was not allowed; the sentence in an outside task, else None (the program's own refusal stands).

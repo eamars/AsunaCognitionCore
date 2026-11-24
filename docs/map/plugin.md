@@ -315,6 +315,9 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `workerFailed`
   - `restart` — Every in-place restart says why: in the status (lifecycle.history) and in a durable log beside the worker's data (the Host's console is kept only under the supervisor, restart/host.log, and only its newest part).
   - `exposed` — The tools a stage lists: her conversation's (role_tools.toolbox; the worker refuses one the turn may not use) or the action task's grant.
+  - `outside` — Whether a call in this session is an outside conversation's or an outside task's (ADR-135 D8).
+  - `door` — The guard's door in the plugin (ADR-135 D8), around every call of her lane and the action lane: a call the step does not offer, in an outside conversation or task, is asked of the worker, which decides and records it; a denial the worker re
+  - `deny` — A denial the worker returned for a call whose body ran: kept for the door, which returns it as it is.
   - `attachPreset`
   - `admit` — A role turn's claimed input, admitted once per step: the worker answers with the stage (its persona and its tools).
   - `attachRole` — Her mind's tools in a role session (ADR-011 §5.1); each turn exposes some of them (exposed()).

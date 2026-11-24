@@ -285,7 +285,10 @@ Every error a tool call can return is read by a model that has to act on it, so 
   token, a line number) or show a value she gave through `config.echoed`, which keeps a name, a choice or an id whole
   and cuts anything longer than 16 characters (the same test checks, within each function, that a value read from
   the call reaches a refusal's words only through it).
-- A call is checked in layers (`RoleTools.call`). The Host plugin's guard checks the schema the worker ships
+- A call is checked in layers (`RoleTools.call`). First, whether it is allowed at all (`guard.check`, from stored
+  facts, before anything about its form): in an outside turn a call that is not allowed gets the plain sentence and
+  nothing else, its reason only in the audit ([RUNTIME_API.md](../RUNTIME_API.md)); at home the layers below word the
+  refusal. Then the Host plugin's guard checks the schema the worker ships
   (`tool_schema.declared`, permissive), in her words with DSH's own line verbatim at the end (`tool-args.js`). In the
   worker: a permission refusal stops alone and names what does the job here (`INSTEAD`); everything else is collected
   into one refusal, numbered, her call's own first thought first, the codes of all of them in the record: the strict

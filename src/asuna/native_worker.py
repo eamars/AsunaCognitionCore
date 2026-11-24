@@ -21,7 +21,7 @@ import time
 import uuid
 
 from . import clock
-from . import sandbox_backend, channel_kinds, errands, tool_watch, visibility
+from . import sandbox_backend, channel_kinds, errands, guard, tool_watch, visibility
 from .host import RuntimeHost
 from .config import DATA, ROOT, database_lock, redact_text, echoed
 from .evidence import Evidence, sha
@@ -302,6 +302,8 @@ class NativeLane:
                 **({'network': task.get('network') or 'public'} if self.lane == 'executor' and task else {}),
                 'allowed_capabilities': task['allowed_capabilities'] if self.lane == 'executor' else [],
                 **({'capability_refusals': self.worker.refusals_for(task)} if self.lane == 'executor' else {}),
+                # An outside task's refusals are the plain sentence (ADR-135 D8): the plugin's door asks the worker.
+                **({'outside': guard.task_outside(self.store, task)} if self.lane == 'executor' and task else {}),
                 'system_sha256': sha(system.encode()),
                 'skill_directories': [str(path) for path in skill_directories(self.store.config, ep['scene_id'], ep['person_id'],
                                                                               self.store)],
@@ -1419,10 +1421,26 @@ class BusinessWorker:
             self.app.broker.bind(broker_session, task, Path(binding['cwd']))
             # The action brain reads tool results on the local clock; receipts keep UTC (local_time.py).
             from . import local_time
+            from .guard import TaskGuarded
             from .tasks import ToolFailed
-            with self.calls.timed('action', args['call_id'], args['tool'], args['args'], task, failed=(ToolFailed,)):
-                result = self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args'])
+            try:
+                with self.calls.timed('action', args['call_id'], args['tool'], args['args'], task,
+                                      failed=(ToolFailed, TaskGuarded)):
+                    result = self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args'])
+            except TaskGuarded as exc:
+                return {'asuna_guard': True, 'denied': str(exc)}   # the plain sentence, returned as it is (ADR-135 D8)
             return local_time.for_model(result, local_time.her_zone(self.app.store))
+        if method == 'guard.task':
+            # ADR-135 D8: a call of an outside task the plugin refused where it runs (a local address its fetch reached):
+            # recorded here, and the sentence it returns.
+            record = self.session(args['session_id'])
+            if record['lane'] != 'executor':
+                raise Denied('ACTION_SESSION_REQUIRED')
+            task = task_records.get(self.app.store, record.get('task_id'))
+            if not task:
+                raise Denied('NATIVE_OPERATION_NOT_ACTIVE')
+            rule = args.get('rule') if args.get('rule') in ('address',) else 'address'
+            return {'sentence': guard.deny_task(self.app.store, task, 'not_granted', rule, str(args.get('tool') or ''))}
         if method == 'tool_specs':
             # One list: the broker's, which is also what every call is checked against.
             return self.app.broker.specs
@@ -1482,8 +1500,11 @@ class BusinessWorker:
             future.asuna_calls.put(({'call_id': args['call_id'], 'tool': args['tool'], 'args': args.get('args'),
                                      **({'thinking': args['thinking']} if isinstance(args.get('thinking'), dict) else {})},
                                     reply))
+            from .guard import Guarded
             try:
                 value, conclude = reply.result(timeout=self.app.config['workflow_timeout_seconds'])
+            except Guarded as exc:
+                return {'denied': str(exc)}          # the plain sentence: the plugin returns it as it is (ADR-135 D8)
             except Refused as exc:
                 return {'refused': str(exc)}
             return {'value': value, 'conclude': bool(conclude)}

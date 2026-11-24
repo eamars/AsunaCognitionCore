@@ -279,6 +279,7 @@ From an input to her words: queueing, context, her tools, the checks, publishing
 - [`handover`](../../src/asuna/handover.py) — ADR-030: the program's watchdog over handovers between the brains.
 - [`unfinished`](../../src/asuna/unfinished.py) — What a restart leaves unfinished (ADR-134): every input that ends ends its turn, and a cut turn is resumed or ended.
 - [`reasons`](../../src/asuna/reasons.py) — The reasons behind her actions: what she did after each thought, and the thought behind each action.
+- [`guard`](../../src/asuna/guard.py) — The guardrail (ADR-135 D8): whether a call is allowed, decided from stored facts before any handler runs.
 
 ### [Groups and people](people.md)
 

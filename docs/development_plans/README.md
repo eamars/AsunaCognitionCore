@@ -4,7 +4,7 @@ This folder holds Asuna's architecture decision records (ADRs): what was decided
 
 This index says only where each ADR stands. How it got there (installs, readings, Xiaoman's verdicts) is in the ADR's folder, in its `progress.md` when it has one. Large built ADRs keep only their decisions still in force, with the full text named by a git hash. Archived ADRs are removed from the tree; `git show <hash>:docs/development_plans/<folder>/<file>` (or `git log --all -- docs/development_plans/<folder>`) brings any of them back.
 
-Status: **Active**, an ongoing routine. **Decided**, accepted and not built. **Open**, built and installed, with the part under "Left" still to do. **Built**, built and installed, nothing left. **Rejected**, decided not to build (why under "Left"). **Archived**, removed from the tree.
+Status: **Active**, an ongoing routine. **Decided**, accepted and not built. **Installed**, built and installed, open until its closing reading. **Open**, built and installed, with the part under "Left" still to do. **Built**, built and installed, nothing left. **Rejected**, decided not to build (why under "Left"). **Archived**, removed from the tree.
 
 | ADR | Title | Status | Left | Decision | Where |
 |---|---|---|---|---|---|

@@ -530,7 +530,9 @@ class TaskService:
                          '重试也一样：停下，在报告里写做到了哪里')
         return current
 
-    def cancel(self,task_id,reason='user_cancelled',*,person_id=None,operator=False):
+    def cancel(self,task_id,reason='user_cancelled',*,person_id=None,operator=False,turn=None):
+        """Cancel a task; the turns it opened that are still open end with it (ADR-134 D5), except `turn`, the one
+        cancelling it."""
         with self.lock:
             task=task_records.get(self.store, task_id)
             if not task or not(operator or person_id==task['requester_id']):raise Denied('TASK_CANCEL_NOT_AUTHORIZED')
@@ -538,6 +540,8 @@ class TaskService:
                 task={**task,'execution_binding':f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"}
             cancelled=task_records.save(self.store, {**task,'state':'CANCELLED','intent_revision':task['intent_revision']+1,'fencing_token':task['fencing_token']+1,'cancel_reason':reason,'feedback_state':'SUPPRESSED'},expected=task['revision'],stream=task_id)
         self.collab(cancelled,'status',{'state':'stopped','reason':reason},'status:'+task_id+':cancelled')
+        from . import unfinished
+        unfinished.task_cancelled(self.store,cancelled,reason,besides=turn)
         return self._notify_fenced(cancelled, 'task_cancelled')
 
     def settle(self, task_id, judged, episode_id):

@@ -391,6 +391,7 @@ ADR-030: the program's watchdog over handovers between the brains.
 What a restart leaves unfinished (ADR-134): every input that ends ends its turn, and a cut turn is resumed or ended.
 
 - def `without_turn` — The input `episode` ends without a turn, as `result_state` says.
+- def `task_cancelled` — D5: a cancelled task ends the turns it opened that are still open (its consult and time-up turns), each as `without_turn` ends one, `ended_by` naming the cancel; never `besides`, the turn that cancelled it.
 - def `cut` — The Host's stop cut the turn `ep` (not finished).
 
 ## `reasons`

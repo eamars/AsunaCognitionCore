@@ -122,6 +122,13 @@ come back only through their inputs, so they are exposed to both breaks.
   that runs at every start: a sweep would hide the next break instead of naming it.
 - **D4. No change to the readers.** The quiet gate, `memory_tiers` and `handover` keep reading `RESUMABLE` as they
   do. With D1-D3, a resumable episode is one that will be resumed.
+- **D5. A cancelled task ends the turns it opened.** A task's consult turn and its time-up turn have no input of
+  their own: the task opens them. Cancelling a task while one of them was open never ended that turn, so it stayed in
+  `TURN`, held the quiet gate shut, and survived every restart, since nothing resumes it and nothing ends it. Now,
+  whoever cancels a task (her stop, an operator cancel, the Host's stop), its consult and time-up turns still in
+  `RESUMABLE` end with it, as D1 ends an input's turn: `SUPPRESSED`, `ended_by` `TASK_CANCELLED:<cancel_reason>`, one
+  `episode.ended_without_turn` audit row (`unfinished.task_cancelled`, called by `TaskService.cancel`). The turn that
+  cancels the task (a time-up turn's `stop`) goes on.
 
 ## 5. Closes when
 
@@ -137,9 +144,11 @@ come back only through their inputs, so they are exposed to both breaks.
   - (d) a crash before the input's `PROCESSING` (F5): the episode is advanced at the start.
 - Installed and read by content: the six are `SUPPRESSED` with their audit rows, and the quiet gate opens when she is
   quiet.
+- At D5's install, the one existing leftover (the consult turn whose task was cancelled 2026-11-23) is ended by its id,
+  like D3, recorded with `ended_by` `ADR-134 D5`.
 - Real traffic, by count and not by date: read after the next 10 Host stops of any kind following the install. It
-  passes when, after each start, no episode is left in `RESUMABLE` with its input `COMPLETE` or `FAILED` (counted from
-  the episode and input rows). The reading also counts the `SUPPRESSED` episodes with an `ended_by`, and their audit
+  passes when, after each start, no episode is left in `RESUMABLE` with its input `COMPLETE` or `FAILED`, or with no
+  input and its task ended (consult and time-up turns), counted from the episode, input and task rows. The reading also counts the `SUPPRESSED` episodes with an `ended_by`, and their audit
   rows. Today there are 0 of either (her 0622), so the reading counts what is actually written in the database rather
   than trusting the code. At 10 stops the reading closes it, pass or fail.
 

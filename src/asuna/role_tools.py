@@ -2708,7 +2708,8 @@ class RoleTools:
         self.checkpoint()
         if task['state'] not in ('READY', 'RUNNING'):
             return {'task': task['_id'], 'state': task['state'], 'note': '这件事已经不在进行中，不用叫停。'}, False
-        stopped = self.coordinator.tasks.cancel(task['_id'], reason='character_stop', person_id=ep['person_id'])
+        stopped = self.coordinator.tasks.cancel(task['_id'], reason='character_stop', person_id=ep['person_id'],
+                                                 turn=ep['_id'])
         self.coordinator.collab(stopped, 'status', {'state': 'stopped', 'reason': reason})
         return {'task': stopped['_id'], 'state': stopped['state'], 'note': '已叫停。'}, False
 

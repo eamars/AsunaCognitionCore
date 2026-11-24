@@ -260,12 +260,19 @@ def moved(task, made):
 
 
 def named_person(store, ep, label):
-    """The person a group turn's `for` names: one whose line is in this turn (people_from_program), by label."""
+    """The person a group turn's `for` names: one whose line is in this turn (people_from_program), by label. In an
+    outside turn never the owner: the owner's ask there is only the one the owner's own account made, never one that
+    `for` names (ADR-135 D7)."""
+    from . import guard
     from .people import People
+    from .scene_links import canonical_person_id
     people = People(store, ep.get('persona'))
     scene = _scene(store, ep['scene_id'])
+    outside = guard.outside(store, ep)
     for person_id in ((ep.get('manifest') or {}).get('people_shown') or {}):
         if people.speaker(scene, person_id) == label:
+            if outside and canonical_person_id(store.config, store, person_id) == visibility.owner_id(store.config):
+                return None
             return person_id
     return None
 

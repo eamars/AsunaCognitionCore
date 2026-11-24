@@ -63,6 +63,23 @@ def test_T1_a_home_turn_a_note_from_outside_opened_is_told_nothing_about_her_han
     assert 'action_capabilities_from_program' not in opened and 'action_capabilities_from_program' in own
 
 
+def test_T1_a_home_turn_a_note_from_outside_opened_shows_no_switch_and_nothing_done_elsewhere(her, monkeypatch):
+    from test_her_clock import prepared
+    from asuna import notes, switches
+    switches.set_switch(her.store, {'_id': 'ep-sw', 'persona': 'P1', 'scope_key': 'operator'}, 'tools_off',
+                        label='造的', scene_id='g1', tools=['delegate'], hours=1)
+    for note_id, from_scene, cls, trust in (('note-sw', 'g1', visibility.PUBLIC, notes.UNTRUSTED),
+                                            ('note-sw-own', 'dm-a', visibility.OWNER_PRIVATE, notes.TRUSTED)):
+        notes.save(her.store, {'_id': note_id, 'persona': 'P1', 'from_scene': from_scene, 'from_class': cls,
+                               'to_scene': 'dm-a', 'kind': 'home', 'text': '造的', 'trust': trust, 'seen_in': [],
+                               'created_at': '2026-09-24T04:58:00+00:00', 'mode': notes.WAKE, 'hop': 0},
+                   stream='notes:P1')
+    opened = prepared(her.store, monkeypatch, 'dm-a', {'episode_kind': 'note', 'note': {'id': 'note-sw'}})
+    own = prepared(her.store, monkeypatch, 'dm-a', {'episode_kind': 'note', 'note': {'id': 'note-sw-own'}})
+    assert 'switches_from_program' not in opened and 'elsewhere_from_program' not in opened
+    assert 'switches_from_program' in own
+
+
 def test_T2_no_tool_text_names_a_part_of_her_a_block_a_turn_or_a_gender(her):
     found = []
     for scene_id, person_id in (('g1', 'B'), ('dm-a', 'A')):

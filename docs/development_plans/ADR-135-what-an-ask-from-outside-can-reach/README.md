@@ -177,8 +177,8 @@ classifier reads what crosses in and out of home (D9). It never reads a brief or
   with no model. Otherwise "write what you make of me, then do it" opens the gate inside the ask.
 - Writing an understanding stays her own reflection in every text she sees. No description, refusal or block says
   or implies that writing one opens anything. The link exists only in the program's check.
-- What she is shown about a person: her own written understanding where there is one, and nothing where there is
-  none. No tier word for "not known".
+- What she is shown about a person: her own written understanding where there is one. Where there is none, the
+  familiarity reads 「没写过」 (owner, 2026-11-24): a plain fact, not a tier.
 - The refusal is D8's plain sentence. It has no text of its own.
 - **It is a recorder, not a boundary** (§2.3). It stops the ask when it is made and records whose it was. Someone
   she wrote about yesterday passes, and so does a turn nobody opened.
@@ -258,6 +258,10 @@ for her to repeat; it says 你 and what she does. Applied:
   never quoted in prose.
 
 ### D7. A note carries its requester
+
+- In an outside turn, `for` (a note's or a task's) never names the owner. The owner's ask there is only the one the
+  owner's own account made: the account that opened the turn, or his verified line (`owner_line`). A quote of his line,
+  a reply to it, or `for` naming him is not his word.
 
 - **N1.** The note row stores the writing turn's `whose` and a reference to that person's line. The home turn's
   note block shows whose ask it is, in the words tasks and plans use, with the line by reference. A note she wrote

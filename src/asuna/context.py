@@ -1004,6 +1004,13 @@ class ContextBuilder:
         if files:context['file_artifacts_from_program']=files
         f.context,f.people=context,people
 
+    def _opened_from_outside(self, event, session_class):
+        """Whether this home turn was opened by a note from outside: the guard's own test (guard.from_outside), with the
+        note its event carries. Such a turn is told nothing that only home is told (ADR-135 D4)."""
+        from . import guard, notes
+        probe={'episode_kind':event.get('episode_kind','external'),'manifest':{'session_class':session_class}}
+        return guard.from_outside(self.store,probe,notes.opening_for(self.store,event)) is not None
+
     def _home_offers(self, f):
         """Her doings elsewhere, errands, stickers, credentials, watches, the weekly review and the dice, her switches,
         who she waits for in a group."""
@@ -1012,7 +1019,9 @@ class ContextBuilder:
         session_class=f.session_class
         # ADR-017: whoever talks to her at home may send her on an errand; where it can go, and what came of the last ones
         # (program words only: nobody's reply comes home this way).
-        if session_class==visibility.OWNER_PRIVATE and event.get('episode_kind') not in ('self_development','presence'):
+        from_outside=session_class==visibility.OWNER_PRIVATE and self._opened_from_outside(event,session_class)
+        if (session_class==visibility.OWNER_PRIVATE and event.get('episode_kind') not in ('self_development','presence')
+                and not from_outside):
             # Owner 2026-10-06: her own doings elsewhere, as words (heartbeats have recent_experience instead).
             from . import places as _places
             done_elsewhere=_places.elsewhere(self.store,persona,moment,{scene['_id']},visibility.owner_private_scenes(self.store.config))
@@ -1101,7 +1110,7 @@ class ContextBuilder:
             occurrence=str(event.get('event_id') or '').split(':',1)[-1]
             context['dice_review_from_program']=_dice.review(self.store,persona,occurrence,moment)
         # Her switches, at home only: all of them, and those that ended lately (ADR-052, ADR-135 D2).
-        if session_class==visibility.OWNER_PRIVATE:
+        if session_class==visibility.OWNER_PRIVATE and not from_outside:
             from . import switches as _switches
             switched=_switches.home_block(self.store,persona,moment)
             if switched:context['switches_from_program']=switched
@@ -1330,10 +1339,7 @@ class ContextBuilder:
                 'note':UNDERSTANDING_NOTE}
         # What her hands can do is said at home only, never in a home turn a note from outside opened: outside the
         # list is the statement (ADR-135 D4). The guard's own test of such a turn decides it.
-        from . import guard, notes
-        probe={'episode_kind':event.get('episode_kind','external'),'manifest':{'session_class':session_class}}
-        if session_class==visibility.OWNER_PRIVATE and guard.from_outside(
-                self.store,probe,notes.opening_for(self.store,event)) is None:
+        if session_class==visibility.OWNER_PRIVATE and not self._opened_from_outside(event,session_class):
             self._capabilities(context,scene,event,session_class)
         if event.get('episode_kind')=='visit':
             # ADR-012 §4.2: nobody called her; the room as it is now, and what she came for. The person on the

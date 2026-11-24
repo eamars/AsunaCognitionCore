@@ -170,7 +170,7 @@ How well she knows a person, in words (AGENTS.md: interpreted state from a versi
 
 - def `level` — 'owner', 'known', or None for this author: the owner's account, then her own written understanding.
 - def `known_before` — Whether she first wrote her understanding of this person on an earlier day than `moment`, on her clock: the earliest revision of any of her records of them against the day of the request, two stored times (ADR-135 D1).
-- def `words` — {'familiarity': the level in words, 'stance': the persona's stance at that level, when it has one}; nothing for someone with no level.
+- def `words` — {'familiarity': the level in words, 'stance': the persona's stance at that level, when it has one}; NONE_WORD for someone with no level, with no stance.
 
 ## `group_admin`
 
@@ -372,7 +372,7 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - def `opening` — The note that opened this turn, or None.
 - def `can_send` — Whether a turn opened by this note may write one: note -> reply -> stop, and a note from outside only for the owner's ask or her own (ADR-135 N2).
 - def `answerable` — Whether the turn a note opens may answer it, from the requester the note stored (ADR-135 N2): a note from home always; one from outside when it carries the owner's ask (by his account) or her own, never anyone else's or none.
-- def `requester` — (whose, line) a note from this turn carries (ADR-135 N1): `wanted` names a person in this group turn, or OWN for her own account; not written, the turn's own `whose`.
+- def `requester` — (whose, line) a note from this turn carries (ADR-135 N1): `wanted` names a person in this turn; not written, the turn's own `whose` (her own in a turn nobody opened).
 - def `outside_class` — The class a home turn acts with when a note from outside opened it (ADR-088 §4.2): that of the place the note came from, never home's; None for any other turn.
 - def `allowed` — Where this turn may write, `cls` being its conversation's class: anywhere it reaches; when an untrusted note opened it, back to where the note came from, and at home also on to a group, never to another home conversation (ADR-088 §4.2).
 - def `places_view` — note_places_from_program: where a note from here can go, by name, with what happens there by default.

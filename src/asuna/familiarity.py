@@ -2,7 +2,8 @@
 
 Computed from records the host already keeps; nothing new is stored and no number reaches her. The level is about
 the person (their canonical identity, across every conversation), and nothing a message says can raise it: the owner
-by his account, and a person she has written her understanding of (ADR-135 D1). Anyone else has no level and no word.
+by his account, and a person she has written her understanding of (ADR-135 D1). Anyone else has no level, and reads
+as NONE_WORD (an empty field reads to her like a block that did not load).
 A persona gives each level its stance (persona-model `people.familiarity`); the core only names the levels.
 """
 from .records import heads as head_records
@@ -11,8 +12,9 @@ TABLE_VERSION = 2
 LEVELS = ('owner', 'known')
 CORE_WORDS = {
     'owner': '{owner_label}本人',
-    'known': '你写过对他的理解',
+    'known': '你写过对这个人的理解',
 }
+NONE_WORD = '没写过'
 
 
 def _ids(store, person_id):
@@ -55,14 +57,14 @@ def known_before(store, person_id, moment):
 
 
 def words(store, person_id, persona=None):
-    """{'familiarity': the level in words, 'stance': the persona's stance at that level, when it has one}; nothing for
-    someone with no level."""
+    """{'familiarity': the level in words, 'stance': the persona's stance at that level, when it has one}; NONE_WORD
+    for someone with no level, with no stance."""
     from .people import People
     from .persona_model import effective
     from .render import model_and_policy
     name = level(store, person_id)
     if name is None:
-        return {}
+        return {'familiarity': NONE_WORD}
     model, policy = model_and_policy(store, persona) if persona else ({}, {})
     row = (effective(model, 'people.familiarity', policy) or {}).get(name) or {}
     out = {'familiarity': row.get('label') or CORE_WORDS[name].format(owner_label=People(store, persona).owner_label)}

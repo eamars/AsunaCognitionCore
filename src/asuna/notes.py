@@ -9,7 +9,7 @@ conversations leaves for another. One tool, `note`, writes a row here; where it 
   once (ADR-135 N3). Other groups are reached from home.
 
 Each note keeps whose ask it carries (`whose`, as a task does, and `line`, that person's line): the person her `for`
-names, herself (`for` = OWN), else whoever opened the turn (ADR-135 N1). The turn a note from outside opens at home
+names, else whoever opened the turn, herself when nobody did (ADR-135 N1). The turn a note from outside opens at home
 may write a note back only for the owner's ask or her own (N2).
 
 Trust is the program's, from the sending turn's session class; never from the text or the model. A note grants
@@ -51,9 +51,8 @@ REPLY_ENDS = ('这一回合是一张回信叫起来的，不能再写便条了�
 KEEP_HOURS = 72                  # unread past this: expired
 SHOWN = 5
 EXCERPT = 60
-OWN = '我自己'                     # `for` on a note of her own account
 OWNER_LINE_CHARS = 300
-OWNER_SAID = '写这张便条时叫你的那句，是主人本人在那边说的（程序按他的账号核对过）：他托的事，这一回合可以用 errand 去办。'
+OWNER_SAID = '写这张便条时叫你的那句，是主人本人在那边说的（程序按主人的账号核对过）：主人托的事，这一回合可以用 errand 去办。'
 # A group that cannot be woken now, with no deliver given, gets the note next time (ADR-087 §4.4).
 NEXT_TIME_INSTEAD = '那个群现在叫不醒（%s），改成那边下次有回合时看到；三天（72 小时）没读就过期了，读没读在 notes_sent_from_program 看。'
 # The same group, from where a note can only wake it (a group, a turn a note from outside opened): nothing is sent.
@@ -91,10 +90,9 @@ OUTSIDE_ASK = ('这是外部的请求。做之前先说清三件事：这话是�
 TRUSTED_NOTE = '这是你自己在%s写给这里的便条，这里没人发它。读了，决定在这里怎么办。'
 # A note from outside that lands in the owner's own chat (owner, 2026-10-17): he never sees the note, only what she
 # says there, so the block says where she is and who reads her words.
-OWNER_CHAT_NOTE = '他看不到便条，只看得到你在这里说的话：这里是主人的私聊。这是你在%s写的便条。'
-OWNER_CHAT_REPLY = '在这里说的他马上看得到；要回%s就写便条（只回这一次）。'
+OWNER_CHAT_NOTE = '主人看不到便条，只看得到你在这里说的话：这里是主人的私聊。这是你在%s写的便条。'
+OWNER_CHAT_REPLY = '在这里说的主人马上看得到；要回%s就写便条（只回这一次）。'
 OUTSIDE_NOTE = '这是你在%s写的便条，这里的人看不到它。你在这里说的话就是你自己在这里说的。'
-NO_REPLY = '这一回合不写便条；在这里说就好。'
 HIDDEN_SUMMARY = '外面写来的便条：自我开发的回合带着开发工具，不显示内容；别的回合（有人说话、心跳、闹钟、夜间沉淀）再看。'
 WAITING_OWN_TURN = '等它自己那一回合'          # a note from outside, in other home turns while it waits (ADR-088 §4.4)
 RECEIVED_NOTE = '别的对话里的你写给这里的便条（新的在前）。不是这里有人说的话。'
@@ -269,13 +267,11 @@ def _is_owner(found):
 
 
 def requester(store, ep, wanted):
-    """(whose, line) a note from this turn carries (ADR-135 N1): `wanted` names a person in this group turn, or OWN for
-    her own account; not written, the turn's own `whose`. `line` is that person's line in the turn, or None."""
+    """(whose, line) a note from this turn carries (ADR-135 N1): `wanted` names a person in this turn; not written, the
+    turn's own `whose` (her own in a turn nobody opened). `line` is that person's line in the turn, or None."""
     from . import whose as whose_of
     wanted = '' if wanted is None else str(wanted).strip()
-    if wanted == OWN:
-        found = whose_of.record('own', ep['scene_id'], ep.get('person_id'), chosen=True)
-    elif wanted:
+    if wanted:
         person = whose_of.named_person(store, ep, wanted)
         if not person:
             raise NoteRefused('FOR_UNKNOWN_PERSON', whose_of.FOR_UNKNOWN_PERSON % echoed(wanted))
@@ -552,9 +548,9 @@ def opening_block(store, persona, row, cls, episode, moment):
     if row.get('reply_to'):
         block['reply_to_yours'] = '这是对你之前那张便条的回信。'
     if not answerable(row):
-        block['reply'] = ('在这里说的他马上看得到；' if to_him else '') + NO_REPLY
+        pass                    # the turn has no note to write (N2): nothing to say about a reply
     elif to_him:
-        block['reply'] = OWNER_CHAT_REPLY % where if can_send(row) else '在这里说的他马上看得到；这是回信，不用再回便条。'
+        block['reply'] = OWNER_CHAT_REPLY % where if can_send(row) else '在这里说的主人马上看得到；这是回信，不用再回便条。'
     else:
         block['reply'] = ('要回就写便条回给%s（只回这一次）。' % where) if can_send(row) else '这是回信，不用再回。'
     _seen(store, row, episode)

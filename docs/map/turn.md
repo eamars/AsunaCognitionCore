@@ -422,7 +422,7 @@ The guardrail (ADR-135 D8): whether a call is allowed, decided from stored facts
 - def `outside` — Whether her turn is an outside one: its conversation is outside, or a note from outside opened it at home.
 - def `task_outside` — Whether a task is an outside one: given in a conversation that is not one of the owner's own.
 - def `check` — (code, rule) when this call of hers is not allowed here and now, else None.
-- def `asker` — Whose ask a call of hers carries, as a person id, or None when it carries nobody's (a turn nobody opened, her own, a note whose `for` is her own): the person a delegate's or a note's `for` names (whose.named_person, as the handler resolves 
+- def `asker` — Whose ask a call of hers carries, as a person id, or None when it carries nobody's (a turn nobody opened, her own): the person a delegate's or a note's `for` names (whose.named_person, as the handler resolves it), else the turn's `whose`.
 - def `asked_at` — When the ask was made: the stored time of the line that opened the turn, else now.
 - def `check_task` — (code, rule) when a task's call reaches outside its grant, else None: a tool it was not given, an integration tool without its profile, a credential outside a home task.
 - def `record` — One audit event for her call that was not allowed: the reason, for us; `sentence`: whether she got the plain sentence (an outside turn) or the program's own refusal (home).

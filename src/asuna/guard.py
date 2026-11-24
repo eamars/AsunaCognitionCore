@@ -196,16 +196,11 @@ def _others_task(store, ep, name, args):
 
 def asker(store, ep, name, args):
     """Whose ask a call of hers carries, as a person id, or None when it carries nobody's (a turn nobody opened, her
-    own, a note whose `for` is her own): the person a delegate's or a note's `for` names (whose.named_person, as the
-    handler resolves it), else the turn's `whose`. A turn whose `whose` is gone answers False: an ask with no asker on
-    record."""
+    own): the person a delegate's or a note's `for` names (whose.named_person, as the handler resolves it), else the
+    turn's `whose`. A turn whose `whose` is gone answers False: an ask with no asker on record."""
     from . import whose as whose_of
     if name in ('delegate', 'note') and args.get('for') not in (None, ''):
         wanted = str(args['for']).strip()
-        if name == 'note':
-            from .notes import OWN
-            if wanted == OWN:
-                return None                              # a note on her own account (ADR-135 N1)
         named = whose_of.named_person(store, ep, wanted)
         if named:
             return named

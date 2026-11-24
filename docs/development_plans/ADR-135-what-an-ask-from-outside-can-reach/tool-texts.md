@@ -62,7 +62,7 @@ Now: parts 按顺序，一个 part 是单独的一条消息，kind 选 text、st
 Proposed:
 > 说话。parts 按顺序，一个 part 是单独的一条消息，kind 选一样：text 你想说的话；sticker 你想发一个表情包；picture、file 你想发一张图、一个文件；poke 你想戳一下谁；react 你想给一条消息点个表情；recall 你想撤回自己说过的一句（还没发出去的就取消）。一批一起发：有一条不对，这一批都留下，回执说哪条、为什么。想说才说。
 
-Fields: `parts` 「这次想发的，按顺序」. `artifact_id` 「picture、file：照抄那张图、那个文件旁边的 id」. `wait` 「群里：no 你不等回话，question 你在问这里的人；不写时，@ 了谁或在回谁就等他三分钟」. The home variant is her own wording and is left.
+Fields: `parts` 「这次想发的，按顺序」. `artifact_id` 「picture、file：照抄那张图、那个文件旁边的 id」. `wait` 「群里：no 你不等回话，question 你在问这里的人；不写时，@ 了谁或在回谁就等对方三分钟」. The home variant is her own wording and is left.
 
 **`end_turn`**
 Now: 结束这一回合。除此之外什么都不做：不发话、不查东西；要说的话先用 `speak` 说完再调它。
@@ -77,7 +77,7 @@ Proposed:
 **`watch`** (J)
 Now: 盯一个人：on 把这个对话里的一个人（照抄标签或写名字）加进名单，之后他在你任何一个对话里说话，你都会在那边知道（群里会叫你看一眼）。how_often=once（默认）他第一次说话叫你一次；burst 他每次沉默十分钟后再开口都叫你。hours 盯多久（1–72），最多同时 5 个，到期自己停；off 停掉一个（id 照抄 watching_from_program）。刚 @ 过或回过的人程序本来就等三分钟。block 屏蔽这个对话里的一个人（person 写他，不写就是正在跟你说话的账号）：他的话照存，但哪儿都不叫你，到点结束；家里的人屏蔽不了。
 Proposed:
-> 留意一个人，do 选一样：on 你想知道这个对话里的一个人什么时候再开口（person 写他的标签或名字；之后他在你任何一个对话里说话，你都会在那边知道；how_often=once 他第一次说话叫你一次，burst 他每次沉默十分钟后再开口都叫你；hours 留意多久，1–72；同时 5 个，到期自己停）；off 你想停掉一个（照抄它旁边的 id）；block 你决定不听这个对话里的一个人（person 写他，不写就是正在跟你说话的那位；他的话照存，哪儿都不叫你；不写 hours 就到你结束它）。刚 @ 过或回过的人本来就等三分钟。
+> 留意一个人，do 选一样：on 你想知道这个对话里的一个人什么时候再开口（person 写这个人的标签或名字；之后这个人在你任何一个对话里说话，你都会在那边知道；how_often=once 第一次说话叫你一次，burst 每次沉默十分钟后再开口都叫你；hours 留意多久，1–72；同时 5 个，到期自己停）；off 你想停掉一个（照抄它旁边的 id）；block 你决定不听这个对话里的一个人（person 写这个人，不写就是正在跟你说话的那位；这个人的话照存，哪儿都不叫你；不写 hours 就到你结束它）。刚 @ 过或回过的人本来就等三分钟。
 
 **`sticker`**
 Proposed:
@@ -93,7 +93,7 @@ Today one text is shown in every place and names all her documents. It splits by
 **`understand_person`** (J)
 Now: 写你对一个人的理解，选一层：person 人那层（在哪儿遇到他都看得到），here 这里那层（只在这个对话）。content 写那一层完整的新正文，留着仍然成立的旧内容，分清他说的、你看到的和你推的；正文不动、只换 short 时 content 写「不更新」。short 一句话（80 字以内）：他是谁、怎么跟他聊，只写正文里有的，推的标明是推的；short 是给你自己的提示，不是要说出口的话。改写已有的那层先用 recall 的 person 读。person 照抄他的标签，不写是开启这一回合的人；串门时要写。每人每层一回合最多一次。在群里先 speak 再写。他的喜好、习惯、怎么跟他聊记在这里。写之前当场问自己三句：…
 Proposed:
-> 写下你对一个人的理解，选一层：person 人那层（在哪儿遇到他都带着），here 这里那层（只在这个对话）。content 写那一层完整的新正文，留着仍然成立的旧内容，分清他说的、你看到的和你推的；只想换 short 时 content 写「不更新」。short 一句话（80 字以内）：他是谁、怎么跟他聊，写正文里有的，推的标明是推的；short 是给你自己看的提示。想改写已有的那层，先用 recall 的 person 读。person 写他的标签，不写就是叫起你的那位。每人每层一次。想说话就先说，再写。他的喜好、习惯、怎么跟他聊记在这里。
+> 写下你对一个人的理解，选一层：person 人那层（在哪儿遇到这个人都带着），here 这里那层（只在这个对话）。content 写那一层完整的新正文，留着仍然成立的旧内容，分清这个人说的、你看到的和你推的；只想换 short 时 content 写「不更新」。short 一句话（80 字以内）：是谁、怎么聊，写正文里有的，推的标明是推的；short 是给你自己看的提示。想改写已有的那层，先用 recall 的 person 读。person 写这个人的标签，不写就是叫起你的那位。每人每层一次。想说话就先说，再写。喜好、习惯、怎么聊记在这里。
 
 The three questions she asks herself before writing follow, unchanged.
 
@@ -133,7 +133,7 @@ Now: 给别的对话里的你写一张便条：to 照抄 note_places_from_progra
 Proposed base:
 > 给别的对话里的你写一张便条：to 写想送到哪儿；text 写你想让那边的你知道的事。那边的你会读到；那边的人看不到便条，看得到你在那边说出口的话，所以写你愿意在那边说的。240 字以内，过了 300 字不收；一次两张。
 
-Field `to`: outside, an enum of the two places a note can go. Field `for`: 「这张是为谁写的：一个人的标签；不写就是叫起你的那位，没有人叫你时就是你自己。他那句话的出处会跟着便条走。」
+Field `to`: outside, an enum of the two places a note can go. Field `for`: 「这张是为谁写的：一个人的标签；不写就是叫起你的那位，没有人叫你时就是你自己。这个人那句话的出处会跟着便条走。」
 Sentences of abilities only some places list: 「deliver：wake 你想马上叫醒那边（排在那边手上的事后面），next_time 那边下次醒来时看到。」; 「这两处之间 1200 字以内，过了 1500 字不收。」; 「叫醒一个群算一次出门。」
 
 **`restart`** (a home ability)
@@ -164,7 +164,7 @@ Ability sentences, listed where those options exist: 「read 你想读还没定�
 
 **`find_member`**
 Proposed:
-> 在这个群里找一个人：name 写他名字里的几个字（群名片或昵称），最多找到 10 个，最近说过话的在前。找到的人给的是标签，照抄就能 @。眼前的名单只列了一部分，别的人用这个找。
+> 在这个群里找一个人：name 写这个人名字里的几个字（群名片或昵称），最多找到 10 个，最近说过话的在前。找到的人给的是标签，照抄就能 @。眼前的名单只列了一部分，别的人用这个找。
 
 **`promote_memory`** (listed only at its moment)
 Proposed:

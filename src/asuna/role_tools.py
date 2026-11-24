@@ -98,8 +98,8 @@ OUTSIDE_GONE = '叫起这一回合的便条（或写它的那一回合）找不�
 STEERING = ('task.message', 'task.stop')
 # Why think comes first, said where it is refused (her count, 2026-10-20: 153 refusals that gave no reason).
 THINK_FIRST = '先用 think 写下这回合的心里话，再做别的：它是你这一回合每一步的理由，存了档，之后回想得起来为什么这么做。'
-# Whose ask a note carries (ADR-135 N1): a person in this turn, herself (notes.OWN), or not written: the turn's.
-NOTE_FOR = '谁托的：这回合别人的标签或「我自己」；不写是叫你的那位'
+# Whose a note is (ADR-135 N1): a person in this turn, or not written: the turn's (her own when nobody opened it).
+NOTE_FOR = '这张是为谁写的：一个人的标签；不写就是叫起你的那位，没有人叫你时就是你自己。这个人那句话的出处会跟着便条走。'
 
 
 def thinking_mode(config):

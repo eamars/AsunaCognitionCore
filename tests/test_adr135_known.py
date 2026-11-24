@@ -84,7 +84,8 @@ def test_K1_a_person_she_has_not_written_about_gets_the_plain_sentence_for_her_h
     assert all(event['code'] == 'asker_not_known' and event['asker'] for event in events)
     from asuna.people import People
     item, _ = understanding.entry(store, scene_records.get(store, 'g1'), N, 'P1', People(store, 'P1'))
-    assert set(item) <= {'who', 'feelings_toward'} and familiarity.words(store, N, 'P1') == {}
+    assert set(item) <= {'who', 'familiarity', 'feelings_toward'}
+    assert item['familiarity'] == familiarity.words(store, N, 'P1')['familiarity'] == familiarity.NONE_WORD
     assert guard.check(store, room.store.collection('episodes').get(ep['_id']), 'speak',
                        {'parts': [{'kind': 'text', 'text': '造的：好'}]}) is None     # speaking is never her hands
 
@@ -117,7 +118,8 @@ def test_K4_many_answered_asks_do_not_make_someone_known(room):
                                'source_event_id': 'k4-%d' % n, 'monologue_refs': [], 'context': {}, 'manifest': {},
                                'tool_calls': {}}, stream='ep-k4-%d' % n)
         if n in (0, 24):
-            assert familiarity.level(store, N) is None and familiarity.words(store, N, 'P1') == {}
+            assert familiarity.level(store, N) is None
+            assert familiarity.words(store, N, 'P1') == {'familiarity': familiarity.NONE_WORD}
 
 
 def test_X1_the_carry_outside_a_visit_of_her_own_hands_over_with_the_outside_grant_only(room):

@@ -80,7 +80,7 @@ def test_N2_the_home_turn_of_someone_else_s_note_writes_no_note_and_says_whose_a
         assert str(caught.value) == guard.NOT_DONE, name
     shown = block(home, row, at_home)
     assert shown['asked_by'] == whose.NOTE['words'] % whose._who(home.store, PERSONA, row['whose'])
-    assert shown['asked_line']['at'] and shown['reply'] == notes.NO_REPLY and 'owner_said' not in shown
+    assert shown['asked_line']['at'] and 'reply' not in shown and 'owner_said' not in shown
     assert notes.count_sent(home.store, at_home['_id']) == 0
 
 
@@ -94,16 +94,21 @@ def test_N3_a_note_of_her_own_is_answered_as_today_and_says_it_is_hers(home):
     assert notes.get(home.store, back['note'])['reply_to'] == row['_id']
 
 
-def test_N3_a_note_for_her_own_account_after_someone_she_does_not_know_spoke(home):
+def test_N3_a_turn_someone_opened_has_no_note_of_her_own_account(home):
     ep = outside_turn(home, 'B', 'n3b')                                  # B: nothing written before today
-    with pytest.raises(Refused) as caught:
-        note(home, ep, {'to': '家里', 'text': '造的：他让我帮忙'})
-    assert list(caught.value.codes) == ['asker_not_known']
-    own = notes.get(home.store, note(home, ep, {'to': '家里', 'text': '造的：我自己记一下', 'for': notes.OWN}, 1)['note'])
-    assert own['whose']['by'] == 'own' and 'line' not in own
-    at_home = home_turn(home, own)                         # it acts for her own ask, so it may write back
-    assert whose.of(home.store, at_home)['by'] == 'own' and guard.check(
-        home.store, at_home, 'note', {'to': places.place_id('g2'), 'text': '造的：知道了'}) is None
+    for n, args in enumerate(({'to': '家里', 'text': '造的：帮忙'}, {'to': '家里', 'text': '造的：记一下', 'for': '我自己'})):
+        with pytest.raises(Refused) as caught:
+            note(home, ep, args, n)
+        assert (str(caught.value), list(caught.value.codes)) == (guard.NOT_DONE, ['asker_not_known'])
+    assert notes.count_sent(home.store, ep['_id']) == 0
+
+
+def test_N3_the_home_turn_of_her_own_note_acts_for_her_own_ask(home):
+    visit = outside_turn(home, F, 'n3c', kind='visit')
+    own = notes.get(home.store, note(home, visit, {'to': '家里', 'text': '造的：记一下'})['note'])
+    at_home = home_turn(home, own)
+    assert own['whose']['by'] == 'own' and 'line' not in own and whose.of(home.store, at_home)['by'] == 'own'
+    assert guard.check(home.store, at_home, 'note', {'to': places.place_id('g2'), 'text': '造的：知道了'}) is None
 
 
 def test_N5_from_outside_a_note_goes_home_only_and_no_other_conversation_is_named(home):

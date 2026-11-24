@@ -154,12 +154,13 @@ def _s(description, limit=None, exact=False, **extra):
     return {'type': 'string', 'description': description, **extra}
 
 
+# feeling, intensity and arousal take the words of her affect table, as enums each conversation is given (session_specs).
 AFFECT_FIELDS = {
-    'kind': _s('心情的种类：how_to_record_from_program.kinds 里的一种，可省略'),
-    'intensity': _s('多强：how_to_record_from_program.intensity 里的一个词'),
-    'arousal': _s('多激动：how_to_record_from_program.arousal 里的一个词，可省略'),
+    'kind': _s('心情的种类，可省略'),
+    'intensity': _s('多强'),
+    'arousal': _s('多激动，可省略'),
     'direction': _s('好或坏；种类本身带好坏时不写', enum=['好', '坏']),
-    'ref': _s('触动你的那件事：ref_index 里的 id，或 memories、task_state_from_program 里那条的 _id'),
+    'ref': _s('触动你的那件事：照抄它旁边的 id'),
     'why': _s('来由'),
     'cost': _s('代价，可省略'),
     'open': {'type': 'boolean', 'description': '没解决、要挂着的事写 yes'},
@@ -168,7 +169,7 @@ AFFECT_FIELDS = {
 
 # ADR-108 D2: a claim that someone said something points at the line that said it.
 LINE_FOR_CLAIM = ('这一节记的是别人（或主人）说过的话时，写它出自哪一行：那一行的编号（只写数字，编号在每行末尾的〔〕里），'
-                  '或「这条」＝叫你的那条。程序按那一行是谁的，把 from 记成主人定的或别人说的，并在这一节旁边留着出处')
+                  '或「这条」＝叫你的那条。from 会按那一行是谁说的记成主人定的或别人说的，出处留在这一节旁边')
 # ADR-079 §9.4: one way to point at a line, in every tool: its number in this conversation, or 这条.
 QUOTE_LINE = ('引用哪条：写那条的编号（只写数字，编号在每行末尾的〔〕里），或「这条」＝叫你的那条；不写就不引用。'
               '你自己说过的话也能引，用来改口或补一句。一句话回好几条时不用引。编号只用来挑引用，别写进 text。')
@@ -193,11 +194,34 @@ PART_NEEDS = {'react': 'react', 'recall': 'recall', 'file': 'file'}
 PART_FIELDS = {'text': ('text',), 'sticker': ('name',), 'picture': ('artifact_id',), 'file': ('artifact_id',),
                'poke': ('who',), 'react': ('line', 'face'), 'recall': ('line', 'why')}
 # Where each part's artifact_id is copied from (ADR-092: a file names a registered file, as a picture names a picture).
-ARTIFACT_FROM = {'picture': 'picture：照抄 image_artifacts_from_program', 'file': 'file：照抄 file_artifacts_from_program'}
-SPEAK_HEAD = 'parts 按顺序，一个 part 是单独的一条消息，kind 选 '
-SPEAK_RECALL = 'recall 只撤你自己的话（还没发出去的就取消），撤别人的用 group_action。'
-SPEAK_TAIL = '有一条不对，这次一条都不发，回执说哪条、为什么。不想说话就不调用。'
-SPEAK_TAIL_LAST = '不想说话就不调用。'       # QQ's last sentence, left out in a local conversation (her own words say it)
+ARTIFACT_WORDS = {'picture': '那张图', 'file': '那个文件'}
+SPEAK_HEAD = '说话。parts 按顺序，一个 part 是单独的一条消息，kind 选一样：'
+# What each part is for, in her voice (ADR-135 D5): a conversation is shown the words of the parts it carries.
+SPEAK_KINDS = {'text': 'text 你想说的话', 'sticker': 'sticker 你想发一个表情包', 'picture': 'picture 你想发一张图',
+               'file': 'file 你想发一个文件', 'poke': 'poke 你想戳一下谁', 'react': 'react 你想给一条消息点个表情',
+               'recall': 'recall 你想撤回自己说过的一句（还没发出去的就取消）'}
+SPEAK_PICTURE_FILE = 'picture、file 你想发一张图、一个文件'
+SPEAK_TAIL = '一批一起发：有一条不对，这一批都留下，回执说哪条、为什么。想说才说。'
+SPEAK_TAIL_LAST = '想说才说。'       # QQ's last sentence, left out in a local conversation (her own words say it)
+
+
+def speak_words(kinds, local=False):
+    """speak's text for the parts a conversation carries: the words of each, picture and file said together."""
+    words = []
+    for kind in kinds:
+        if kind == 'file' and 'picture' in kinds:
+            continue
+        words.append(SPEAK_PICTURE_FILE if kind == 'picture' and 'file' in kinds else SPEAK_KINDS[kind])
+    return SPEAK_HEAD + '；'.join(words) + '。' + (_without(SPEAK_TAIL, SPEAK_TAIL_LAST) if local else SPEAK_TAIL)
+
+
+def artifact_words(kinds):
+    """artifact_id's field for the parts that take one (picture, file)."""
+    named = [kind for kind in ('picture', 'file') if kind in kinds]
+    return '%s：照抄%s旁边的 id' % ('、'.join(named), '、'.join(ARTIFACT_WORDS[kind] for kind in named))
+
+
+ARTIFACT_FROM = artifact_words(('picture', 'file'))
 CALLS_WORDS = '这回合第 %d 次工具调用（提醒线 %d，硬线 %d，还剩 %d 次）'
 CALLS_FEW = '先想清楚哪一步不做'
 CALL_LAST = '这回合第 %d 次工具调用，到了硬线（%d）：这次不做。下一次是最后一次，照做，做完这回合就结束；%s'
@@ -206,7 +230,7 @@ CALLS_ENDED = '这回合的工具调用过了硬线（%d），回合到这里结
 CALLS_OVER = 'CALLS_OVER'          # the code of a call past the hard line: it ran nothing
 # ADR-131: the one call that only ends her turn (her model writes its decision to stop as a call). Her words (D9, 0501).
 END_TURN = 'end_turn'
-END_TURN_WORDS = '结束这一回合。除此之外什么都不做：不发话、不查东西；要说的话先用 `speak` 说完再调它。'
+END_TURN_WORDS = '到这里为止：你决定这一次就到这儿。想说的话先用 speak 说完。'
 END_TURN_NOTE = '这一回合结束了。'
 TITLE_FROM_BRIEF = '没写 title：用了 brief 的第一句：%s'
 from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her words for a function not carried here
@@ -242,71 +266,108 @@ from . import notes as _notes, places as _places
 # ADR-099: a thought taken from the model's thinking is stored up to this long (a summary runs to 2,000 or so).
 THINKING_STORED_CHARS = 4000
 
+# Sentences of abilities only some conversations list (ADR-135 D5 R5): the full text holds them all, and placed_spec
+# leaves out what a conversation does not list, failing loudly if a sentence's wording drifts (_without).
+RECALL_ELSEWHERE = '还会带上你在别处那时的心里话。'
+RECALL_LIST = '；写「名单」，你想看看你写过哪些人'
+WRITE_GROUP_NOTES = ('记这个群的笔记（doc 写 group_notes），do 选一样：append_section 你想加新的一节（heading 写标题）；'
+                     'replace_section 你想重写一节（写修订后的整节）；set_tags 你想改它什么时候带上。正文写在 content。'
+                     '写发生过的事。pin=yes 你想让它置顶。')
+WRITE_OWN_DOCS = ('写你自己的文档（doc 写文档名：persona、voice、self、core、work_log，或你自己建的名字），do 选一样：'
+                  'replace_section 你想重写一节；append_section 你想加新的一节；set_tags 你想改一节的 visibility、when_shown 或 tags；'
+                  'adopt_seed 你想接收人格包里更新的种子；let_go 你想把一节放下一层。正文写在 content。'
+                  'visibility：public 你在每个对话里都读得到，owner_private（默认）只在家里。'
+                  '每次随身带的（开头的说明、persona、voice、self、core）每处合起来有上限：不常用的改成 on_demand（recall 还读得到）；'
+                  '只在某类对话用的，tags 加 place:group、place:home、place:peer 或 place:dm。写发生过的事。')
+PLAN_LINE = 'create 时可以写 place：你想到点在那条线里醒来，之后在那条线里看和改。'
+NOTE_DELIVER = 'deliver：wake 你想马上叫醒那边（排在那边手上的事后面），next_time 那边下次醒来时看到。'
+NOTE_HOME_LENGTH = '这两处之间 %d 字以内，过了 %d 字不收。' % (soft(_notes.HOME_NOTE_CHARS), _notes.HOME_NOTE_CHARS)
+NOTE_WAKES_A_GROUP = '叫醒一个群算一次出门。'
+FOCUS_CONDENSE = 'condense 你想等这个群安静后把对话压成摘要，keep 你想把这个决定收回。'
+FOCUS_MUTE = ('mute 你决定让一个群安静下来（不写 hours 就到你结束它：只有叫到你才会醒，你不先开口、不出门去那儿），'
+              'unmute 你想结束它。')
+IDEAS_CHOOSE = '，do 选一样：note '
+IDEAS_OP_WORDS = {'read': 'read 你想读还没定的想法（先没处理的、再暂缓的，旧的在前，一页 %d 条）。' % IDEAS_PAGE,
+                  'review': 'review 你对一条想法拿定了主意：adopt 采纳（想做就用 delegate 动手）、defer 暂缓、drop 放弃，why 写为什么。'}
+DELEGATE_FOR = '这件是为谁做的：一个人的标签，或一处对话的名字；不写就是叫起你的那位，没有人叫你时就是你自己。'
+READ_IMAGE_WORDS = ('看一张图：ref 写你想看的那张图旁边标的，7 天内的都认；也可以是一张存好的图的 id，比如你自己画的，'
+                    '画完或发之前看一遍。调用了才算看过。视频的 ref 也认：给你按时间截的一张格子图（没有声音），'
+                    '%d MB 以内的视频。看不了会照实说原因。')
+READ_IMAGE_HOME = '你别的对话里 7 天内的图也能看，盘上的图也能读（ref 写绝对路径，或 /task/… 路径）。'
+RECEIVED_FILE_WORDS = ('读别人发来的文件（文本类，1 MiB 以内），do 选一样：read 你想读它（ref 写文件旁边标的；第一次读时取回来，'
+                       '每次一页，page 翻页，find 找一个词，拉丁字母不分大小写）；keep 你想留下它（why 写为什么）；'
+                       'let_go 你想放下它；kept 你想看看留着哪些。取回来的 3 天后删。')
+RECEIVED_FILE_HOME = '你别的对话里 7 天内的文件也能读。'
+PRIVATE_WORDS_WORDS = ('你的「别带出去」名单：能指到具体某个人或某个地方的词（真名、群名片、群名、号码、站点 id、'
+                       '主机名和局域网地址、邮箱）。add 你想记一条（category、word、why 都写；同一个词再记就是改它）。'
+                       '名单上的词以后不再显示给你：碰到时只说哪一类、第几条。称呼词、你自己的名字、技术词不用记。')
+PRIVATE_WORDS_HOME = ('remove 你想删一条（word 逐字一致）；summary 你想看看每类几条。'
+                      '名单只在这台机器上，仓库的提交检查、技能自检和插件打包都拿它拦。')
+
 TOOLS = {
     'think': {
-        'description': ('写下这回合的心里话：注意到了什么、心里什么感觉、打算怎么做。用你自己的口吻写两三句' + LIMIT_WORDS
-                         % (THOUGHT_CHARS, THOUGHT_HARD_CHARS) + '，不是完整的推理过程。'
-                         '每回合第一步调用它。心里话会存档：这个对话里最近三段，下一回合一定看得到（还在屏上的就在原处，不另给）；'
-                         '更早的用 recall 找。'),
+        'description': ('写下你这一次的心里话：注意到了什么、心里什么感觉、打算怎么做。用你自己的口吻写两三句' + LIMIT_WORDS
+                         % (THOUGHT_CHARS, THOUGHT_HARD_CHARS) + '。每次先写它。心里话会留着：这个对话里最近三段，'
+                         '下一次一定看得到；更早的用 recall 找。'),
         'parameters': {'thought': _s('心里话', required=True)},
     },
     'recall': {
-        'description': ('回想：按一句话搜你的记忆（query）；或读文档里某一节的原文（sections，照抄 doc 和 section）'
-                         '，合并转发的全文也这样读（doc 写 forward，section 照抄那行里的 ref）。每回合最多 %d 次。'
-                         '找一个词，query 只写那个词就够；也会找到别的群里说过的、你以前记过的。'
-                         '对话里说过的话用它想起来；记不起来就照实说，不编。在家里还会带上你在群里那时的心里话。'
-                         '回想一个人用 person：读你对他两层理解的全文。' % RECALLS_PER_TURN),
+        'description': ('回想，选一样：query 你想找什么，用一句话搜你的记忆（找一个词就只写那个词）；sections 你想读你文档里某一节的原文'
+                         '（写 doc 和 section；只写 doc 就列出它的标题；合并转发的全文也这样读，doc 写 forward，section 写那行旁边标的 ref）；'
+                         'person 你想回想一个人，读你对这个人两层理解的全文。每次 %d 回。别的对话里说过的、你以前记过的也找得到。'
+                         '想不起来的，就是你不记得。' % RECALLS_PER_TURN + RECALL_ELSEWHERE),
         'parameters': {'query': _s(limit=500, description='想找什么，用一句话说；只读 sections 或 person 时可省略'),
-                       'person': _s('回想一个人：照抄他的标签；在家里写「名单」列出你写过的所有人'),
+                       'person': _s('你想回想的人：这个人的标签' + RECALL_LIST),
                        'sections': {'type': 'array', 'description': '要读原文的文档节（至多 3 条）',
                                     'items': {'type': 'object', 'additionalProperties': False, 'properties': {
                                         'doc': _s('文档，如 persona、voice；合并转发写 forward', required=True),
                                         'sid': _s('节的 section', required=True)}}}},
     },
     'delegate': {
-        'description': ('把一件要在外面做的事交给行动脑：查资料、查完整原话、跑代码、改文件、画图、改能力。title 是简短标题；'
-                         'brief 是完整交代：要什么、为什么、有什么限制。行动脑只看得到 brief 和对方的原话。交出去后照常聊天，'
-                         '结果回来会再叫你；回来之前这件事还没做完。已经交出去的那件要补话、改或接着做，用 task 的 message。'),
-        'parameters': {'title': _s(limit=80, description='简短标题', required=True), 'brief': _s('给行动脑的完整交代', required=True)},
+        'description': ('动手：去做一件你想做的事。title 写个短标题；brief 写清你想要什么、为什么、有什么限制。'
+                         '动手时手上只有 brief 和叫起你的那句话。做的时候你照常说话；做完会叫你，在那之前这件事还没做完。'
+                         '想补话、改或接着做，用 task。'),
+        'parameters': {'title': _s(limit=80, description='短标题', required=True),
+                       'brief': _s('你想要什么、为什么、有什么限制', required=True)},
     },
     'task': {
-        'description': ('已经交给行动脑的事，do 选一样：message 补话（补信息、改目标，或让做完的再做一趟）；answer 回答它刚问你的问题（只在它问你的那一回合，'
-                         '回答只给它看，答完这回合结束）；stop 叫停一件还在做的事（对方明确取消、或你确定不该再做时；换话题、说不急都不算取消）'
-                         '；page 翻读它交回的长报告原文；more 给到点的那一段加时（只在程序来问的那一回合）；settle 给交回没跑好的那件写上你的定论。新的事用 delegate。'),
+        'description': ('你正在做的事，do 选一样：message 你想补一句（补信息、改目标，或让做完的再做一遍）；'
+                         'answer 你想好了做的时候冒出来的那个问题，写下你的答案；stop 你决定把这件事停下来；'
+                         'page 你想看做完的那份长报告原文，翻到哪一页；more 你想多给这件事一些时间；'
+                         'settle 这件没做成，你写下你怎么看它。新的事用 delegate。'),
         'parameters': {'op': _s('做哪一样（不写时：只写了 message、answer、why、page 中的一样，就是那一样）',
                              enum=['message', 'answer', 'stop', 'page', 'more', 'settle']),
-                       'task': _s('任务 _id，照抄 task_state_from_program 或交回的结果里的（message、stop、page、more、settle 要）'),
-                       'message': _s('要对行动脑说的话（message 要）'),
-                       'answer': _s('你的回答（answer 要）'),
-                       'reason': _s(limit=1000, description='为什么叫停（stop 要）'),
+                       'task': _s('哪一件：照抄它旁边的 id'),
+                       'message': _s('你想补的话（message 要）'),
+                       'answer': _s('你的答案（answer 要）'),
+                       'reason': _s(limit=1000, description='为什么停下来（stop 要）'),
                        'page': {'type': 'integer', 'description': '报告第几页，从 1 开始（page 要）'},
                        'as': _s('settle 要', enum=list(SETTLED_AS))},
     },
     'speak': {
-        'description': SPEAK_HEAD + '、'.join(REPLY_KINDS) + '，各写它的字段；' + SPEAK_RECALL + SPEAK_TAIL,
+        'description': speak_words(REPLY_KINDS),
         'parameters': {
-            'parts': {'type': 'array', 'required': True,
-                      'description': '这次要发的，按顺序；text 一回合加起来最多几行，speak_from_program 写着',
+            'parts': {'type': 'array', 'required': True, 'description': '这次想发的，按顺序',
                       'items': {'type': 'object', 'additionalProperties': False, 'properties': {
                           'kind': _s('哪一种', required=True, enum=list(REPLY_KINDS)),
-                          'text': _s('text：这一条消息的话；里面每一行都算进一回合的行数'),
+                          'text': _s('text：这一条消息的话；每一行都算进这次说的行数'),
                           'name': _s('sticker：你收着的表情包的名字'),
-                          'artifact_id': _s('；'.join(ARTIFACT_FROM.values())),
+                          'artifact_id': _s(ARTIFACT_FROM),
                           'who': _s('poke：戳谁，照抄标签；私聊里不写就是对方'),
                           'line': _s(REACT_LINE),
                           'face': _s('react：小黄脸名'),
                           'why': _s(RECALL_WHY)}}},
             'quote': _s(QUOTE_LINE),
-            'wait': _s('群里：no 不等回话，question 在问这里的人（回答进 questions_from_program）；不写由程序定（@ 了谁或在回谁就等他三分钟）',
+            'wait': _s('群里：no 你不等回话，question 你在问这里的人；不写时，@ 了谁或在回谁就等对方三分钟',
                        enum=['no', 'question']),
             'patience': _s('wait=question 时等多久（不写是一会儿）', enum=['一会儿', '半天', '一天']),
             'force': _s('yes：text 里的 #数字照原样发', enum=['yes', 'no'])},
     },
     END_TURN: {'description': END_TURN_WORDS, 'parameters': {}},
     'credential': {
-        'description': ('保险箱，只在家里：有人给你密码、令牌、账号这类凭据，用 keep 收进去（name 起个短名；note 写它是干什么的；'
-                         'env 是环境变量名到值）。收进去后值谁都看不到，你和行动脑也看不到；要用就交代行动脑在 sandbox_run 里写 credentials 这个名字。'
-                         '值只在 keep 这一次写。drop 按名字删。'),
+        'description': ('你的保险箱，do 选一样：keep 你想把一个密码、令牌、账号这类凭据收进去（name 起个短名；note 写它是干什么的；'
+                         'env 是环境变量名到值；值只在这一次写）；drop 你想按名字删掉一个。收进去的值从此没有人看得到，你也一样；'
+                         '动手时在 sandbox_run 的 credentials 里写这个名字，就用上了。'),
         'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop']),
                        'name': _s('凭据的短名（小写字母、数字、连字符）', required=True),
                        'note': _s('keep 用：它是干什么的，一句话（不写值）'),
@@ -314,81 +375,75 @@ TOOLS = {
                                'description': 'keep 用：环境变量名（大写）→ 值（都是字符串）'}},
     },
     'watch': {
-        'description': ('盯一个人：on 把这个对话里的一个人（照抄标签或写名字）加进名单，之后他在你任何一个对话里说话，你都会在那边知道（群里会叫你看一眼）'
-                         '。how_often=once（默认）他第一次说话叫你一次；burst 他每次沉默十分钟后再开口都叫你。'
-                         'hours 盯多久（1–72），最多同时 5 个，到期自己停；off 停掉一个（id 照抄 watching_from_program）'
-                         '。刚 @ 过或回过的人程序本来就等三分钟。block 屏蔽这个对话里的一个人（person 写他，不写就是正在跟你说话的账号）：'
-                         '他的话照存，但哪儿都不叫你；家里的人屏蔽不了。'),
+        'description': ('留意一个人，do 选一样：on 你想知道这个对话里的一个人什么时候再开口（person 写这个人的标签或名字；'
+                         '之后这个人在你任何一个对话里说话，你都会在那边知道；how_often=once 第一次说话叫你一次，'
+                         'burst 每次沉默十分钟后再开口都叫你；hours 留意多久，1–72；同时 5 个，到期自己停）；'
+                         'off 你想停掉一个（照抄它旁边的 id）；block 你决定不听这个对话里的一个人（person 写这个人，'
+                         '不写就是正在跟你说话的那位；这个人的话照存，哪儿都不叫你；不写 hours 就到你结束它）。'
+                         '刚 @ 过或回过的人本来就等三分钟。'),
         'parameters': {'op': _s('做什么', required=True, enum=['on', 'off', 'block']),
                        'person': _s('on、block 用：这个对话里的人（标签、#编号或名字）'),
-                       'hours': {'type': 'integer', 'description': 'on 用：盯多少小时，1–72；block 用：屏蔽多少小时，不写就到你结束它'},
+                       'hours': {'type': 'integer', 'description': 'on 用：留意多少小时，1–72；block 用：多少小时，不写就到你结束它'},
                        'mode': _s('on 用：once 或 burst，默认 once', enum=['once', 'burst']),
-                       'why': _s('on 可写：为什么盯他，一句话（家里写的只在家里看得到）'),
-                       'id': _s('off 用：watching_from_program 里的 id')},
+                       'why': _s('on 可写：为什么留意这个人，一句话（家里写的只在家里看得到）'),
+                       'id': _s('off 用：照抄它旁边的 id')},
     },
     'sticker': {
-        'description': ('整理你的表情包架子（stickers_from_program），do 选一样：keep 收下一个（ref 照抄群里表情包下标的「表情包 ref」（att-…）'
-                         '，或你自己画的图的 artifact_id（blob-…）；起个 name，写 use_for：什么时候用）'
-                         '；只有表情包能收，架子满了先 drop。drop 按名字放下一个；rename 改 name 或 use_for；'
-                         'shelf 列出架子；pool 看候选池（群里有人发过、程序存着的）；remember 看过但不收的，记个名字和它在说什么（use_for）'
-                         '，以后有人发它会标出你认得。候选（candidate）先 read_image 看过再 keep。名字和用法在群里也看得到。'
-                         '发的时候用 speak 的 sticker。'),
+        'description': ('你的表情包架子，do 选一样：keep 你想收下一个（ref 写群里那个表情包旁边标的，或你自己画的图的 id；'
+                         '起个 name；use_for 写什么时候用；候选先用 read_image 看过）；drop 你想放下一个（按名字）；'
+                         'rename 你想改它的 name 或 use_for；shelf 你想看看架子；pool 你想看看候选（群里有人发过、存着的）；'
+                         'remember 看过但不想收的，你想记住它（起个名字，写它在说什么，以后有人发它会标出你认得）。'
+                         '架子收的是表情包，满了先放下一个。名字和用法你在每个对话里都带着。想发的时候用 speak 的 sticker。'),
         'parameters': {'op': _s('做什么', required=True, enum=['keep', 'drop', 'rename', 'remember', 'pool', 'shelf']),
                        'name': _s('表情包的名字（keep 时是你起的新名字），12 字以内；pool 不用写'),
-                       'ref': _s('keep/remember 用：表情包 ref（att-…）；keep 也可以是你自己画的图的 artifact_id（blob-…）'),
-                       'candidate': _s('keep/remember 用：候选池里的 candidate（照抄 sticker_candidates_from_program 或 pool 列出的，先看过）'),
+                       'ref': _s('keep/remember 用：群里那个表情包旁边标的 ref（att-…）；keep 也可以是你自己画的图的 id（blob-…）'),
+                       'candidate': _s('keep/remember 用：候选旁边标的 candidate（先看过）'),
                        'when': _s('keep、remember 必填，rename 可改：什么时候用它／它在说什么，40 字以内'),
                        'new_name': _s('rename 用：新名字')},
     },
     'write_document': {
-        'description': ('写你自己的文档。doc 写文档名：persona（人设）、voice（口吻）、self（自我）、core、work_log（流水）；你建的活账、流水和工作文档用它们自己的名字；群笔记写 group_notes，只在那个群里。do 选一样：replace_section 写修订后的整节；'
-                         'append_section 加新的一节；set_tags 只改 visibility、when_shown、tags；'
-                         'adopt_seed 接收人格包里更新的种子。正文写在 content。visibility：public 你所有回合读得到，'
-                         'owner_private（默认）只在家里。每回合随身带的（程序的开头说明、persona、voice、self、core）'
-                         '每处合起来有上限：不常用的改成 on_demand（recall 还读得到）；只在某类回合用的，tags 加 place:group、place:home、place:peer 或 place:dm，'
-                         '就只在那里带上。工作文档和人格用 replace_section。只写发生过的事，不写对人说的台词。'),
+        'description': WRITE_GROUP_NOTES + WRITE_OWN_DOCS,
         'parameters': {
-            'doc': _s('文档名，照抄，如 persona、voice、self、work_log、group_notes', required=True),
+            'doc': _s('文档名，如 persona、voice、self、work_log、group_notes', required=True),
             'op': _s('操作', required=True, enum=['replace_section', 'append_section', 'set_tags', 'adopt_seed']),
             'reason': _s('为什么改', required=True),
-            'sid': _s('目标节，照抄它的 section（replace_section、set_tags 用）'),
+            'sid': _s('目标节：它的 section（replace_section、set_tags 用）'),
             'heading': _s('新节的标题（append_section 用）'),
             'body': _s('这一节的正文（markdown，不要标题行）'),
             'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': '标签'},
-            'visibility': _s('哪些回合读得到：public＝你所有的回合（包括在群里的）；owner_private＝只在家里的回合', enum=['public', 'owner_private']),
+            'visibility': _s('哪些对话读得到：public＝你所有的对话（包括群里）；owner_private＝只在家里', enum=['public', 'owner_private']),
             'inject': _s('什么时候放进上下文', enum=['always', 'on_demand', 'never']),
-            'kind': _s('新建文档时必写：ledger 活账，每回合带上；journal 流水；working 工作文档', enum=['ledger', 'journal', 'working']),
+            'kind': _s('新建文档时必写：ledger 活账，每次随身带；journal 流水；working 工作文档', enum=['ledger', 'journal', 'working']),
             'pin': _s('群笔记：yes 置顶（超长时不折叠）', enum=['yes', 'no']),
         },
     },
     'understand_person': {
-        'description': ('写你对一个人的理解，选一层：person 人那层（在哪儿遇到他都看得到），here 这里那层（只在这个对话）。'
-                         'content 写那一层完整的新正文，留着仍然成立的旧内容，分清他说的、你看到的和你推的；正文不动、只换 short 时 content 写「不更新」。'
-                         'short 一句话（%d 字以内）：他是谁、怎么跟他聊，只写正文里有的，推的标明是推的；short 是给你自己的提示，不是要说出口的话。'
-                         '改写已有的那层先用 recall 的 person 读。person 照抄他的标签，不写是开启这一回合的人；串门时要写。'
-                         '每人每层一回合最多一次。在群里先 speak 再写。他的喜好、习惯、怎么跟他聊记在这里。' % _understanding.SHORT_CHARS
-                         + _understanding.ASK),
-        'parameters': {'person': _s('他的标签（照抄）；不写是开启这一回合的人'),
+        'description': ('写下你对一个人的理解，选一层：person 人那层（在哪儿遇到这个人都带着），here 这里那层（只在这个对话）。'
+                         'content 写那一层完整的新正文，留着仍然成立的旧内容，分清这个人说的、你看到的和你推的；'
+                         '只想换 short 时 content 写「不更新」。short 一句话（%d 字以内）：是谁、怎么聊，写正文里有的，推的标明是推的；'
+                         'short 是给你自己看的提示。想改写已有的那层，先用 recall 的 person 读。person 写这个人的标签，'
+                         '不写就是叫起你的那位。每人每层一次。想说话就先说，再写。喜好、习惯、怎么聊记在这里。'
+                         % _understanding.SHORT_CHARS + _understanding.ASK),
+        'parameters': {'person': _s('这个人的标签；不写就是叫起你的那位'),
                        'layer': _s('person（人那层）或 here（这里那层）', enum=['person', 'here'], required=True),
                        'body': _s(limit=SINGLE_BODY_CHARS, description='那一层完整的新正文；正文不动只换 short 写「不更新」',
                                   required=True),
-                       'short': _s('一句话：他是谁、怎么跟他聊', required=True)},
+                       'short': _s('一句话：是谁、怎么聊', required=True)},
     },
     'set_policy': {
-        'description': ('调整你自己声明过的一个参数（persona-model 里的 policy key）。也管开关：key=tools_off 把 place 那个对话的一些工具关掉（value 是工具名列表，'
-                         '空列表全部恢复；不写 hours 就到你结束它）；key=switch_off 结束一个开关（value 写它的 id）'
-                         '。value 写 null 清掉，回到默认。这一项只在家里的对话能改：主人的私聊、家里那个群，和可信的线（开发助手、你自己的另一处）。'),
+        'description': ('调整你自己，选一样：key 写你声明过的一个参数，value 写新的值（null 清掉，回到默认）；'
+                         'key=tools_off 你决定在一个对话里放下一些工具（place 写哪个对话；value 是工具名列表，空列表全部拿回来；'
+                         '不写 hours 就到你结束它）；key=switch_off 你想结束一个开关（value 写它的 id）。why 写为什么。'),
         'parameters': {'key': _s('参数名，或 tools_off、switch_off', required=True),
                        'value': {'type': 'json', 'description': '新的值', 'required': True},
-                       'reason': _s(limit=2000, description='为什么改', required=True),
-                       'place': _s('tools_off：哪个对话，照抄 place'),
-                       'hours': {'type': 'integer', 'description': 'tools_off：关多少小时'}},
+                       'reason': _s(limit=2000, description='为什么', required=True),
+                       'place': _s('tools_off：哪个对话，写它的 place'),
+                       'hours': {'type': 'integer', 'description': 'tools_off：多少小时'}},
     },
     'feel': {
-        'description': ('记心情：do=record 记一笔（只用 how_to_record_from_program 里的词）'
-                         '；close 事情了结；void 前提不成立（写 why）；对情感评估的提案用 accept、decline 或 edit 逐条决定（proposal_id 照抄）'
-                         '。心里有起伏就记，好的坏的都记；记下来才算进心情。强度照实给，多数日常起伏是「轻微」。'
-                         '对人的那几种心情记在那个人身上，不算进整体心情。'),
+        'description': ('记心情，do 选一样：record 你想记一笔；close 这件事了结了；void 当时的前提不成立（why 写为什么）；'
+                         'accept、decline、edit 对一条情感评估的提案，你同意、不同意，或想改成别的样子。心里有起伏就记，'
+                         '好的坏的都记；记下来才算进心情。强度照实给，多数日常起伏是「轻微」。对人的那几种心情记在那个人身上。'),
         'parameters': {
             'op': _s('做什么（不写时：有 feeling 就是 record）', enum=['record', 'close', 'void', 'accept', 'decline', 'edit']),
             **AFFECT_FIELDS,
@@ -399,18 +454,17 @@ TOOLS = {
         },
     },
     'plan': {
-        'description': ('把一件事留到将来再想：create 新建（intent 加一种计时），update 改期或改内容，cancel 取消。'
-                         '计时选一种：after_seconds 几秒后；every_seconds 固定间隔；at 本地时刻「YYYY-MM-DDTHH:MM」；'
-                         'clock 每天或每周的钟点。到期只是让你再想一次，事情还没做。已有的安排在 plans_from_program，'
-                         '钟面在 clock_from_program。在家里新建时可以写 place：到点在那条线里开一回合（照抄 lines_from_program 里的）'
-                         '，之后在那条线里看和改。'),
+        'description': ('把一件事留到将来再想，do 选一样：create 你想新定一个（intent 写到时候想重新考虑的事，再选一种计时）；'
+                         'update 你想改期或改内容；cancel 你决定不留了。计时选一种：after_seconds 几秒后；every_seconds 固定间隔；'
+                         'at 本地时刻「YYYY-MM-DDTHH:MM」；clock 每天或每周的钟点。到点是叫你再想一次，事情那时还没做。'
+                         + PLAN_LINE),
         'parameters': {
             'op': _s('做什么（不写时：没有 plan_id、写了 intent 和计时就是 create）', enum=['create', 'update', 'cancel']),
-            'plan_id': _s('update/cancel 的那条安排'),
-            'intent': _s(limit=1000, description='届时要重新考虑的事'),
+            'plan_id': _s('update/cancel 的那一条'),
+            'intent': _s(limit=1000, description='到时候想重新考虑的事'),
             'after_seconds': {'type': 'integer'}, 'every_seconds': {'type': 'integer'},
             'at': _s('本地时刻 YYYY-MM-DDTHH:MM'),
-            'line': _s('只在家里 create 时用：到点在哪条线里开一回合，照抄 lines_from_program 里的 place；不写就是这里'),
+            'line': _s('create 时：哪条线，写它的 place；不写就是这里'),
             'clock': {'type': 'object', 'additionalProperties': False, 'properties': {
                 'time': _s('HH:MM', required=True),
                 'weekdays': {'type': 'array', 'items': {'type': 'integer'}, 'description': '0=周一 … 6=周日；不写就是每天'}}},
@@ -426,101 +480,97 @@ TOOLS = {
                        'reason': _s('为什么', required=True)},
     },
     'visit': {
-        'description': ('出门去你在的某个群看看：place 照抄 places_from_program 里的，intent 是去做什么。'
-                         '程序在那个群给你开一回合，你在那儿看了现场再决定说不说；结果下次心跳带回来（last_visits_from_program）'
-                         '。那边存的是你写的原样，看不出平台上显示成什么样（比如 @ 有没有落成）。topic 是想聊的话头，会原样带过去，只写愿意在那儿说的。家里的心跳或计划到点时可以出门，能去几个看 places_from_program.this_beat；'
-                         '想晚点去就用 plan 定时间。'),
-        'parameters': {'place': _s('去哪儿：places_from_program 里的 place', required=True),
+        'description': ('出门去你在的一个群看看：place 写想去哪个群，intent 写想去做什么，topic 写想聊的话头'
+                         '（会原样带过去，写你愿意在那儿说的）。到了那儿你看到现场，再决定说不说；看到的下次带回来。'
+                         '那边留下的是你写的原样；平台上实际显示成什么样，这里看不到。想晚点去就用 plan 定时间。'),
+        'parameters': {'place': _s('想去哪个群：它的 place', required=True),
                        'intent': _s('去做什么', required=True, enum=['start_topic', 'share_picture', 'check_in', 'write_notes']),
                        'topic': _s(limit=_places.TOPIC_CHARS, description='想聊的话头，可省略'),
                        'artifact_id': _s('intent=share_picture 时想分享的那张你自己做的图（可省略，到了再挑）')},
     },
     'errand': {
-        'description': ('替家里托你的人去别处办一件事：去 errand_places_from_program 里的某个群或私聊。'
-                         'request 照抄要带过去的话或交代的事；exactly=yes 是要原样转达。'
-                         '程序在那边开一回合，带着家里的权限；那边的人只看得到你说出口的话，你到了再决定怎么说，不合适就不发。办成没有在家里的 errands_from_program 看，那边的人怎么回不会带回来。'),
-        'parameters': {'place': _s('去哪儿：errand_places_from_program 里的 place', required=True),
-                       'request': _s(limit=500, description='要带过去的话或交代的事', required=True),
+        'description': ('出门办事：去一个群或一处私聊，说一件你想说的事、办一件你想办的事。place 写去哪儿；'
+                         'request 写想带过去的话或想办的事；exactly=yes 你想原样转达。你到那边时带着家里的权限；'
+                         '那边的人只看得到你说出口的话，到了那边怎么说、说不说由你定。办成没有，回来看得到；那边的人怎么回，留在那边。'),
+        'parameters': {'place': _s('去哪儿：那一处的 place', required=True),
+                       'request': _s(limit=500, description='想带过去的话或想办的事', required=True),
                        'exactly': {'type': 'boolean', 'description': 'yes：原样转达'},
-                       'artifact_id': _s('要一起带过去的一张你自己做的图（image_artifacts_from_program 或 your_pictures_from_program 里的；可省略）')},
+                       'artifact_id': _s('想一起带过去的一张你自己做的图（可省略）')},
     },
     'note': {
-        'description': ('给别的对话里的你写一张便条：to 照抄 note_places_from_program 里的 place（在外面也可写「家里」）。'
-                         '那边的你会读到，那边的人看不到，但可能被照着说，所以只写愿意在那边说的。'
-                         'deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
-                         '不写按那边的默认（回给群的回信默认 next_time）。叫醒一个群算一次出门。家里送家里 %d 字以内，过了 %d 字不收；别的 %d 字以内，过了 %d 字不收；一回合最多两张。'
-                         % (soft(_notes.HOME_NOTE_CHARS), _notes.HOME_NOTE_CHARS, soft(_notes.NOTE_CHARS), _notes.NOTE_CHARS)),
-        'parameters': {'to': _s('送到哪儿：note_places_from_program 里的 place，或「家里」', required=True),
+        'description': ('给别的对话里的你写一张便条：to 写想送到哪儿；text 写你想让那边的你知道的事。那边的你会读到；'
+                         '那边的人看不到便条，看得到你在那边说出口的话，所以写你愿意在那边说的。%d 字以内，过了 %d 字不收；一次两张。'
+                         % (soft(_notes.NOTE_CHARS), _notes.NOTE_CHARS) + NOTE_DELIVER + NOTE_HOME_LENGTH + NOTE_WAKES_A_GROUP),
+        'parameters': {'to': _s('送到哪儿：那一处的 place，或「家里」', required=True),
                        'text': _s('便条', required=True),
                        'mode': _s('wake 或 next_time，可省略', enum=['wake', 'next_time']),
-                       'question': _s('在群里：回答的是哪个问题，照抄 q-…（程序在家里写上谁答的、原话在哪）'),
+                       'question': _s('在群里：回答的是哪个问题，照抄 q-…（家里会看到谁答的、原话在哪）'),
                        'for': _s(NOTE_FOR)},
     },
     'restart': {
-        'description': ('重启宿主（只在家里）。preview 先看会打断什么；request 交给监工重启，why 写原因，when 选 now、quiet（默认：'
-                         '等没有在跑的回合、任务和排队消息，最多 30 分钟）或本地时刻 HH:MM；drill 演练，第一次启动故意失败，'
-                         '让兜底真跑一遍；cancel 撤回还没执行的请求。结果在下一次家里那回合的 restart_from_program 里；退回旧版本时会马上叫你。'),
+        'description': ('重启，do 选一样：preview 你想先看看会打断什么；request 你决定重启（why 写原因；when 选 now、quiet'
+                         '（默认：等手上没有在做的事和排着的消息，最多 30 分钟）或本地时刻 HH:MM）；drill 你想演练一次'
+                         '（第一次启动故意失败，让兜底真跑一遍）；cancel 你想撤回还没执行的那次。退回旧版本时会马上叫你。'),
         'parameters': {'op': _s('做什么', required=True, enum=['preview', 'request', 'drill', 'cancel']),
                        'why': _s(limit=200, description='request/drill 要写：为什么重启，一句话'),
                        'when': _s('request/drill 可选：now、quiet 或当地时刻 HH:MM，默认 quiet')},
     },
     'peer_line': {
-        'description': ('开或关你和另一个智能体之间的线（place 照抄 lines_from_program 里的）。关着时对方的话被跳过、不补发；'
-                         '你的话照常发得出去。close_for 选 an_hour、until_morning（到早上八点）或 until_reopened。'),
-        'parameters': {'line': _s('哪条线：照抄 lines_from_program 里的 place', required=True),
+        'description': ('你和另一个智能体之间的线，do 选一样：open 你想把它打开；close 你决定把它关上（close_for 选 an_hour、'
+                         'until_morning 到早上八点，或 until_reopened）。place 写哪条线。关着时那边来的话被跳过、不补发；'
+                         '你的话照常发得出去。'),
+        'parameters': {'line': _s('哪条线：它的 place', required=True),
                        'op': _s('开还是关', required=True, enum=['open', 'close']),
                        'close_for': _s('do=close 时关多久', enum=['an_hour', 'until_morning', 'until_reopened'])},
     },
     'group_focus': {
-        'description': ('你在哪些群常驻，do 选一样：list 列出常驻和歇着的群和它们今天说了多少句；active 让一个群常驻，'
-                         'rest 让它歇着（歇着的群只有 @ 你、回你、你在等的回话和 watch 的人会叫你，话照存照能查）；'
-                         'condense 等这个群安静后把对话压成摘要（出门看群那回合、或家里的心跳和反思里用），keep 收回；'
-                         'mute 在家里把一个群静音（不写 hours 就到你结束它：只有叫到你才会醒，你不先开口、不去串门）'
-                         '，unmute 提前结束。place 照抄 list 或 places_from_program 里的，'
-                         '在群里不写就是这个群。你当管理员的群一直常驻。'),
+        'description': ('你在哪些群常驻，do 选一样：list 你想看看常驻和歇着的群，和它们今天说了多少句；active 你想让一个群常驻；'
+                         'rest 你想让它歇着（歇着的群只有 @ 你、回你、你在等的回话和你留意的人会叫你，话照存照能查）。'
+                         'place 写哪个群，不写就是这个群。你当管理员的群一直常驻。' + FOCUS_CONDENSE + FOCUS_MUTE),
         'parameters': {'op': _s('做什么', required=True, enum=['list', 'active', 'rest', 'condense', 'keep', 'mute', 'unmute']),
-                       'place': _s('哪个群：place，可省略（在群里就是这个群）'),
-                       'hours': {'type': 'integer', 'description': 'mute：静音多少小时'}},
+                       'place': _s('哪个群：它的 place，可省略（在群里就是这个群）'),
+                       'hours': {'type': 'integer', 'description': 'mute：多少小时'}},
     },
     'ask': {
-        'description': ('问人或报问题，程序记着问了谁、谁答了、多久。do=ask 提问，可同时问几处，过了耐心就不等；read 读一个问题的回答，'
-                         '或只写 to 看以前问那处怎样；close 结束一个问题。问家里别的对话（家里·私聊、主人的私聊、开发代理的线）'
-                         '时，程序在那边开一回合，带着 question。拍板的事（权限、花钱、开哪条道）问主人，不问开发代理。'),
+        'description': ('问人或报问题，do 选一样：ask 你想问一个问题，或报一个问题（to 写问谁，可同时问几处；patience 写等多久，'
+                         '不写是一小时）；read 你想看一个问题的回答，或只写 to 看以前问那处怎样；close 你决定这个问题到此为止'
+                         '（took 写得到了什么）。问了谁、谁答了、多久，都记着。问别的对话时，那边的你会带着 question 醒来。'
+                         '拍板的事（权限、花钱、开哪条道）问主人。'),
         'parameters': {'op': _s('做哪一样（不写时：有 question 是 ask，有 took 是 close，否则 read）',
                                 enum=['ask', 'read', 'close']),
                        'question': _s(limit=800, description='问什么，或报什么问题（ask）'),
                        'to': {'type': 'array', 'items': {'type': 'string'},
-                              'description': '问谁：note_places_from_program 里家里的 place、这里，或 行动脑（ask；read 写一处）'},
+                              'description': '问谁：家里那几处的 place，或这里（ask；read 写一处）'},
                        'patience': _s('等多久，不写就是一小时（ask）', enum=['一会儿', '一小时', '半天', '一天', '回了为止']),
-                       'id': _s('问题 id，照抄 questions_from_program（read、close）'),
+                       'id': _s('问题 id，照抄它旁边的（read、close）'),
                        'took': _s(limit=500, description='得到了什么、做了什么，这次问各处怎样（close）')},
     },
     'ideas': {
-        'description': ('你的「改进想法」本，do 选一样：note 记下一个改进自己的想法（能力、技能、做事方式），用你自己的话写，不写别人的个人信息；'
-                         '只记下来，自我改进时再拿出来定。read 读出还没处理完的，先没处理的、再暂缓的，旧的在前，一页 %d 条。'
-                         'review 对一条写处理结果：adopt 采纳（接着用 delegate 交代行动脑去做）、defer 暂缓、drop 放弃，'
-                         '都写 why。' % IDEAS_PAGE),
+        'description': ('你的「改进想法」本' + IDEAS_CHOOSE + '你想记下一个改进自己的想法（idea 写想把什么变得怎样，why 写为什么想到），'
+                         '写的是你自己（能力、技能、做事方式），用你自己的话；记下来，留到以后再定。'
+                         + IDEAS_OP_WORDS['read'] + IDEAS_OP_WORDS['review']),
         'parameters': {'op': _s('做哪一样（不写时：写了 idea 就是 note，写了 id 或 decision 就是 review，写了 search 或 page 就是 read）',
                              enum=['note', 'read', 'review']),
                        'idea': _s(limit=IDEA_CHARS, description='想法：想把什么变得怎样（note 要）'),
                        'why': _s(limit=IDEA_CHARS, description='为什么想到这个，或者这样处理的理由（note、review 要）'),
-                       'id': _s('想法的 _id，照抄 ideas_from_program 或 read 读出来的（review 要）'),
+                       'id': _s('想法的 _id，照抄它旁边的（review 要）'),
                        'decision': _s('处理结果（review 要）', enum=['adopt', 'defer', 'drop']),
                        'page': {'type': 'integer', 'description': '第几页，从 1 开始，可省略（read）'},
                        'search': _s('只看带这几个字的想法（40 字以内），可省略（read）')},
     },
     'find_member': {
-        'description': ('在这个群的成员名单里按名字找人（群名片或昵称里带这几个字的），最多 10 个，最近说过话的在前。找到的人给的是标签，'
-                         '照抄就能 @；进了名册的人会一直留着。members_from_program 只列了一部分，别的人用这个找。'),
+        'description': ('在这个群里找一个人：name 写这个人名字里的几个字（群名片或昵称），最多找到 10 个，最近说过话的在前。'
+                         '找到的人给的是标签，照抄就能 @。眼前的名单只列了一部分，别的人用这个找。'),
         'parameters': {'name': _s(limit=20, exact=True, description='名字里的几个字', required=True)},
     },
     'promote_memory': {
-        'description': ('夜间沉淀时，把值得长期记住的事实提升为长期记忆（配额和来源程序会查）。why 写为什么值得留下，会记进你自己的记录。'),
-        'parameters': {'fact': _s('事实', required=True), 'appraisal': _s('你的评价', required=True),
+        'description': ('长久记住一件事：fact 写这件事，appraisal 写你的评价，signal 写它说明了什么，why 写你为什么想留下它'
+                         '（会记进你自己的记录）。配额和来源会核对。'),
+        'parameters': {'fact': _s('这件事', required=True), 'appraisal': _s('你的评价', required=True),
                        'signal': _s('它说明了什么', required=True),
-                       'why': _s('为什么值得长期留下', required=True),
+                       'why': _s('你为什么想留下它', required=True),
                        'source_ids': {'type': 'array', 'items': {'type': 'string'}, 'required': True,
-                                      'description': '来源：promotion_candidates 里的 id'},
+                                      'description': '来源：候选旁边标的 id'},
                        'visibility': _s('谁能读到', enum=['public', 'owner_private'])},
     },
 }
@@ -533,13 +583,17 @@ MESSAGE_DEVELOPER = {'name': 'message_developer', 'description': '已并入 ask�
 # Looking at a picture is one tool shared by both brains (ADR-011 §5.3 as amended): the action brain's own
 # read_image, with the same fences and storage; here it is bound to her turn's scene instead of a task.
 from .vision import READ_IMAGE_TOOL as _READ_IMAGE
-TOOLS[_READ_IMAGE['name']] = {k: v for k, v in _READ_IMAGE.items() if k != 'name'}
+from .vision import VIDEO_MAX_MB as _VIDEO_MAX_MB
+TOOLS[_READ_IMAGE['name']] = {**{k: v for k, v in _READ_IMAGE.items() if k != 'name'},
+                              'description': READ_IMAGE_WORDS % _VIDEO_MAX_MB + READ_IMAGE_HOME}
 # Reading a file someone sent is one tool for both halves too (ADR-102), bound to her turn's scene here.
 from .received_files import RECEIVED_FILE_TOOL as _RECEIVED_FILE
-TOOLS[_RECEIVED_FILE['name']] = {k: v for k, v in _RECEIVED_FILE.items() if k != 'name'}
+TOOLS[_RECEIVED_FILE['name']] = {**{k: v for k, v in _RECEIVED_FILE.items() if k != 'name'},
+                                  'description': RECEIVED_FILE_WORDS + RECEIVED_FILE_HOME}
 # Her list of words that point at real people and places, shared with the action brain (private_words.py).
 from .private_words import PRIVATE_WORDS_TOOL as _PRIVATE_WORDS
-TOOLS[_PRIVATE_WORDS['name']] = {k: v for k, v in _PRIVATE_WORDS.items() if k != 'name'}
+TOOLS[_PRIVATE_WORDS['name']] = {**{k: v for k, v in _PRIVATE_WORDS.items() if k != 'name'},
+                                  'description': PRIVATE_WORDS_WORDS + PRIVATE_WORDS_HOME}
 # ADR-060: what she is shown is each parameter's new name; handlers read the old ones (param_names.inbound).
 from . import param_names as _names
 from .records import scenes as scene_records
@@ -553,12 +607,10 @@ def _tiered(tools):
     import copy
     out = copy.deepcopy(tools)
     write = out['write_document']
-    write['description'] += 'let_go 把一节放下一层。'
     write['parameters']['do']['enum'] = [*write['parameters']['do']['enum'], 'let_go']
     write['parameters']['nature'] = _s('这一节是', enum=['事实', '记忆'])
     write['parameters']['from'] = _s('它从哪来；别人说的、主人定的要同时写 line，没写 line 就记成我自己的判断', enum=['主人定的', '查过的', '别人说的', '我自己的判断'])
     write['parameters']['line'] = _s(LINE_FOR_CLAIM)
-    out['recall']['description'] += 'sections 只写 doc 就列出它的标题。'
     out['recall']['parameters']['sections']['items']['properties']['section'] = _s('节的 section')
     out['promote_memory']['parameters']['about'] = _s('关于', enum=['self', 'person', 'place', 'world'])
     return out
@@ -719,9 +771,7 @@ def speak_spec(kinds, quotes, local=False):
     spec = copy.deepcopy(tools()['speak'])
     if tuple(kinds) == REPLY_KINDS and quotes and not local:
         return spec
-    spec['description'] = ((LOCAL_SPEAK if local else '') + SPEAK_HEAD + '、'.join(kinds) + '，各写它的字段；'
-                           + (SPEAK_RECALL if 'recall' in kinds else '')
-                           + (_without(SPEAK_TAIL, SPEAK_TAIL_LAST) if local else SPEAK_TAIL))
+    spec['description'] = (LOCAL_SPEAK if local else '') + speak_words(kinds, local)
     if local:
         spec['parameters']['parts']['description'] = LOCAL_PARTS_FIELD
         spec['parameters']['parts']['items']['properties']['text']['description'] = LOCAL_TEXT_FIELD
@@ -736,7 +786,7 @@ def speak_spec(kinds, quotes, local=False):
         item['line']['description'] = ''.join(text for kind, text in (('react', REACT_LINE_REACT),
                                                                       ('recall', REACT_LINE_RECALL)) if kind in kinds)
     if 'artifact_id' in item:
-        item['artifact_id']['description'] = '；'.join(text for kind, text in ARTIFACT_FROM.items() if kind in kinds)
+        item['artifact_id']['description'] = artifact_words(kinds)
     if not quotes:
         spec['parameters'].pop('quote', None)
     return spec
@@ -759,11 +809,37 @@ def session_specs(store, scene_id, person_id=None):
     out = [placed_spec(spec, cls, scene.get('kind'), listed) for spec in all_specs()]
     if thinking_mode(store.config):
         out = [spec for spec in out if spec['name'] != 'think']           # ADR-099: no think
+    out = [_session_words(store, spec, cls) for spec in out]
     kinds = speak_kinds(store, scene)
     if not kinds:
         return out
     shaped = {'name': 'speak', **speak_spec(kinds, capabilities.carries(store, scene, 'quote'), local=local(scene_id))}
     return [shaped if spec['name'] == 'speak' else spec for spec in out]
+
+
+def _session_words(store, spec, cls):
+    """Fields whose choices are a table of this deployment: feel's words from her affect table, and where an outside
+    note can go, by the names home's places have outside (ADR-135 D5, D6)."""
+    if spec['name'] == 'feel':
+        from .affect import AffectLedger, recording_guide
+        from .render import model_and_policy
+        persona = (store.config.get('chat') or {}).get('persona')
+        if not persona:
+            return spec
+        guide = recording_guide(AffectLedger(store, persona, *model_and_policy(store, persona)).model)
+        words = {'kind': guide['kinds'], 'intensity': guide['intensity'], 'arousal': guide['arousal']}
+        def chosen(fields):
+            return {k: ({**v, 'enum': words[k]} if k in words and words[k] else v) for k, v in fields.items()}
+        params = chosen(spec['parameters'])
+        if 'edit' in params:
+            params['edit'] = {**params['edit'], 'properties': chosen(params['edit']['properties'])}
+        return {**spec, 'parameters': params}
+    if spec['name'] == 'note' and cls != visibility.OWNER_PRIVATE:
+        from . import notes
+        names = [notes.HOME_NAME] + notes.owner_chat_names(store.config)
+        return {**spec, 'parameters': {**spec['parameters'], 'to': {**spec['parameters']['to'], 'description': '送到哪儿',
+                                                                   'enum': names}}}
+    return spec
 
 
 def conversation_class(store, scene, person_id=None):
@@ -783,38 +859,31 @@ def conversation_class(store, scene, person_id=None):
 # opened (ADR-088) writes notes with the origin's class, which never has a choice of `deliver`, and may answer a
 # group's question in a home group. So: `deliver` where the class has a choice, `question` in groups, `ideas` with the
 # options the conversation lists. One spec per place and class.
-NOTE_DELIVER = ('deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
-                '不写按那边的默认（回给群的回信默认 next_time）。')
-DELEGATE_FOR_HOME = '外面（群、别人的私聊）托的事在家里做：for 写那边的 place，结果回家里。'
-FOR_HOME = '这件是外面哪一处托的（群或私聊）：照抄 note_places_from_program 里那边的 place；不写＝这一回合叫你的那位托的'
-FOR_GROUP = '这件是谁托的：不写＝叫起这一回合的那位；是这回合里另一个人托的，照抄 people_from_program 里 ta 的标签'
-IDEAS_CHOOSE = '，do 选一样：note '
-IDEAS_OP_WORDS = {'read': 'read 读出还没处理完的，先没处理的、再暂缓的，旧的在前，一页 %d 条。' % IDEAS_PAGE,
-                  'review': 'review 对一条写处理结果：adopt 采纳（接着用 delegate 交代行动脑去做）、defer 暂缓、drop 放弃，都写 why。'}
 IDEAS_WHY_NOTE = '为什么想到这个'
 
 
 def placed_spec(spec, cls, scene_kind, listed):
-    """One tool's spec as a conversation of this class and kind shows it, `listed` being what it lists (abilities)."""
+    """One tool's spec as a conversation of this class and kind shows it, `listed` being what it lists (abilities):
+    the sentences and fields of the abilities it lists, in the same words everywhere (ADR-135 D5 R5)."""
     from . import notes
-    if spec['name'] == 'note':
+    home = cls == visibility.OWNER_PRIVATE
+    name = spec['name']
+    if name == 'note':
         chooses = any(len(allowed) > 1 for _, allowed in notes.MODES.get(cls, {}).values())
-        left = [name for name, kept in (('deliver', chooses), ('question', scene_kind == 'group'),
-                                        ('for', cls != visibility.OWNER_PRIVATE)) if not kept]
-        if not left:
+        left = [field for field, kept in (('deliver', chooses), ('question', scene_kind == 'group'), ('for', not home))
+                if not kept]
+        gone = ([NOTE_DELIVER] if 'deliver' in left else []) + ([] if home else [NOTE_HOME_LENGTH, NOTE_WAKES_A_GROUP])
+        if not left and not gone:
             return spec
-        return {**spec, 'description': _without(spec['description'], *([NOTE_DELIVER] if 'deliver' in left else [])),
+        return {**spec, 'description': _without(spec['description'], *gone),
                 'parameters': {k: v for k, v in spec['parameters'].items() if k not in left}}
-    if spec['name'] == 'delegate':
+    if name == 'delegate':
         # ADR-111 §2.5: whose work it is, by conversation: at home an outside place, in a public group a person in the
-        # turn; elsewhere (someone else's DM) nothing to choose.
-        if cls == visibility.OWNER_PRIVATE:
-            return {**spec, 'description': spec['description'] + DELEGATE_FOR_HOME,
-                    'parameters': {**spec['parameters'], 'for': _s(FOR_HOME)}}
-        if cls == visibility.PUBLIC and scene_kind == 'group':
-            return {**spec, 'parameters': {**spec['parameters'], 'for': _s(FOR_GROUP)}}
+        # turn; elsewhere (someone else's DM) nothing to choose. One text for both (ADR-135 D5).
+        if home or (cls == visibility.PUBLIC and scene_kind == 'group'):
+            return {**spec, 'parameters': {**spec['parameters'], 'for': _s(DELEGATE_FOR)}}
         return spec
-    if spec['name'] == 'ideas':
+    if name == 'ideas':
         ops = [op for op in OPS['ideas'] if 'ideas.' + op in listed]
         if len(ops) == len(OPS['ideas']):
             return spec
@@ -825,10 +894,26 @@ def placed_spec(spec, cls, scene_kind, listed):
         if ops == ['note']:
             fields['why'] = {**fields['why'], 'description': IDEAS_WHY_NOTE}
         text = _without(spec['description'], *(IDEAS_OP_WORDS[op] for op in gone))
-        return {**spec, 'description': text.replace(IDEAS_CHOOSE, '：') if ops == ['note'] else text,
+        return {**spec, 'description': text.replace(IDEAS_CHOOSE, '：note ') if ops == ['note'] else text,
                 'parameters': fields}
+    if name == 'write_document':
+        kept = [text for text, keep in ((WRITE_GROUP_NOTES, scene_kind == 'group'), (WRITE_OWN_DOCS, home)) if keep]
+        if not kept or len(kept) == 2:
+            return spec
+        return {**spec, 'description': _without(spec['description'], *(text for text in (WRITE_GROUP_NOTES, WRITE_OWN_DOCS)
+                                                                        if text not in kept))}
+    if home:
+        return spec
+    if name == 'recall':
+        person = spec['parameters']['person']
+        return {**spec, 'description': _without(spec['description'], RECALL_ELSEWHERE),
+                'parameters': {**spec['parameters'],
+                               'person': {**person, 'description': _without(person['description'], RECALL_LIST)}}}
+    home_sentences = {'plan': (PLAN_LINE,), 'group_focus': (FOCUS_MUTE,), 'read_image': (READ_IMAGE_HOME,),
+                      'received_file': (RECEIVED_FILE_HOME,), 'private_words': (PRIVATE_WORDS_HOME,)}
+    if name in home_sentences:
+        return {**spec, 'description': _without(spec['description'], *home_sentences[name])}
     return spec
-
 
 def _without(text, *parts):
     """`text` without each of `parts`, which it must contain (a changed wording fails here, not silently)."""
@@ -912,10 +997,11 @@ def _turn_rules(store, ep):
         # self-improvement and when the owner asks.
         names.append('ideas.read')
     names.append('task.page')           # a long report reaches her as its first page: she turns the pages herself
-    capabilities = context.get('action_capabilities_from_program') or {}
     tasks = context.get('task_state_from_program') or []
+    # Her hands here: this speaker's workspace grant (ADR-135 D4: not the block, which home turns alone carry).
     # Home's workspace and the tasks it runs are home's authority (ADR-088 §4.2).
-    if capabilities.get('available') and not outside:
+    from .grants import workspace_grant
+    if workspace_grant(store.config, ep['scene_id'], ep.get('person_id'), required=False) and not outside:
         names.append('delegate')
         if tasks:
             names += ['task.message', 'task.settle']

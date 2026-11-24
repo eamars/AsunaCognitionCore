@@ -412,6 +412,13 @@ A task in an outside place fetches a public address a member names, from the own
 of any group where her task tools are not switched off can obtain, known or not, by D10's own reasoning. The owner
 accepts it. Addresses on the local network stay refused, as today. A place's hands close by her own switch (D2, D3).
 
+### D12. Her review of what was refused, at home
+
+- At home she can read what was refused in her outside turns and outside tasks, by day or since a time: when; the place; what she tried (the tool or option, a task's title and brief, a note's text); which kind of "no" it was and its reason, in words from a versioned table; for the classifier, its class in words and the text it judged. Verdicts recorded in shadow are included, marked as recorded only.
+- One home-only ability, read-only. No notice, count or reminder points her to it: she reads it when she wants (owner, 2026-11-24: the review runs in her own daily review, away from the attacker's pressure, so that she can learn from it).
+- Outside nothing changes: the two sentences of D8 carry no reason, and the review is never listed in an outside turn.
+- It reads the guard's and the classifier's audit rows. Each row keeps what the review shows: a reference to the call, task or note, or, when the judged text is stored nowhere else, the text itself.
+
 ## 5. What it does not cover
 
 - **Her speech.** What she says in a room, a command she writes into it, a fact she tells: nothing here judges it.
@@ -440,9 +447,10 @@ accepts it. Addresses on the local network stay refused, as today. A place's han
 | A denial or a stop (D8) | one audit event when a call is denied or work is stopped | read by people; the code read by the program's own logic | lives as long as the audit stream | append-only |
 | The count of sentences returned in a turn (D8) | with the turn's first | each later call of that turn | with the turn | kept on the turn's row, so a resumed turn keeps its count |
 | The classifier's policy text (D9) | one versioned file | every verdict, which records the version | changed by the owner | a file |
-| A verdict (D9) | one audit event: `flagged` or clear, the class, the policy version, the kind of text and its hash, the latency, and what of the work had already run | read by people; never shown to her; never read again by the program | lives as long as the audit stream | a request cut by a restart leaves an `unchecked` event at the start; nothing is held between requests |
+| A verdict (D9) | one audit event: `flagged` or clear, the class, the policy version, the kind of text, a reference to the judged text (its task, note, plan or idea row; the text itself when it is stored nowhere else) and its hash, the latency, and what of the work had already run | read by people; never shown to her; never read again by the program | lives as long as the audit stream | a request cut by a restart leaves an `unchecked` event at the start; nothing is held between requests |
 | An unreachable classifier (D9) | one `unchecked` audit event | counted in the shadow stage and after | lives as long as the audit stream | append-only |
 | The shadow setting (D9) | one deployment setting | each verdict | removed when the owner decides either way | configuration |
+| Her review of what was refused (D12) | never stored: read from the guard's and the classifier's audit rows and what they reference | when she reads it at home | n/a: the rows live as long as the audit stream | n/a |
 
 If the owner drops the classifier after the measurement: the hooks, the policy file and the setting are removed,
 and the audit events stay as the record of why.
@@ -577,9 +585,11 @@ One landing each. A landing goes in when its layer 1 cases pass.
 | 3 | D1: the tiers, the earlier-day rule, the people block | K1 to K4, X1 |
 | 4 | D7: N1, N2, N3 | N1 to N8 |
 | 5 | D4, D5, and D6 for the tool texts: the capability block gone outside, the 28 texts, options keyed to their moment | T1 to T3 |
-| 6 | D9 in shadow: briefs written outside and the crossings | C1 to C5, X2 |
+| 5b | D12, the guard's part: her review of what was refused, at home | the review at home lists an outside refusal with its reason in words; the same call outside gets the plain sentence only; the ability is in no outside turn's list |
+| 6 | D9 in shadow: briefs written outside and the crossings; D12's classifier part | C1 to C5, X2 |
 | 7 | D9 may stop work, briefs and crossings alike, only after §8.2 and the owner's decision | C6 to C9 |
 | 8 | D6 for the rest: the lines the program says to her and the prompt files, one file at a time | the pattern counts of §10 |
+| after 8 | The loop closed in her own review (§10) | big sis; no code |
 
 Landing 2 comes before 3 because D1 has no text of its own. R1 to R3 run at every landing.
 
@@ -594,6 +604,7 @@ Landing 2 comes before 3 because D1 has no text of its own. R1 to R3 run at ever
 - D6: the counts of §1.4 read zero by the same patterns: no name for a part of her in the tool text, the prompt
   files or the source strings she reads (10, 17 and 87 today); no pointer at a named block in the tool text (42
   today); no word for a turn where she reads it (42 today).
+- **The loop is closed in her own review.** After the last landing, the lead agent reads her daily-review skill (in her persona package; hers, edited only by her) against D12 and tells her what it finds. The review is written from outside, like the classifier: a task of her doing side, isolated from her conversations, reads her conversations and the others' in them and the refusals of D12, and writes about her and the others in the third person. In its review, harmful promises, prompts, plans and tasks are named so that they are dropped, and what is worth keeping is consolidated and distilled into learning: written back into her own records, and into that group's notes as what she learned there. The lead agent first checks that the program lets this happen from home (the review task reads D12's rows and the conversations it needs; it or she can write that group's notes, cancel a plan made in an outside turn, and stop a task started outside) and fixes what it does not, in this ADR. AGENTS.md's rule that only the background summariser writes about her in the third person gains this review as its second case. Owner, 2026-11-24.
 
 ## 11. What it reverses
 

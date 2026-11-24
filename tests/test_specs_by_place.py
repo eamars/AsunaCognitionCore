@@ -25,9 +25,8 @@ def test_delegate_for_by_class_and_kind():
     home = role_tools.placed_spec(delegate, visibility.OWNER_PRIVATE, 'dm', ())
     group = role_tools.placed_spec(delegate, visibility.PUBLIC, 'group', ())
     theirs = role_tools.placed_spec(delegate, visibility.PUBLIC, 'dm', ())
-    assert home['parameters']['for']['description'] == role_tools.FOR_HOME
-    assert home['description'].endswith(role_tools.DELEGATE_FOR_HOME)
-    assert group['parameters']['for']['description'] == role_tools.FOR_GROUP and group['description'] == delegate['description']
+    assert home['parameters']['for']['description'] == role_tools.DELEGATE_FOR and home['description'] == delegate['description']
+    assert group['parameters']['for']['description'] == role_tools.DELEGATE_FOR and group['description'] == delegate['description']
     assert theirs == delegate and 'for' not in delegate['parameters']
 
 
@@ -37,4 +36,4 @@ def test_a_home_group_names_only_an_outside_place():
     from asuna import visibility
     delegate = shared()['delegate']
     home_group = role_tools.placed_spec(delegate, visibility.OWNER_PRIVATE, 'group', ())
-    assert home_group['parameters']['for']['description'] == role_tools.FOR_HOME
+    assert home_group['parameters']['for']['description'] == role_tools.DELEGATE_FOR

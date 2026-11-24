@@ -376,6 +376,7 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - def `outside_class` — The class a home turn acts with when a note from outside opened it (ADR-088 §4.2): that of the place the note came from, never home's; None for any other turn.
 - def `allowed` — Where this turn may write, `cls` being its conversation's class: anywhere it reaches; when an untrusted note opened it, back to where the note came from, and at home also on to a group, never to another home conversation (ADR-088 §4.2).
 - def `places_view` — note_places_from_program: where a note from here can go, by name, with what happens there by default.
+- def `owner_chat_names` — How the owner's own chats are named in an outside turn, in order (ADR-135 N3).
 - def `prepare` — Validate one note from this turn: (draft, None), or (None, the row already sent by this call).
 - def `owner_line` — The owner's own words that woke this turn outside (his platform account, mapped to him by configuration), or None.
 - def `record`

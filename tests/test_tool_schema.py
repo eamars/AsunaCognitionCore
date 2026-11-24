@@ -50,7 +50,7 @@ def test_fields_the_program_fills_in_later_are_not_missing_at_layer_three():
     assert said('write_document', WRITE, {'do': 'append_section', 'why': 'y', 'heading': 'h'}) == []
     assert said('delegate', role_tools.tools()['delegate']['parameters'], {'brief': 'x'}) == []
     assert tool_schema.violations('delegate', role_tools.tools()['delegate']['parameters'], {}) == [
-        ('ARGS_MISSING', '缺 brief（给行动脑的完整交代）', 'brief')]
+        ('ARGS_MISSING', '缺 brief（你想要什么、为什么、有什么限制）', 'brief')]
 
 
 def test_speak_parts_written_as_a_json_string_a_part_without_a_kind_and_its_own_keys_are_repaired():

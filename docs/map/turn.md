@@ -172,6 +172,8 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `thinking_mode` — ADR-099: her 心里话 come from the model's own thinking (`thoughts: thinking`), not from her think call; nothing then asks her to write her thoughts out.
 - def `asks_thought` — Whether this turn asks for her thought before anything else (ADR-099): `think` is in the turn's tools.
 - class `Refused` — A call she can correct herself: the message says, in words for her, what to do instead.
+- def `speak_words` — speak's text for the parts a conversation carries: the words of each, picture and file said together.
+- def `artifact_words` — artifact_id's field for the parts that take one (picture, file).
 - def `local` — Whether a conversation is local (ADR-129 D9): its channel kind declares no REPLY_PARTS, so none of QQ's rules on how she speaks applies there.
 - def `speak_parts` — The parts speak takes in this conversation: its channel kind's REPLY_PARTS, else LOCAL_PARTS (ADR-129 D9).
 - def `tools` — The tool specs her brain is shown (tiered memory's, ADR-062); `delegate` takes a tier when the owner configured the action brain's 高 (ADR-075).
@@ -191,7 +193,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `declared_specs` — Specs as DSH registers them and the model reads them: each tool's parameters declared (tool_schema.declared).
 - def `session_specs` — Her tools as one conversation shows them: `speak` with the parts and the quote its channel's adapter declared (ADR-079 §9.7), and each option left out that no turn there can use (`placed_spec`, ADR-087 §4.3); the rest as all_specs.
 - def `conversation_class` — The class of a conversation's turns: the local chat's is its person's, a private chat's the person it is with, a group's its own.
-- def `placed_spec` — One tool's spec as a conversation of this class and kind shows it, `listed` being what it lists (abilities).
+- def `placed_spec` — One tool's spec as a conversation of this class and kind shows it, `listed` being what it lists (abilities): the sentences and fields of the abilities it lists, in the same words everywhere (ADR-135 D5 R5).
 - def `aliases` — Old name -> the tool it runs as (the plugin lets one through where that tool is listed).
 - def `turn_kind`
 - def `exposed` — What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the conversation's list (abilities).

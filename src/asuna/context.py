@@ -759,6 +759,67 @@ class ContextBuilder:
         plans=[schedule_rules.project(row,schedule_zone,moment) for row in plan_rows]
         f.plans,f.schedule_zone,f.task_states=plans,schedule_zone,task_states
 
+    def _capabilities(self, context, scene, event, session_class):
+        """action_capabilities_from_program, at home: what her hands can do here, in words."""
+        from .grants import workspace_grant
+        grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
+        from .role_tools import switched_off
+        context['action_capabilities_from_program']={
+            # not where the task tools are switched off here: they are not in the list (ADR-135 D2)
+            'available':bool(grant) and 'delegate' not in switched_off(self.store,{'scene_id':scene['_id']}),'route':'用 delegate 把事交给行动脑；补话、接着做或叫停用 task（message、stop）。文件、网页、沙箱、原话检索和看图都是行动脑的事。',
+            'cancellation_available':True,
+            'network':'行动脑可以按需搜索公共网页并读取页面。',
+            'delivery':('程序自动执行委托，结果作为独立事件返回当前场景（外面托的写 for，结果回家里）；等待时仍可聊天。'
+                        if session_class==visibility.OWNER_PRIVATE else
+                        '程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。')}
+        from .grants import for_whose
+        from . import whose as _whose_of
+        # ADR-111 §2.4: the development tools only where this turn's whose earns them.
+        if for_whose(self.store, _whose_of.of_turn(self.store, None, event)):
+            context['action_capabilities_from_program']['development'] = {
+                'candidate':'持久的有效项目候选（代码、技能、提示、种子）；可委托行动脑检查、修改和自行发布。',
+                'guide':'先读核心技能 asuna-self-improvement：改什么走哪层、怎么自检、怎么发布、什么会触发重启。'}
+        from . import sandbox_backend
+        if not sandbox_backend.available(self.store.config):
+            # What she cannot hand over, said as such (ADR-010 D5); never how the machine is set up.
+            context['action_capabilities_from_program']['not_available']=(
+                '跑代码、改自己的能力、接管集成这几件事现在交不出去：没有可用的隔离环境。别答应要做这些。')
+        elif session_class!=visibility.OWNER_PRIVATE:
+            context['action_capabilities_from_program']['run_code']=(
+                '在这里交出去的事，行动脑不能跑代码或命令；那只在主人那边做。别在这里答应跑代码。')
+        # ADR-098: the placeholders by name and meaning (never their values), and which this place hands over.
+        from . import local_roots as _local_roots
+        context['action_capabilities_from_program']['paths']=_local_roots.context_line(
+            session_class==visibility.OWNER_PRIVATE)
+        context['action_capabilities_from_program']['history_query']=(
+            '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
+            '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
+        from .vision import vision_capability
+        if vision_capability(self.store.config)['supported']:
+            context['action_capabilities_from_program']['read_image']=(
+                '图片按 Pull 模式接：入站只带元数据与占位符，read_image(ref) 才把字节拉成这一回合真实的视觉输入；'
+                '行动脑也有同一个工具，交代要按图做的事时把 ref 写进 brief。没调用就是没看过，占位符只证明那里有过一张图。')
+        context['action_capabilities_from_program']['group_discussion']=(
+            '可按需整理当前授权群指定时间／主题的讨论：参与者、后续更正、个人意见、未决事项与实际覆盖范围分开返回，'
+            '每条带 message_id 供原文回读；分类是按字面线索的机械标注不是结论，more=true 表示只覆盖了部分'
+            '（还有未读原文，或同一 reply 链的讨论流没走完），续页之后才能说整理完整；按 person '
+            '整理时链上带进来的上下文发言可能不是那个人说的（标 thread_context）。措辞与取舍仍由你'
+            '判断，不自动总结、不自动发言。')
+        from .image_generation import available as image_available
+        if image_available(self.store.config):
+            context['action_capabilities_from_program']['image_generation']=(
+                '行动脑能用本机的生图服务画图；画好的图登记成你自己的，之后可以随消息发出去（群里只发全年龄的图）。'
+                '外部公开的生图服务也能用，但那样只能给链接。')
+        from .integration import event_profile
+        integration_profile = event_profile(self.store.config, event, self.store)
+        if integration_profile == 'agent_home':
+            context['action_capabilities_from_program']['integration'] = {
+                'grant': '这条线的家里回合带窄集成授权：只有 integration_start（只启用已发布的适配器版本）和 '
+                         'integration_status（只读）。没有试运行，也没有停止；RUNNING 不等于平台连上或发送成功。'}
+        elif integration_profile:
+            context['action_capabilities_from_program']['integration'] = {
+                'grant': '本机 owner 工作域允许适配器试运行和启停。试运行用开发候选的冻结副本，启用只用已发布的版本；改适配器代码要有开发授权。仅配置端点可达；进程启动不证明平台发送。'}
+
     def _scene_blocks(self, f):
         """The context itself and the blocks of the scene: the event, recent thoughts, linked scenes, the heartbeat and
         self-development blocks, peer lines, who is speaking, media and what she can send."""
@@ -1272,64 +1333,9 @@ class ContextBuilder:
             context['understanding_update_from_program']={
                 'available':True,'target':target_note,
                 'note':UNDERSTANDING_NOTE}
-        from .grants import workspace_grant
-        grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
-        from .role_tools import switched_off
-        context['action_capabilities_from_program']={
-            # not where the task tools are switched off here: they are not in the list (ADR-135 D2)
-            'available':bool(grant) and 'delegate' not in switched_off(self.store,{'scene_id':scene['_id']}),'route':'用 delegate 把事交给行动脑；补话、接着做或叫停用 task（message、stop）。文件、网页、沙箱、原话检索和看图都是行动脑的事。',
-            'cancellation_available':True,
-            'network':'行动脑可以按需搜索公共网页并读取页面。',
-            'delivery':('程序自动执行委托，结果作为独立事件返回当前场景（外面托的写 for，结果回家里）；等待时仍可聊天。'
-                        if session_class==visibility.OWNER_PRIVATE else
-                        '程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。')}
-        from .grants import for_whose
-        from . import whose as _whose_of
-        # ADR-111 §2.4: the development tools only where this turn's whose earns them.
-        if for_whose(self.store, _whose_of.of_turn(self.store, None, event)):
-            context['action_capabilities_from_program']['development'] = {
-                'candidate':'持久的有效项目候选（代码、技能、提示、种子）；可委托行动脑检查、修改和自行发布。',
-                'guide':'先读核心技能 asuna-self-improvement：改什么走哪层、怎么自检、怎么发布、什么会触发重启。'}
-        from . import sandbox_backend
-        if not sandbox_backend.available(self.store.config):
-            # What she cannot hand over, said as such (ADR-010 D5); never how the machine is set up.
-            context['action_capabilities_from_program']['not_available']=(
-                '跑代码、改自己的能力、接管集成这几件事现在交不出去：没有可用的隔离环境。别答应要做这些。')
-        elif session_class!=visibility.OWNER_PRIVATE:
-            context['action_capabilities_from_program']['run_code']=(
-                '在这里交出去的事，行动脑不能跑代码或命令；那只在主人那边做。别在这里答应跑代码。')
-        # ADR-098: the placeholders by name and meaning (never their values), and which this place hands over.
-        from . import local_roots as _local_roots
-        context['action_capabilities_from_program']['paths']=_local_roots.context_line(
-            session_class==visibility.OWNER_PRIVATE)
-        context['action_capabilities_from_program']['history_query']=(
-            '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
-            '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
-        from .vision import vision_capability
-        if vision_capability(self.store.config)['supported']:
-            context['action_capabilities_from_program']['read_image']=(
-                '图片按 Pull 模式接：入站只带元数据与占位符，read_image(ref) 才把字节拉成这一回合真实的视觉输入；'
-                '行动脑也有同一个工具，交代要按图做的事时把 ref 写进 brief。没调用就是没看过，占位符只证明那里有过一张图。')
-        context['action_capabilities_from_program']['group_discussion']=(
-            '可按需整理当前授权群指定时间／主题的讨论：参与者、后续更正、个人意见、未决事项与实际覆盖范围分开返回，'
-            '每条带 message_id 供原文回读；分类是按字面线索的机械标注不是结论，more=true 表示只覆盖了部分'
-            '（还有未读原文，或同一 reply 链的讨论流没走完），续页之后才能说整理完整；按 person '
-            '整理时链上带进来的上下文发言可能不是那个人说的（标 thread_context）。措辞与取舍仍由你'
-            '判断，不自动总结、不自动发言。')
-        from .image_generation import available as image_available
-        if image_available(self.store.config):
-            context['action_capabilities_from_program']['image_generation']=(
-                '行动脑能用本机的生图服务画图；画好的图登记成你自己的，之后可以随消息发出去（群里只发全年龄的图）。'
-                '外部公开的生图服务也能用，但那样只能给链接。')
-        from .integration import event_profile
-        integration_profile = event_profile(self.store.config, event, self.store)
-        if integration_profile == 'agent_home':
-            context['action_capabilities_from_program']['integration'] = {
-                'grant': '这条线的家里回合带窄集成授权：只有 integration_start（只启用已发布的适配器版本）和 '
-                         'integration_status（只读）。没有试运行，也没有停止；RUNNING 不等于平台连上或发送成功。'}
-        elif integration_profile:
-            context['action_capabilities_from_program']['integration'] = {
-                'grant': '本机 owner 工作域允许适配器试运行和启停。试运行用开发候选的冻结副本，启用只用已发布的版本；改适配器代码要有开发授权。仅配置端点可达；进程启动不证明平台发送。'}
+        # What her hands can do is said at home only; outside the list is the statement (ADR-135 D4).
+        if session_class==visibility.OWNER_PRIVATE:
+            self._capabilities(context,scene,event,session_class)
         if event.get('episode_kind')=='visit':
             # ADR-012 §4.2: nobody called her; the room as it is now, and what she came for. The person on the
             # event only authorizes the turn, so no block speaks of a current speaker.
@@ -1528,8 +1534,9 @@ class ContextBuilder:
         brought_up,carried_here,context,event,manifest=f.brought_up,f.carried_here,f.context,f.event,f.manifest
         model,moment,people,persona,policy,scene=f.model,f.moment,f.people,f.persona,f.policy,f.scene
         session_class,system,system_ref,would_surface=f.session_class,f.system,f.system_ref,f.would_surface
-        # Which writes and reads this turn allows (owner_private or public) is a program fact, stated plainly.
-        context['session_class']=session_class
+        # Which writes and reads this turn allows is a program fact, stated plainly at home (ADR-135 D4: not outside).
+        if session_class==visibility.OWNER_PRIVATE:
+            context['session_class']=session_class
         # The ceiling applies to what a turn sends, not to what is prepared (coordinator._deliver, context_budget.py).
         from .context_budget import size as _size
         manifest['context_chars']=_size(context)

@@ -81,7 +81,7 @@ MODE_WORDS = {WAKE: '马上叫醒那边（排在那边手上的事后面）', NE
 TRUST_WORDS = {TRUSTED: '你在家里写的', UNTRUSTED: '你在外面写的'}
 STATE_WORDS = {'waiting': '送到了，还没读', 'read': '读了，没回（读到不等于办了：要确认，再写一张问一句）',
                'replied': '读了，回了你', 'expired': '三天没读，过期了'}
-WAKE_TEXT = '这一回合是你自己在别的对话里写的一张便条叫起来的，这里没有人说话。便条在 note_from_program。'
+WAKE_TEXT = '叫起你的是一张便条，这里没有人说话。'
 FROM_OUTSIDE = '这是你在%s写给这里的便条，这里没人发它。'
 # ADR-088 §4.3, her own line (2026-10-21): what a note from outside that opens a home turn asks her. Not on a reply to
 # a note of hers, nor on a note carrying the owner's line.
@@ -352,15 +352,26 @@ def places_view(store, persona, scene_id, cls, first):
 
 
 # ── sending ─────────────────────────────────────────────────────────
+def owner_chat_names(config):
+    """How the owner's own chats are named in an outside turn, in order (ADR-135 N3)."""
+    chats = owner_chats(config)
+    return [OWNER_CHAT_NAME + ('' if len(chats) == 1 else ' %d' % (n + 1)) for n in range(len(chats))]
+
+
 def _resolve(store, persona, found, wanted, cls):
     from .people import People
     wanted = str(wanted or '').strip()
     if wanted in found:
         return wanted
-    if cls != visibility.OWNER_PRIVATE and wanted in ('家里', 'home', '家'):
+    if cls != visibility.OWNER_PRIVATE and wanted in (HOME_NAME, 'home', '家'):
         homes = [place for place, (_, kind) in found.items() if kind == 'home']
         if homes:
             return homes[0]
+    if cls != visibility.OWNER_PRIVATE and wanted in owner_chat_names(store.config):
+        from . import places
+        sid = owner_chats(store.config)[owner_chat_names(store.config).index(wanted)]
+        if places.place_id(sid) in found:
+            return places.place_id(sid)
     people = People(store, persona)
     named = [place for place, (sid, _) in found.items()
              if wanted and wanted in people.scene_title(scene_records.get(store, sid))]

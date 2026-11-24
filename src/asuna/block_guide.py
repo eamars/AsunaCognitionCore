@@ -9,8 +9,17 @@ from __future__ import annotations
 from .config import prompt_path
 
 
-def notes(faces=True):
-    """block key -> the explanations it may carry (a block worded per place has more than one).
+# Blocks built only in home turns (context.py): an outside conversation's guide does not explain them (ADR-135 D4).
+HOME_ONLY = ('switches_from_program', 'places_from_program', 'last_visits_from_program', 'errands_from_program',
+             'elsewhere_from_program', 'credentials_from_program', 'restart_from_program', 'host_from_program',
+             'self_review_from_program', 'dice_review_from_program', 'night_from_program', 'ideas_from_program',
+             'recent_experience_from_program', 'peer_asides_from_program', 'lines_from_program',
+             'memory_week_from_program', 'your_pictures_from_program')
+
+
+def notes(faces=True, outside=False):
+    """block key -> the explanations it may carry (a block worded per place has more than one). `outside`: an outside
+    conversation's, which leaves out the blocks only home turns carry (HOME_ONLY).
 
     `faces`: this conversation can carry the platform's own faces (stickers.has_faces). The faces block
     cannot arrive where that does not hold, so its explanation is not said there either (the owner,
@@ -18,7 +27,7 @@ def notes(faces=True):
     """
     from . import (affect, attend, context, credentials, dice, group_members, host_stops, lines, night, notes as _notes, notices,
                    outbound_files, outbound_media, places, questions, restarts, self_review, stickers, switches, waiting)
-    return {
+    found = {
         'recent_thoughts_from_program': (context.THOUGHTS_NOTE,),
         'understanding_update_from_program': (context.UNDERSTANDING_NOTE,),
         'people_from_program': (context.PEOPLE_NOTE,),
@@ -52,6 +61,7 @@ def notes(faces=True):
         'dice_review_from_program': (dice.REVIEW_NOTE,),
         **_tiered_notes(),
     }
+    return {key: texts for key, texts in found.items() if not (outside and key in HOME_ONLY)}
 
 
 def _tiered_notes():
@@ -92,7 +102,7 @@ WORDS = '你用工具做事；只有 `speak` 发得出去。写在正文里的�
 ENDING = '结束：要说的话都用 `speak` 说；说完了、或者这回合不想说，就调用 `end_turn`，也可以什么都不调用——这一回合到此为止，不算漏了什么。'
 
 
-def guide(config, faces=True):
+def guide(config, faces=True, outside=False):
     """The fixed text of her turns: how a turn goes, what each block is, how to read memories. `faces`: it can carry
     the platform's faces (stickers.has_faces), which is the only place its block's explanation is said."""
     from .context import MEMORY_SOURCE_RULES
@@ -103,7 +113,7 @@ def guide(config, faces=True):
     lines = ['# 每回合的资料', '带 _from_program 的块是程序事实；带 _at 的字段是你的钟面上的时刻，和 clock_from_program 同一个钟。'
              '下面是各块的说明，块里不再重复；某块自己带的 note 是这一回合特有的话，以它为准。']
     lines += ['- %s：%s' % pair for pair in DELIVERY]
-    for key, texts in notes(faces).items():
+    for key, texts in notes(faces, outside).items():
         lines.append('- %s：%s' % (key, '／'.join(texts)))
     lines += ['', '# 记忆的来源', MEMORY_SOURCE_RULES]
     from . import memory_tiers

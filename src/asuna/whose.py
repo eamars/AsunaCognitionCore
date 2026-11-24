@@ -274,7 +274,14 @@ def named_outside(store, ep, place):
     """The outside conversation a home turn's `for` names: a group or a DM from her note places that is not a home
     one (a home group is listed among the outside places, `places.errand_targets`)."""
     from . import notes
-    found = notes.targets(store, ep['scene_id'], visibility.OWNER_PRIVATE).get(place)
+    targets = notes.targets(store, ep['scene_id'], visibility.OWNER_PRIVATE)
+    found = targets.get(place)
+    if not found:                       # or by the name the place has (ADR-135 D5: 「一处对话的名字」)
+        from .people import People
+        people = People(store, ep.get('persona'))
+        named = [value for value in targets.values()
+                 if place and str(place).strip() == people.scene_title(_scene(store, value[0]))]
+        found = named[0] if len(named) == 1 else None
     if not found or found[1] not in ('group', 'dm') or visibility.home_group(store.config, found[0]):
         return None
     return found[0]

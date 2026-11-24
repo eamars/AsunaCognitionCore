@@ -432,3 +432,4 @@ The guardrail (ADR-135 D8): whether a call is allowed, decided from stored facts
 - def `deny_task` — One audit event for a task's call that was not allowed; the sentence in an outside task, else None (the program's own refusal stands).
 - def `review_window` — (since, before) as stored times, for `wanted`: 今天, a day YYYY-MM-DD, or a time YYYY-MM-DDTHH:MM on her clock (since then until now); None when it is none of those.
 - def `review` — What was refused in her outside turns and outside tasks between two stored times, newest first, at most REVIEW_MOST: when, where, what she tried, which kind of "no" and why, in words (REVIEW_WORDS); and how many more.
+- def `expired` — The expired asks whose own text has a word of `query`, newest first, at most EXPIRED_MOST: those asked in `scene_id`, or, with None (home), anywhere.

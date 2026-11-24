@@ -2113,6 +2113,13 @@ class RoleTools:
                 crossed = crossing.elsewhere(self.store, ep['persona'], here, query, zone)
             with part('before'):
                 before = crossing.before(self.store, ep['persona'], here, self._cls(ep), query, zone)
+        # ADR-135 D12: a stranger's ask the program did not do, met as expired: in its own conversation and at home.
+        expired = []
+        if query:
+            from . import guard
+            with part('expired'):
+                expired = guard.expired(self.store, ep['persona'], query,
+                                        where['scene_id'] if guard.outside(self.store, ep) else None)
         self.checkpoint()
         ep = self._fresh(ep)
         c._update(ep, recall_count=count + 1,
@@ -2128,7 +2135,7 @@ class RoleTools:
             'sections_missing': missing or [], 'memories': [m.get('_id') for m in recalled.get('memories') or []],
             'own_thoughts_elsewhere': [m['_id'] for m in elsewhere],
             'elsewhere': [m['ref'] for m in crossed], 'before': [m.get('now') for m in before],
-            'turn_kind': turn_kind(ep), 'place': place(self.store.config, self.store, scene, ep['person_id'])},
+            'expired': len(expired), 'turn_kind': turn_kind(ep), 'place': place(self.store.config, self.store, scene, ep['person_id'])},
             ep['scope_key'])
         result = {'query': query, 'memories': recalled.get('memories') or []}
         if recalled.get('coverage_from_program'):
@@ -2146,6 +2153,8 @@ class RoleTools:
             result['elsewhere'], result['elsewhere_how'] = crossed, crossing.HOW
         if before:
             result['before'] = before
+        if expired:
+            result['expired'] = expired
         if query:
             # ADR-097 D5: what this recall brought back, and whether it found what the turn itself had not (W6).
             from . import crossing
@@ -2176,7 +2185,7 @@ class RoleTools:
         if found:
             result['headings'] = found
         result['searched'] = memory_tiers.SEARCHED
-        if not (result['memories'] or result.get('documents') or found or elsewhere or crossed or before):
+        if not (result['memories'] or result.get('documents') or found or elsewhere or crossed or before or expired):
             result['found'] = memory_tiers.NOTHING
         return result, False
 

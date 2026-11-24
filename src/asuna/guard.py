@@ -285,14 +285,18 @@ def record(store, ep, code, rule, name, args, *, sentence, call=None):
     """One audit event for her call that was not allowed: the reason, for us; `sentence`: whether she got the plain
     sentence (an outside turn) or the program's own refusal (home)."""
     from . import role_tools as rt
+    from . import whose as whose_of
     args = args if isinstance(args, dict) else {}
+    person = asker(store, ep, name, args)
+    asked = ({'asker_id': person, 'asked_in': (whose_of.of(store, ep) or {}).get('scene_id') or ep.get('scene_id')}
+             if isinstance(person, str) and person else {})
     store.audit(ep['_id'], 'guard.denied', {
         'code': code, 'rule': rule, 'tool': name,
         **({'option': rt.ability(name, args)} if name in rt.OPS and args.get('op') in rt.OPS[name] else {}),
         'class': place(ep), 'authority': authority(store, ep), 'turn_kind': rt.turn_kind(ep),
         'asker': bool((ep.get('whose') or {}).get('person_id')),
         **({'task': args['task']} if name == 'task' and isinstance(args.get('task'), str) else {}),
-        **({'call': call} if call else {}), 'sentence': sentence}, ep['scope_key'])
+        **({'call': call} if call else {}), **asked, 'sentence': sentence}, ep['scope_key'])
 
 
 def guard_task(store, task, tool, args):
@@ -318,12 +322,13 @@ def deny_task(store, task, code, rule, tool):
 REVIEW_VERSION = 1
 REVIEW_MOST = 20
 REVIEW_KIND = '这一步没有做'
+EXPIRED = '这件已经过期，你不用接着做了。'     # shown with an expired ask, never stored or searched
 REVIEW_WORDS = {
     'not_listed': '那个对话里没有这一样',
     'not_now': '那个时候用不了这一样',
     'outside_turn': '叫起那一次的是外面写来的便条，带的是外面的权限',
     'no_place': '那一次写的便条没有能送去的地方',
-    'asker_not_known': None,          # UNDECIDED: the owner words this row (test_every_review_reason_is_decided)
+    'asker_not_known': EXPIRED,
     'not_granted': '这件事要的超出了它在那边得到的',
     LIMITED: '那一次已经被拒了三回，后面的都没有再看',
 }
@@ -375,14 +380,72 @@ def review(store, persona, since, before):
         if task:
             scene_id, tried = task.get('scene_id'), {'tool': said.get('tool'), 'task': task.get('title') or '',
                                                      'brief': excerpt(task.get('goal') or '', TRIED_CHARS)}
+            person = (task.get('whose') or {}).get('person_id') or task.get('requester_id')
+            asked_in = scene_id
         else:
             ep = episode_records.get(store, row['stream_id'], fields=['scene_id'])
             scene_id, tried = (ep or {}).get('scene_id'), _tried(store, row['stream_id'], said)
+            person, asked_in = said.get('asker_id'), said.get('asked_in') or scene_id
         items.append({'at': row.get('occurred_at'),
                       'where': people.scene_title(scene_records.get(store, scene_id)) if scene_id else '',
+                      **_asked_by(store, people, asked_in, person),
                       'tried': tried, 'kind': REVIEW_KIND,
                       **({'why': REVIEW_WORDS[said['code']]} if REVIEW_WORDS.get(said.get('code')) else {})})
     return {'items': items, **({'more': len(rows) - REVIEW_MOST} if len(rows) > REVIEW_MOST else {})}
+
+
+def _asked_by(store, people, scene_id, person):
+    """{'asked_by': the asker's label as she knows them in that conversation}, or {} when nobody asked."""
+    if not person or not scene_id:
+        return {}
+    from .records import scenes as scene_records
+    return {'asked_by': people.speaker(scene_records.get(store, scene_id) or {'_id': scene_id}, person)}
+
+
+# ── an expired ask, when she recalls it (ADR-135 D12) ──
+# A stranger's ask the program did not do (asker_not_known) is expired the moment it is made. Its record is its
+# guard.denied row; a recall whose words are in the ask's own text (what she tried, read through the call) shows it
+# with EXPIRED, which is added here and never stored, so a query can only ever match what was asked.
+EXPIRED_MOST = 3
+ASK_WORD_FREQ = 10000      # a query word matches when it is this rare or rarer in the segmenter's dictionary
+
+
+def expired(store, persona, query, scene_id=None):
+    """The expired asks whose own text has a word of `query`, newest first, at most EXPIRED_MOST: those asked in
+    `scene_id`, or, with None (home), anywhere."""
+    from . import audit, key_words
+    from .people import People
+    from .records import episodes as episode_records
+    from .records import scenes as scene_records
+    query = str(query or '').strip()
+    words = [word for word in key_words.words(query)
+             if len(word) >= 2 and (word.isascii() or (key_words.frequency(word) or 0) < ASK_WORD_FREQ)]
+    if not words:
+        return []
+    rows = sorted((row for row in audit.events(store, 'guard.denied').rows(fields=['stream_id', 'occurred_at', 'payload'])
+                   if (row.get('payload') or {}).get('code') == 'asker_not_known'),
+                  key=lambda row: row.get('occurred_at') or '', reverse=True)
+    people, out = People(store, persona), []
+    for row in rows:
+        said = row.get('payload') or {}
+        if not said.get('call'):
+            continue                    # no reference to the call: nothing of the ask's own text to match
+        asked_in = said.get('asked_in') or (episode_records.get(store, row['stream_id'], fields=['scene_id'])
+                                            or {}).get('scene_id')
+        if scene_id is not None and asked_in != scene_id:
+            continue
+        tried = _tried(store, row['stream_id'], said)
+        text = ' '.join(str(value) for key, value in tried.items() if key != 'tool')
+        if not any(key_words.found(word, text) for word in words):
+            continue
+        out.append({'at': row.get('occurred_at'),
+                    **({'where': people.scene_title(scene_records.get(store, asked_in))}
+                       if scene_id is None and asked_in else {}),
+                    **_asked_by(store, people, asked_in, said.get('asker_id')),
+                    'tried': tried, 'status': EXPIRED})
+        if len(out) == EXPIRED_MOST:
+            break
+    return out
 
 
 def _tried(store, stream, said):

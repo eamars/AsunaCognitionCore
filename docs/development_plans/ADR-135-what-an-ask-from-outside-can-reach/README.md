@@ -418,6 +418,7 @@ accepts it. Addresses on the local network stay refused, as today. A place's han
 - One home-only ability, read-only. No notice, count or reminder points her to it: she reads it when she wants (owner, 2026-11-24: the review runs in her own daily review, away from the attacker's pressure, so that she can learn from it).
 - Outside nothing changes: the two sentences of D8 carry no reason, and the review is never listed in an outside turn.
 - It reads the guard's and the classifier's audit rows. Each row keeps what the review shows: a reference to the call, task or note, or, when the judged text is stored nowhere else, the text itself.
+- A stranger's ask the program did not do is an expired ask: her review lists it with 「这件已经过期，你不用接着做了。」, and a recall that matches it shows it the same way, in the conversation it came from and at home, so that she meets an expired ask, never an unkept promise (owner, 2026-11-24).
 
 ## 5. What it does not cover
 

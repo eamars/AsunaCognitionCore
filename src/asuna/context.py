@@ -554,8 +554,8 @@ class ContextBuilder:
             held_back='另有 %d 条相关的没重复给：都在你眼前这段对话里%s。'%(len(in_view),'（最早是 %s 那条）'%earliest if earliest else '')
         coverage_block=None
         if retrieval_manifest.get('coverage')=='insufficient' and not (held_back and not memories):
-            coverage_block=('关于眼前这件事，你想不起相关的记忆；不要编，记不清就直说。' if not memories
-                            else '想起来的这些和眼前的事关系不大：只能当灵感，不能当事实说。')
+            coverage_block=('关于眼前这件事，没有想起相关的记忆。' if not memories
+                            else '想起来的这些和眼前的事关系不大。')
         return {'facts':facts,'memories':memories,'retrieval':retrieval_manifest,'brought_up':brought_up,
                 'would_surface':would_surface,'held_back':held_back,'coverage':coverage_block}
 

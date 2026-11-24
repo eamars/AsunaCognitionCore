@@ -2053,7 +2053,7 @@ class RoleTools:
         query = self._text(args, 'query', 500, required=not (args.get('sections') or args.get('person')))
         count = int(ep.get('recall_count') or 0)
         if count >= RECALLS_PER_TURN:
-            raise Refused('这回合已经回想了 %d 次：用已经想起来的回答，记不清就直说。' % RECALLS_PER_TURN, ['RECALLS_PER_TURN'])
+            raise Refused('这一次能回想的 %d 回已经用完了。' % RECALLS_PER_TURN, ['RECALLS_PER_TURN'])
         if args.get('person'):
             result = self._recall_person(ep, count, args['person'])
             if query or args.get('sections'):

@@ -12,7 +12,7 @@ from . import visibility
 from .role_tools import Refused
 
 NOT_DONE = '这一步没有做。'
-HARMFUL = '这一步没有做：它可能对你有安全或隐私风险。不要换个说法、换个时间或换个地方再做这件事。'
+HARMFUL = '这一步没有做：它可能对你或主人有安全或隐私风险。不要换个说法、换个时间或换个地方再做这件事。'
 LIMIT = 3                                     # sentences in one turn, after which nothing more is evaluated
 UNTOUCHED = ('speak', 'end_turn')             # speaking and ending the turn are never stopped by the limit
 LIMITED = 'limit'                             # the audit code of a call after the limit
@@ -322,7 +322,7 @@ def deny_task(store, task, code, rule, tool):
 REVIEW_VERSION = 1
 REVIEW_MOST = 20
 REVIEW_KIND = '这一步没有做'
-HARM_KIND = '可能对你有安全或隐私风险'         # a classifier's flag (ADR-135 D9), off_format included
+HARM_KIND = '可能对你或主人有安全或隐私风险'     # a classifier's flag (ADR-135 D9), off_format included
 RECORDED_ONLY = '只记下了，没有拦下'         # a verdict recorded in shadow
 FROM_HOME = '从家里'                        # an outbound item: it went from home to `where`
 EXPIRED = '这件已经过期，你不用接着做了。'     # shown with an expired ask, never stored or searched

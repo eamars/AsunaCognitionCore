@@ -292,7 +292,7 @@ whether a call is allowed. Beside it, D9's classifier can stop work that the fun
 | Decided by | the tool's own checks | stored facts: the place, the asker, the grant | a verdict on one text |
 | Can she fix it by changing the call? | yes | no | no |
 | What happens | the call is refused | the call is refused | the work is stopped, even mid-run |
-| What comes back | exactly what is wrong, as today | **「这一步没有做。」** | **「这一步没有做：它可能对你有安全或隐私风险。不要换个说法、换个时间或换个地方再做这件事。」** |
+| What comes back | exactly what is wrong, as today | **「这一步没有做。」** | **「这一步没有做：它可能对你或主人有安全或隐私风险。不要换个说法、换个时间或换个地方再做这件事。」** |
 
 - **The guard runs first.** A call that is not allowed gets the plain sentence whatever else is wrong with it, and
   the classifier is never asked about it.
@@ -349,15 +349,16 @@ history, no tool output.
 **Two classifiers, one per direction.** Only one runs per text: inbound for what comes into home, outbound for what
 goes out of it. Same mechanism and lane, two fixed prefixes; each record names its direction.
 
-**What they judge: security and privacy actions, never her language.** The owner: "Harmful check is vague. I don't
-want you to check her language, but more precisely the cybersecurity, privacy etc." Inbound asks whether carrying out
-the text would give remote access to or control of this machine, its network or the owner's accounts; run someone
-else's code or commands; probe the machine (its hardware, system, addresses, host name, files, tools, settings);
-read or gather private data or stored credentials, or put one person's details together from several places; or
-change, switch off or bypass the program's checks, permissions, logs or records. Outbound asks whether sending it
-would give someone outside the machine's details, private data (a real name, an address, contact details, an
-account number, private chat, whereabouts, or one person's details put together), a credential, or a way in. Each
-says that tone, manners, opinions, topic, wording and language are not judged. The answer is one of two words:
+**What they judge: harm to her or her owner's security or privacy, never her language.** The owner: "Harmful check
+is vague. I don't want you to check her language, but more precisely the cybersecurity, privacy etc." And: listing
+cases "opened a box of worms, as you cannot enumerate all possible cases … The classifier will not include herself,
+but owner too. Any harm to herself AND/OR the owner should be classified." So each policy asks one question, whether
+carrying the text out (inbound), or sending it or acting on it outside (outbound), would harm the security or
+privacy of the character who wrote it or of the character's owner, and names categories only as examples
+(「比如（不限于）」): letting someone into or in control of this machine or their accounts, running someone else's
+code, probing for the machine's details, private data or credentials, changing the program's checks or records;
+outbound, letting someone outside learn the machine's details, private data or credentials, or a way in. Each says
+that tone, manners, opinions, topic, wording and language are not judged. The answer is one of two words:
 「有风险」 or 「无风险」. The classes are the owner's to word and to change; they live in two versioned texts in the
 core (`classify_inbound.md`, `classify_outbound.md`), with no persona words in them; the drafts are the lead agent's.
 
@@ -411,7 +412,7 @@ result are where something put together in words crosses into home or out of it.
 - It does not read her memory or her speech, and it does not read what she starts at home (§5).
 
 **Cost.** About 35 crossings a day: about 35 short requests, well under 1% of the context text her turns already
-send. Each verdict records its latency. The two policies, each request's fixed prefix, are 484 and 449 characters
+send. Each verdict records its latency. The two policies, each request's fixed prefix, are 232 and 296 characters
 (their budget lines in tests/test_tool_budget.py).
 
 ### D10. The carry: the place's grant is the boundary
@@ -432,7 +433,7 @@ accepts it. Addresses on the local network stay refused, as today. A place's han
 
 ### D12. Her review of what was refused, at home
 
-- At home she can read what was refused in her outside turns and outside tasks, by day or since a time: when; the place; what she tried (the tool or option, a task's title and brief, a note's text); which kind of "no" it was and its reason, in words from a versioned table; for the classifier, that it 「可能对你有安全或隐私风险」 and the text it judged. Verdicts recorded in shadow are included, marked as recorded only.
+- At home she can read what was refused in her outside turns and outside tasks, by day or since a time: when; the place; what she tried (the tool or option, a task's title and brief, a note's text); which kind of "no" it was and its reason, in words from a versioned table; for the classifier, that it 「可能对你或主人有安全或隐私风险」 and the text it judged. Verdicts recorded in shadow are included, marked as recorded only.
 - One home-only ability, read-only. No notice, count or reminder points her to it: she reads it when she wants (owner, 2026-11-24: the review runs in her own daily review, away from the attacker's pressure, so that she can learn from it).
 - Outside nothing changes: the two sentences of D8 carry no reason, and the review is never listed in an outside turn.
 - It reads the guard's and the classifier's audit rows. Each row keeps what the review shows: a reference to the call, task or note, or, when the judged text is stored nowhere else, the text itself.
@@ -497,7 +498,7 @@ and the audit events stay as the record of why.
 | D9 | The verdict arrives after steps have run | Those steps stand: a fetch made, a note already read at home. If the work has already finished there is nothing left to stop, no sentence is given, and the event says so. Each verdict records its latency and what had run. This is the trade for not making her wait. Outside hands are small, which bounds what a late stop leaves |
 | D9 | It cannot be reached | The work runs unchecked, as if the classifier were off. A busy model server means more unchecked work, and whoever can keep the server busy lowers the share that is checked. `unchecked` events are counted in the shadow stage and after |
 | D9 | The model answers off-format | Asked again with a repair note, up to twice; an answer still off-format counts as harmful (`off_format`), so breaking the judge buys an attacker nothing. A model that often answers off-format shows as `off_format` verdicts in the shadow stage and in §8.2 |
-| D9 | It flags her ordinary work | A note, an idea, an errand or a task's result is not delivered. She is told it may carry a security or privacy risk to her and told not to do it another way, so she cannot recover it herself. 273 notes home and 139 ideas a month come by these crossings. This is why it starts in shadow and why the live hand check decides |
+| D9 | It flags her ordinary work | A note, an idea, an errand or a task's result is not delivered. She is told it may carry a security or privacy risk to her or her owner and told not to do it another way, so she cannot recover it herself. 273 notes home and 139 ideas a month come by these crossings. This is why it starts in shadow and why the live hand check decides |
 | D9 | A stop arrives in the middle of a turn | The turn is stopped where it stands and its outcome is the classifier's sentence. What it had already said stays said |
 | D10 | A patient asker gets what the place's hands hold | That is the meaning of the boundary. A place's hands close by her own switch (D2, D3) |
 

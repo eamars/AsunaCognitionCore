@@ -261,7 +261,8 @@ for her to repeat; it says 你 and what she does. Applied:
 
 - In an outside turn, `for` (a note's or a task's) never names the owner. The owner's ask there is only the one the
   owner's own account made: the account that opened the turn, or his verified line (`owner_line`). A quote of his line,
-  a reply to it, or `for` naming him is not his word.
+  a reply to it, or `for` naming him is not his word. A call whose `for` names him gets D8's plain sentence, code
+  `for_owner`.
 
 - **N1.** The note row stores the writing turn's `whose` and a reference to that person's line. The home turn's
   note block shows whose ask it is, in the words tasks and plans use, with the line by reference. A note she wrote

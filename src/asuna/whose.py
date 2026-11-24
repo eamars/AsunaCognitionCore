@@ -259,6 +259,18 @@ def moved(task, made):
             and (made.get('errand') or made).get('scene_id') != task.get('scene_id'))
 
 
+def names_owner(store, ep, label):
+    """Whether `label` is the owner's, among the people of this turn (people_from_program)."""
+    from .people import People
+    from .scene_links import canonical_person_id
+    people = People(store, ep.get('persona'))
+    scene = _scene(store, ep['scene_id'])
+    owner = visibility.owner_id(store.config)
+    return any(people.speaker(scene, person_id) == label
+               and canonical_person_id(store.config, store, person_id) == owner
+               for person_id in ((ep.get('manifest') or {}).get('people_shown') or {}))
+
+
 def named_person(store, ep, label):
     """The person a group turn's `for` names: one whose line is in this turn (people_from_program), by label. In an
     outside turn never the owner: the owner's ask there is only the one the owner's own account made, never one that

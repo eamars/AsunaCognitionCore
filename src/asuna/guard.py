@@ -229,6 +229,14 @@ def asked_at(store, ep):
     return (row or {}).get('received_at') or (row or {}).get('occurred_at') or clock.now().isoformat()
 
 
+def _for_owner(store, ep, name, args):
+    """In an outside turn a task's or a note's `for` never names the owner: his ask there is only his own account's."""
+    if name not in ('delegate', 'note') or args.get('for') in (None, '') or not outside(store, ep):
+        return False
+    from . import whose as whose_of
+    return whose_of.names_owner(store, ep, str(args['for']).strip())
+
+
 def _asker_not_known(store, ep, name, args):
     """D1: in an outside turn her hands move for a task, a note or a plan only for the owner, for someone she wrote her
     understanding of on an earlier day than the ask, or for nobody's ask."""
@@ -264,6 +272,7 @@ RULES = (
     ('BLOCK_NO_SPEAKER', 'not_now', _block_no_speaker),
     ('IMAGE_PATH_HOME_ONLY', 'not_listed', _image_path),
     ('TASK_NOT_YOURS', 'not_granted', _others_task),
+    ('FOR_OWNER', 'for_owner', _for_owner),
     ('ASKER_NOT_KNOWN', 'asker_not_known', _asker_not_known),
     ('REFUSALS_HOME_ONLY', 'not_listed', _review_away),
 )
@@ -341,6 +350,7 @@ REVIEW_WORDS = {
     'outside_turn': '叫起那一次的是外面写来的便条，带的是外面的权限',
     'no_place': '那一次写的便条没有能送去的地方',
     'asker_not_known': EXPIRED,
+    'for_owner': '那一次写的是替主人办，主人没有在那边自己说',
     'not_granted': '这件事要的超出了它在那边得到的',
     LIMITED: '那一次已经被拒了三回，后面的都没有再看',
 }

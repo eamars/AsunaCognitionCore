@@ -145,6 +145,7 @@ Whose work a task is (ADR-111): who asked, and where.
 - def `words` — Whose it is, in her words (TASK or PLAN), with where the person stands when they can no longer be reached.
 - def `result_words` — `for` on a result item: whose it is, and where it was handed over when that is another conversation.
 - def `moved` — Whether a task runs on the Web chat for outside work she took on in another conversation (`made`: the turn that handed it over, whose task would otherwise run there, or at its errand's home): the one case, besides an errand's, of a task run
+- def `names_owner` — Whether `label` is the owner's, among the people of this turn (people_from_program).
 - def `named_person` — The person a group turn's `for` names: one whose line is in this turn (people_from_program), by label.
 - def `named_outside` — The outside conversation a home turn's `for` names: a group or a DM from her note places that is not a home one (a home group is listed among the outside places, `places.errand_targets`).
 - def `line_in_turn` — A person's line in this group turn, the input of a task she names for them: their first line to her waiting behind the one that opened it, as `people_from_program` found them (understanding.group_people); never one that came after.

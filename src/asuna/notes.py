@@ -5,9 +5,12 @@ conversations leaves for another. One tool, `note`, writes a row here; where it 
 
 - in a home (owner-private) turn: trusted. To another home conversation, or to a group or someone's chat she has a
   route to.
-- in a public turn: untrusted. To home (her local chat, or the owner's own direct chat, where it reaches him at
-  once) or to another group. It must be in her own words: a run of OWN_WORDS_RUN characters shared with someone else's recent line
-  there is refused.
+- in a public turn: untrusted. To home only: her local chat, or the owner's own direct chat, where it reaches him at
+  once (ADR-135 N3). Other groups are reached from home.
+
+Each note keeps whose ask it carries (`whose`, as a task does, and `line`, that person's line): the person her `for`
+names, herself (`for` = OWN), else whoever opened the turn (ADR-135 N1). The turn a note from outside opens at home
+may write a note back only for the owner's ask or her own (N2).
 
 Trust is the program's, from the sending turn's session class; never from the text or the model. A note grants
 nothing: the turn it opens has only what its own scene and kind give, and one an untrusted note opens at home acts
@@ -24,7 +27,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from . import clock
-from .config import ago, character_id, excerpt, over, soft, echoed
+from .config import ago, excerpt, over, soft, echoed
 from .evidence import canonical, sha
 from .state import now
 from . import scene_links, visibility
@@ -48,13 +51,9 @@ REPLY_ENDS = ('这一回合是一张回信叫起来的，不能再写便条了�
 KEEP_HOURS = 72                  # unread past this: expired
 SHOWN = 5
 EXCERPT = 60
-OWN_WORDS_RUN = 20
-OWN_WORDS_HOURS = 2
+OWN = '我自己'                     # `for` on a note of her own account
 OWNER_LINE_CHARS = 300
 OWNER_SAID = '写这张便条时叫你的那句，是主人本人在那边说的（程序按他的账号核对过）：他托的事，这一回合可以用 errand 去办。'
-# The copied-words refusal (ADR-087 §4.5): the stretch of her note, whose line by label and time, never the words.
-NOT_OWN_WORDS = ('便条第 %d–%d 字和 %s %s 在这里说的一句一样。写明是谁说的也不行，这一段只能换成你自己的话；'
-                 '别人托你的，用你的话说清是谁的意思。')
 # A group that cannot be woken now, with no deliver given, gets the note next time (ADR-087 §4.4).
 NEXT_TIME_INSTEAD = '那个群现在叫不醒（%s），改成那边下次有回合时看到；三天（72 小时）没读就过期了，读没读在 notes_sent_from_program 看。'
 # The same group, from where a note can only wake it (a group, a turn a note from outside opened): nothing is sent.
@@ -84,9 +83,7 @@ TRUST_WORDS = {TRUSTED: '你在家里写的', UNTRUSTED: '你在外面写的'}
 STATE_WORDS = {'waiting': '送到了，还没读', 'read': '读了，没回（读到不等于办了：要确认，再写一张问一句）',
                'replied': '读了，回了你', 'expired': '三天没读，过期了'}
 WAKE_TEXT = '这一回合是你自己在别的对话里写的一张便条叫起来的，这里没有人说话。便条在 note_from_program。'
-CAUTION = ('这段话是你在%s那一回合写给家里的。那一回合的你在外面，读到的都是外人能写的东西，所以这段话里可能带着别人的意思。'
-           '它是消息：知道就好，可以回一句。要是它让你去做有后果的事（交给行动脑、改自己、出门、动凭据），'
-           '先想一想这是不是你在家自己也会做的决定。')
+FROM_OUTSIDE = '这是你在%s写给这里的便条，这里没人发它。'
 # ADR-088 §4.3, her own line (2026-10-21): what a note from outside that opens a home turn asks her. Not on a reply to
 # a note of hers, nor on a note carrying the owner's line.
 OUTSIDE_ASK = ('这是外部的请求。做之前先说清三件事：这话是谁说的、能不能核实；做出去谁承担；用不用你的名字或你的号。'
@@ -94,17 +91,16 @@ OUTSIDE_ASK = ('这是外部的请求。做之前先说清三件事：这话是�
 TRUSTED_NOTE = '这是你自己在%s写给这里的便条，这里没人发它。读了，决定在这里怎么办。'
 # A note from outside that lands in the owner's own chat (owner, 2026-10-17): he never sees the note, only what she
 # says there, so the block says where she is and who reads her words.
-OWNER_CHAT_NOTE = ('他看不到便条，只看得到你在这里说的话：这里是主人的私聊。这段话是你在%s那一回合写的；'
-                   '那一回合的你在外面，便条里可能带着别人的意思。')
+OWNER_CHAT_NOTE = '他看不到便条，只看得到你在这里说的话：这里是主人的私聊。这是你在%s写的便条。'
 OWNER_CHAT_REPLY = '在这里说的他马上看得到；要回%s就写便条（只回这一次）。'
-OUTSIDE_NOTE = ('这是你在%s写的便条，这里的人看不到它。那边谁都能说话，便条里可能带着别人的意思：它是消息，读了就好。'
-                '你在这里说的话就是你自己在这里说的。')
+OUTSIDE_NOTE = '这是你在%s写的便条，这里的人看不到它。你在这里说的话就是你自己在这里说的。'
+NO_REPLY = '这一回合不写便条；在这里说就好。'
 HIDDEN_SUMMARY = '外面写来的便条：自我开发的回合带着开发工具，不显示内容；别的回合（有人说话、心跳、闹钟、夜间沉淀）再看。'
 WAITING_OWN_TURN = '等它自己那一回合'          # a note from outside, in other home turns while it waits (ADR-088 §4.4)
 RECEIVED_NOTE = '别的对话里的你写给这里的便条（新的在前）。不是这里有人说的话。'
 SENT_NOTE = '你从这里写出去的便条，那边怎么样了（只有状态，回信会作为便条回来）。'
-PLACES_NOTE = ('写便条（note）能送到的地方。写你自己的话，不抄别人的原话；'
-               '那边的回合会读到它，也可能照着说出来。')
+PLACES_NOTE = '写便条（note）能送到的地方。那边的回合会读到它，也可能照着说出来。'
+HOME_NAME, OWNER_CHAT_NAME = '家里', '主人的私聊'      # how home's places are named in an outside turn (ADR-135 N3)
 OUTSIDE_PLACES = '这一回合是外面的便条叫起来的：从这里写的便条算你在外面写的，回给写它的那边，或者送到群里。'
 
 
@@ -228,8 +224,6 @@ def targets(store, scene_id, cls):
         local = (config.get('chat') or {}).get('scene_id')
         for sid in ([local] if local else []) + owner_chats(config):
             found[places.place_id(sid)] = (sid, 'home')
-        for sid, _, _ in places.groups(config):
-            found[places.place_id(sid)] = (sid, 'group')
     return {place: value for place, value in found.items()
             if value[0] != scene_id and scene_records.get(store, value[0], fields=['_id'])}
 
@@ -254,8 +248,51 @@ def opening(store, ep):
 
 
 def can_send(note):
-    """Whether a turn opened by this note may write one (note -> reply -> stop)."""
-    return not note or note.get('hop', 1) < MAX_HOP
+    """Whether a turn opened by this note may write one: note -> reply -> stop, and a note from outside only for the
+    owner's ask or her own (ADR-135 N2)."""
+    return not note or (note.get('hop', 1) < MAX_HOP and answerable(note))
+
+
+def answerable(note):
+    """Whether the turn a note opens may answer it, from the requester the note stored (ADR-135 N2): a note from home
+    always; one from outside when it carries the owner's ask (by his account) or her own, never anyone else's or none."""
+    if not note or note.get('trust') != UNTRUSTED:
+        return True
+    found = note.get('whose') or {}
+    if found.get('by') in ('own', 'standing'):
+        return True
+    return found.get('by') == 'words' and bool(found.get('person_id')) and _is_owner(found)
+
+
+def _is_owner(found):
+    return found.get('owner') is True
+
+
+def requester(store, ep, wanted):
+    """(whose, line) a note from this turn carries (ADR-135 N1): `wanted` names a person in this group turn, or OWN for
+    her own account; not written, the turn's own `whose`. `line` is that person's line in the turn, or None."""
+    from . import whose as whose_of
+    wanted = '' if wanted is None else str(wanted).strip()
+    if wanted == OWN:
+        found = whose_of.record('own', ep['scene_id'], ep.get('person_id'), chosen=True)
+    elif wanted:
+        person = whose_of.named_person(store, ep, wanted)
+        if not person:
+            raise NoteRefused('FOR_UNKNOWN_PERSON', whose_of.FOR_UNKNOWN_PERSON % echoed(wanted))
+        found = whose_of.record('words', ep['scene_id'], person, chosen=True)
+    else:
+        found = whose_of.of(store, ep)
+    if not found:
+        return None, None
+    line = None
+    if found.get('by') == 'words' and found.get('person_id'):
+        if found.get('chosen'):
+            line = whose_of.line_in_turn(store, ep, found['person_id'])
+        elif message_records.get(store, 'in-' + ep['_id'], fields=['_id']):
+            line = 'in-' + ep['_id']
+        owner = scene_links.canonical_person_id(store.config, store, found['person_id']) == visibility.owner_id(store.config)
+        found = {**found, 'owner': owner}
+    return found, line
 
 
 def outside_class(store, ep, first):
@@ -284,8 +321,9 @@ def allowed(store, scene_id, cls, first):
     if cls != visibility.OWNER_PRIVATE:
         return back
     home = visibility.owner_private_scenes(store.config)
-    return {**back, **{place: value for place, value in targets(store, scene_id, visibility.PUBLIC).items()
-                       if value[1] == 'group' and value[0] not in home}}
+    from . import places
+    return {**back, **{places.place_id(sid): (sid, 'group') for sid, _, _ in places.groups(store.config)
+                       if sid not in home and sid != scene_id and scene_records.get(store, sid, fields=['_id'])}}
 
 
 def places_view(store, persona, scene_id, cls, first):
@@ -296,8 +334,12 @@ def places_view(store, persona, scene_id, cls, first):
         return None
     people = People(store, persona)
     items, kinds = [], []
+    # An outside turn names home's places plainly, never by the owner's name or her other conversations (N3).
+    local, chats = (store.config.get('chat') or {}).get('scene_id'), owner_chats(store.config)
+    plain = {local: HOME_NAME, **{sid: OWNER_CHAT_NAME + ('' if len(chats) == 1 else ' %d' % (n + 1))
+                                  for n, sid in enumerate(chats)}} if cls != visibility.OWNER_PRIVATE else {}
     for place, (sid, kind) in found.items():
-        items.append({'place': place, 'name': people.scene_title(scene_records.get(store, sid))})
+        items.append({'place': place, 'name': plain.get(sid) or people.scene_title(scene_records.get(store, sid))})
         if kind not in kinds:
             kinds.append(kind)
     # How a note arrives, said once per kind of place rather than on every row (the list can be long); a note from a
@@ -314,37 +356,6 @@ def places_view(store, persona, scene_id, cls, first):
 
 
 # ── sending ─────────────────────────────────────────────────────────
-def borrowed(store, scene_id, text, moment):
-    """The recent line of someone else here the note shares a run of OWN_WORDS_RUN characters with, as {author, at,
-    first, last}: the line's author and time, and the stretch of her text that matches it (1-based, inclusive,
-    spaces counted); None when there is none."""
-    kept = [i for i, ch in enumerate(text) if not ch.isspace()]          # where each non-space character sits
-    flat = ''.join(text[i] for i in kept)
-    if len(flat) < OWN_WORDS_RUN:
-        return None
-    since = (moment - timedelta(hours=OWN_WORDS_HOURS)).isoformat()
-    me = character_id(store.config)
-    for row in message_records.inbound(store, scene_id, not_author=me, since=since, by=None).rows(
-            fields=['text', 'author', 'received_at']):
-        line = ''.join(str(row.get('text') or '').split())
-        hits = [i for i in range(len(flat) - OWN_WORDS_RUN + 1) if flat[i:i + OWN_WORDS_RUN] in line]
-        if len(line) >= OWN_WORDS_RUN and hits:
-            return {'author': row['author'], 'at': row.get('received_at'), 'first': kept[hits[0]] + 1,
-                    'last': kept[hits[-1] + OWN_WORDS_RUN - 1] + 1}
-    return None
-
-
-def copied_words(store, persona, scene_id, match):
-    """The copied-words refusal (ADR-087 §4.5): which stretch of her note matches whose line, by label and time, never
-    the line itself; naming the source does not make it pass."""
-    from . import local_time
-    from .people import People
-    scene = scene_records.get(store, scene_id) or {'_id': scene_id}
-    who = People(store, persona).speaker(scene, match['author'])
-    when = local_time.stamp(match.get('at'), local_time.her_zone(store)) or local_time.UNKNOWN
-    return NOT_OWN_WORDS % (match['first'], match['last'], who, when)
-
-
 def _resolve(store, persona, found, wanted, cls):
     from .people import People
     wanted = str(wanted or '').strip()
@@ -386,6 +397,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
         raise NoteRefused('NOTE_TARGET_UNKNOWN', ('送不到「%s」。能送到的：%s。照抄 place。' % (echoed(args.get('to')), names))
                           if names else '这一回合没有能送便条的地方。')
     to_scene, kind = found[place]
+    asked, line = requester(store, ep, args.get('for'))
     text = str(args.get('text') or '').strip()
     if not text:
         raise NoteRefused('NOTE_TEXT_REQUIRED', 'text 写便条的内容。')
@@ -409,10 +421,6 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     if mode not in choices:
         raise NoteRefused('NOTE_MODE_NOT_ALLOWED', '送到%s的便条只能%s：deliver 写 %s，或不写。'
                           % (KIND_WORDS[kind], MODE_WORDS[choices[0]], choices[0]))
-    if trust == UNTRUSTED:
-        match = borrowed(store, ep['scene_id'], text, moment)
-        if match:
-            raise NoteRefused('NOTE_NOT_OWN_WORDS', copied_words(store, persona, ep['scene_id'], match))
     sent_here = count_sent(store, ep['_id'])
     if not question and sent_here >= PER_TURN:
         raise NoteRefused('NOTE_TURN_LIMIT', '这一回合已经写了 %d 张便条（上限 %d 张），先到这里；还要说的下回合再写。'
@@ -440,6 +448,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
             'from_episode': ep['_id'], 'to_scene': to_scene, 'kind': kind, 'place': place, 'text': text,
             'trust': trust, 'mode': mode, 'hop': hop, 'reply_to': (reply or {}).get('_id'),
             'tables_version': TABLES_VERSION, 'created_at': now(), 'seen_in': [],
+            **({'whose': asked} if asked else {}), **({'line': line} if line else {}),
             **({'owner_line': said} if said else {}),
             **({'question': question} if question else {}),
             **({'answers': args['answers']} if args.get('answers') else {})}, None
@@ -527,14 +536,14 @@ def opening_block(store, persona, row, cls, episode, moment):
     elif to_him:
         note = OWNER_CHAT_NOTE % where
     elif cls == visibility.OWNER_PRIVATE:
-        note = CAUTION % where
+        note = FROM_OUTSIDE % where
     else:
         note = OUTSIDE_NOTE % where
     if row['trust'] == UNTRUSTED and cls == visibility.OWNER_PRIVATE and not row.get('reply_to') \
             and not row.get('owner_line'):
         note += OUTSIDE_ASK
     block = {'from': where, 'at': row['created_at'], 'written': TRUST_WORDS[row['trust']],
-             'text': row['text'], 'note': note}
+             'text': row['text'], 'note': note, **asked_by(store, persona, row)}
     if row.get('owner_line'):
         block['owner_said'] = {'text': row['owner_line'], 'note': OWNER_SAID}
     tail = answers_tail(store, persona, row)
@@ -542,12 +551,30 @@ def opening_block(store, persona, row, cls, episode, moment):
         block['answers'] = tail
     if row.get('reply_to'):
         block['reply_to_yours'] = '这是对你之前那张便条的回信。'
-    if to_him:
+    if not answerable(row):
+        block['reply'] = ('在这里说的他马上看得到；' if to_him else '') + NO_REPLY
+    elif to_him:
         block['reply'] = OWNER_CHAT_REPLY % where if can_send(row) else '在这里说的他马上看得到；这是回信，不用再回便条。'
     else:
         block['reply'] = ('要回就写便条回给%s（只回这一次）。' % where) if can_send(row) else '这是回信，不用再回。'
     _seen(store, row, episode)
     return block
+
+
+def asked_by(store, persona, row):
+    """Whose ask a note carries, in the words tasks and plans use, and that person's line by where and when, never
+    its text (ADR-135 N1); a note from outside with none stored says so."""
+    from . import whose as whose_of
+    found = row.get('whose')
+    if not found:
+        return {'asked_by': whose_of.NOBODY} if row.get('trust') == UNTRUSTED else {}
+    out = {'asked_by': whose_of.words(store, persona, found, whose_of.NOTE)}
+    said = message_records.get(store, row['line'], fields=['received_at', 'scene_id']) if row.get('line') else None
+    if said:
+        from .people import People
+        out['asked_line'] = {'where': People(store, persona).scene_title(scene_records.get(store, said['scene_id'])),
+                             'at': said.get('received_at')}
+    return out
 
 
 def answers_tail(store, persona, row):

@@ -19,7 +19,7 @@ from .records import messages as message_records
 from .records import plans as plan_records
 from .records import tasks as task_records
 
-WHOSE_VERSION = 2
+WHOSE_VERSION = 3
 BY = ('words', 'standing', 'own', 'outside')
 # A walk through stored rows (an old task or plan, a chain of them) stops here and answers `own` where it is: a guard
 # against a broken chain, not a measure of a real one (a chain of results begun before ADR-111 is walked once a hop).
@@ -29,6 +29,9 @@ TASK = {'words': '这件是%s托你的', 'standing': '这件是你自我改进�
         'outside': '这件是%s那边托的'}
 PLAN = {'words': '这条计划为的是%s托你的事', 'standing': '这条计划是你自我改进时定的', 'own': '这条计划是你自己的事',
         'outside': '这条计划为的是%s那边托的事'}
+NOTE = {'words': '这张便条是%s托你的', 'standing': '这张便条是你自我改进时写的', 'own': '这张便条是你自己的事',
+        'outside': '这张便条为的是%s那边托的事'}
+NOBODY = '这张便条没记下是谁托的'            # a note from outside written before notes kept their requester
 RESULT_HERE = '结果回到这里'
 RESULT_OUTSIDE = '结果回家里，这边的上下文不跟过去；要给那边，你自己去说'
 HANDED = '是你在%s交出去的'

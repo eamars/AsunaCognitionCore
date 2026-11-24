@@ -1,17 +1,14 @@
 """ADR-087 step 4 (§4.4, §4.5), on the fixture world in memory: a note from home to a group that cannot be woken now
 waits for its next turn there unless she chose `deliver`, and one from a group is refused; a one-shot plan moved in the turn it fired stays fired and
-a new plan takes the timing; a note from outside that copies someone's recent line is refused with where the copy is
-and whose line it is, never the line; a refusal naming a wrong reference lists the usable ones. dm-a is home (the
+a new plan takes the timing; a refusal naming a wrong reference lists the usable ones. dm-a is home (the
 owner A's chat); g1 is a group with A and B, g2 one with A and C. The native scheduler is a recording stand-in (test_plan_zone_service)."""
 from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
 
-from asuna import clock, local_time, notes, places, role_tools, switches, visibility
-from asuna.people import People
+from asuna import clock, notes, places, role_tools, switches, visibility
 from asuna.records import plans as plan_records
-from asuna.records import scenes as scene_records
 from asuna.role_tools import Refused, RoleTools
 from asuna.schedule import PRESENCE_PLAN, ScheduleService
 from test_plan_zone_service import NativeStandIn
@@ -116,23 +113,6 @@ def test_a_note_to_a_group_whose_day_is_used_up_goes_next_time_and_a_free_group_
     assert notes.get(her.store, sent['note'])['mode'] == notes.NEXT_TIME and len(her.service.controller.offers) == 1
 
 
-def test_a_note_from_another_group_never_wakes_a_muted_group_and_is_refused_saying_a_plan_can_take_it(her):
-    presence_plan(her)
-    ep_id = turn(her, ['note'], scene='g2', person='C', cls=visibility.PUBLIC)
-    mute = switches.set_switch(her.store, {'_id': ep_id, 'persona': PERSONA, 'scope_key': 'scene:g2'}, 'mute',
-                               label='一群', scene_id='g1')
-    why = places.eligibility(her.store, {'_id': 'g1'}, {}, {'per_day': 9}, clock.now(), None)[1]
-    no = refused(her, ep_id, 'note', {'to': G1, 'text': '二群这边说周末去爬山，一群要不要一起？'})
-    assert no.codes[0] == 'NOTE_VISIT_NOT_NOW' and why in str(no)
-    assert 'plan' in str(no) and 'next_time' not in str(no), 'from a group she cannot choose next_time'
-    assert her.service.controller.offers == [] and notes.count_sent(her.store, ep_id) == 0
-    # Not muted, the same note wakes it as before, and a note from outside is not counted as one of her visits.
-    switches.clear(her.store, {'_id': ep_id, 'persona': PERSONA, 'scope_key': 'scene:g2'}, mute['_id'])
-    woken = call(her, ep_id, 'note', {'to': G1, 'text': '二群这边说周末去爬山，一群要不要一起？'}, 1)
-    assert woken['arrives'] == notes.MODE_WORDS[notes.WAKE] and [o[2] for o in her.service.controller.offers] == ['g1']
-    assert plan_records.get(her.store, PRESENCE_PLAN)['visits'] == []
-
-
 # ── 2. a one-shot plan moved in the turn it fired ───────────────────
 def fired_turn(her, plan_id='plan-fired', intent='提醒主人喝水'):
     her.store.put('plans', {'_id': plan_id, 'scene_id': 'dm-a', 'person_id': 'A', 'scope_key': 'scene:dm-a',
@@ -160,29 +140,6 @@ def test_a_plan_moved_in_the_turn_it_fired_stays_fired_and_a_new_one_takes_the_t
     assert plan_records.get(her.store, worded['plan_id'])['intent'] == '提醒主人起来走走'
     assert worded['plan_id'] not in (new, 'plan-fired') and worded['note'] == role_tools.PLAN_MOVED_FIRED % (
         'plan-fired', worded['plan_id'])
-
-
-# ── 3. a note in someone else's words ───────────────────────────────
-def test_a_note_that_copies_someones_recent_line_is_refused_with_where_and_whose_never_the_line(her):
-    line = '明天下午三点的群聚取消了大家都知道了别再问'
-    her.store.put('messages', {'_id': 'in-line-b', 'scene_id': 'g1', 'direction': 'inbound', 'author': 'B',
-                               'policy_epoch': 1, 'scene_seq': 1, 'text': line,
-                               'received_at': clock.now().isoformat()})
-    ep_id = turn(her, ['note'], scene='g1', person='B', cls=visibility.PUBLIC)
-    label = People(her.store, PERSONA).speaker(scene_records.get(her.store, 'g1'), 'B')
-    draft = '%s说：%s' % (label, line)                     # naming the source does not make it hers
-    no = refused(her, ep_id, 'note', {'to': '家里', 'text': draft})
-    assert no.codes[0] == 'NOTE_NOT_OWN_WORDS'
-    words = str(no)
-    first, last = draft.index(line) + 1, len(draft)
-    assert '便条第 %d–%d 字' % (first, last) in words
-    assert '写明是谁说的也不行' in words and line[:notes.OWN_WORDS_RUN] not in words
-    at = local_time.stamp(her.store.collection('messages').get('in-line-b')['received_at'], local_time.her_zone(her.store))
-    assert '字和 %s %s 在这里说的一句一样' % (label, at) in words, 'whose line, by label and time'
-    assert notes.count_sent(her.store, ep_id) == 0
-
-    own = call(her, ep_id, 'note', {'to': '家里', 'text': '群里 B 说明天的聚会不办了，他想让家里知道。'}, 1)
-    assert notes.get(her.store, own['note'])['trust'] == notes.UNTRUSTED
 
 
 # ── 4. a wrong reference lists the usable ones ──────────────────────

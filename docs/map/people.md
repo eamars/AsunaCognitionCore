@@ -370,12 +370,12 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - def `owner_chats` — The owner's own direct chats: home, but never the local chat, a peer line or an agent line.
 - def `opening_for` — The note an input carries (a home note turn, or a visit a note opened), or None.
 - def `opening` — The note that opened this turn, or None.
-- def `can_send` — Whether a turn opened by this note may write one (note -> reply -> stop).
+- def `can_send` — Whether a turn opened by this note may write one: note -> reply -> stop, and a note from outside only for the owner's ask or her own (ADR-135 N2).
+- def `answerable` — Whether the turn a note opens may answer it, from the requester the note stored (ADR-135 N2): a note from home always; one from outside when it carries the owner's ask (by his account) or her own, never anyone else's or none.
+- def `requester` — (whose, line) a note from this turn carries (ADR-135 N1): `wanted` names a person in this group turn, or OWN for her own account; not written, the turn's own `whose`.
 - def `outside_class` — The class a home turn acts with when a note from outside opened it (ADR-088 §4.2): that of the place the note came from, never home's; None for any other turn.
 - def `allowed` — Where this turn may write, `cls` being its conversation's class: anywhere it reaches; when an untrusted note opened it, back to where the note came from, and at home also on to a group, never to another home conversation (ADR-088 §4.2).
 - def `places_view` — note_places_from_program: where a note from here can go, by name, with what happens there by default.
-- def `borrowed` — The recent line of someone else here the note shares a run of OWN_WORDS_RUN characters with, as {author, at, first, last}: the line's author and time, and the stretch of her text that matches it (1-based, inclusive, spaces counted); None wh
-- def `copied_words` — The copied-words refusal (ADR-087 §4.5): which stretch of her note matches whose line, by label and time, never the line itself; naming the source does not make it pass.
 - def `prepare` — Validate one note from this turn: (draft, None), or (None, the row already sent by this call).
 - def `owner_line` — The owner's own words that woke this turn outside (his platform account, mapped to him by configuration), or None.
 - def `record`
@@ -385,6 +385,7 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - def `read_elsewhere` — Whether the note that would open this turn was already shown in a finished turn there (ADR-091 D1): it is answered, and a turn of its own would answer it twice.
 - def `waited` — How long a note still waiting has waited, said with its state (her ask, ADR-088 §4.4): waiting a long while must not read as still due; past KEEP_HOURS it is expired.
 - def `opening_block` — note_from_program: the note that opened this turn, its source named, never a line of this conversation.
+- def `asked_by` — Whose ask a note carries, in the words tasks and plans use, and that person's line by where and when, never its text (ADR-135 N1); a note from outside with none stored says so.
 - def `answers_tail` — A note that brings a group's answer home (ADR-061 step 2): the program's line on who answered and where the original is; None for any other note.
 - def `received_block` — notes_from_program: notes to this conversation lately.
 - def `sent_block` — notes_sent_from_program: what came of the notes she wrote here, in program words only.

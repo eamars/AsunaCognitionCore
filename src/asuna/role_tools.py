@@ -98,6 +98,8 @@ OUTSIDE_GONE = '叫起这一回合的便条（或写它的那一回合）找不�
 STEERING = ('task.message', 'task.stop')
 # Why think comes first, said where it is refused (her count, 2026-10-20: 153 refusals that gave no reason).
 THINK_FIRST = '先用 think 写下这回合的心里话，再做别的：它是你这一回合每一步的理由，存了档，之后回想得起来为什么这么做。'
+# Whose ask a note carries (ADR-135 N1): a person in this turn, herself (notes.OWN), or not written: the turn's.
+NOTE_FOR = '谁托的：这回合别人的标签或「我自己」；不写是叫你的那位'
 
 
 def thinking_mode(config):
@@ -444,15 +446,15 @@ TOOLS = {
     },
     'note': {
         'description': ('给别的对话里的你写一张便条：to 照抄 note_places_from_program 里的 place（在外面也可写「家里」）。'
-                         '那边的你会读到，那边的人看不到，但可能被照着说，所以只写愿意在那边说的；用你自己的话：'
-                         '和这里别人刚说的一长段一样的，写明是谁说的也送不出去；别人托的，用你的话说清是谁的意思。'
+                         '那边的你会读到，那边的人看不到，但可能被照着说，所以只写愿意在那边说的。'
                          'deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
                          '不写按那边的默认（回给群的回信默认 next_time）。叫醒一个群算一次出门。家里送家里 %d 字以内，过了 %d 字不收；别的 %d 字以内，过了 %d 字不收；一回合最多两张。'
                          % (soft(_notes.HOME_NOTE_CHARS), _notes.HOME_NOTE_CHARS, soft(_notes.NOTE_CHARS), _notes.NOTE_CHARS)),
         'parameters': {'to': _s('送到哪儿：note_places_from_program 里的 place，或「家里」', required=True),
-                       'text': _s('便条，你自己的话', required=True),
+                       'text': _s('便条', required=True),
                        'mode': _s('wake 或 next_time，可省略', enum=['wake', 'next_time']),
-                       'question': _s('在群里：回答的是哪个问题，照抄 q-…（程序在家里写上谁答的、原话在哪）')},
+                       'question': _s('在群里：回答的是哪个问题，照抄 q-…（程序在家里写上谁答的、原话在哪）'),
+                       'for': _s(NOTE_FOR)},
     },
     'restart': {
         'description': ('重启宿主（只在家里）。preview 先看会打断什么；request 交给监工重启，why 写原因，when 选 now、quiet（默认：'
@@ -797,7 +799,8 @@ def placed_spec(spec, cls, scene_kind, listed):
     from . import notes
     if spec['name'] == 'note':
         chooses = any(len(allowed) > 1 for _, allowed in notes.MODES.get(cls, {}).values())
-        left = [name for name, kept in (('deliver', chooses), ('question', scene_kind == 'group')) if not kept]
+        left = [name for name, kept in (('deliver', chooses), ('question', scene_kind == 'group'),
+                                        ('for', cls != visibility.OWNER_PRIVATE)) if not kept]
         if not left:
             return spec
         return {**spec, 'description': _without(spec['description'], *([NOTE_DELIVER] if 'deliver' in left else [])),

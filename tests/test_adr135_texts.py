@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from asuna import block_guide, guard, role_tools, visibility
+from asuna import understanding as _understanding
 from test_adr135_guard import denied, her, turn  # noqa: F401  (her: a fixture)
 
 TEXTS = Path(__file__).resolve().parents[1] / 'docs/development_plans/ADR-135-what-an-ask-from-outside-can-reach/tool-texts.md'
@@ -53,7 +54,9 @@ def test_T2_no_tool_text_names_a_part_of_her_a_block_a_turn_or_a_gender(her):
     for scene_id, person_id in (('g1', 'B'), ('dm-a', 'A')):
         for name, spec in shown(her.store, scene_id, person_id).items():
             for text in words(spec):
-                text = text.replace(role_tools.LOCAL_SPEAK, '')      # her own words for the local chat, left as hers
+                # her own words, left as hers: the local chat's speak, and her three questions (AGENTS.md: her writing
+                # names things as she likes)
+                text = text.replace(role_tools.LOCAL_SPEAK, '').replace(_understanding.ASK, '')
                 for what, pattern in FORBIDDEN.items():
                     found += ['%s %s: %s in %r' % (scene_id, name, what, match.group()) for match in pattern.finditer(text)]
     assert found == []

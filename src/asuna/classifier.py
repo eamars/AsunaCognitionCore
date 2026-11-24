@@ -15,9 +15,10 @@ as not switched on (`unchecked`).
 It runs alongside her work, never before it: the work is already done or under way when the verdict comes. The
 deployment setting `classifier` is `off` (the default: nothing is asked), `shadow` (asked and recorded, nothing
 stopped) or `stop`: a flagged crossing is held where it stands (`stop`), unless the owner asked for it. A held
-crossing is not delivered, its turn does not start, or, when its turn is already running, her hands there get the
-classifier's sentence (`held`, read at the turn's start and at the guard's door); her speech is never stopped. A
-verdict that comes after the work is done stops nothing (`too_late`).
+crossing is not delivered, its turn does not start, or, when its turn is already running, the turn ends at her next
+call: that call, `speak` included, gets the classifier's sentence (`held`, read at the turn's start and at the start
+of each of her calls); what she had said before stays said. A verdict that comes after the work is done stops
+nothing (`too_late`).
 
 Records, each on the stream of the turn or task the text belongs to: `classifier.asked` when a request starts,
 `classifier.verdict` when it is answered, `classifier.unchecked` when it could not be; at the worker's start an asked

@@ -12,7 +12,7 @@ from . import visibility
 from .role_tools import Refused
 
 NOT_DONE = '这一步没有做。'
-HARMFUL = '这一步没有做：它可能造成伤害。不要换个说法、换个时间或换个地方再做这件事。'
+HARMFUL = '这一步没有做：它可能对你有安全或隐私风险。不要换个说法、换个时间或换个地方再做这件事。'
 LIMIT = 3                                     # sentences in one turn, after which nothing more is evaluated
 UNTOUCHED = ('speak', 'end_turn')             # speaking and ending the turn are never stopped by the limit
 LIMITED = 'limit'                             # the audit code of a call after the limit
@@ -322,6 +322,8 @@ def deny_task(store, task, code, rule, tool):
 REVIEW_VERSION = 1
 REVIEW_MOST = 20
 REVIEW_KIND = '这一步没有做'
+HARM_KIND = '可能对你有安全或隐私风险'         # a classifier's flag (ADR-135 D9), off_format included
+RECORDED_ONLY = '只记下了，没有拦下'         # a verdict recorded in shadow
 EXPIRED = '这件已经过期，你不用接着做了。'     # shown with an expired ask, never stored or searched
 REVIEW_WORDS = {
     'not_listed': '那个对话里没有这一样',
@@ -371,15 +373,20 @@ def review(store, persona, since, before):
     from .records import tasks as task_records
     rows = [row for row in audit.events(store, 'guard.denied', since=since, before=before).rows()
             if (row.get('payload') or {}).get('sentence') is True or (row.get('payload') or {}).get('outside') is True]
+    rows += [row for row in audit.events(store, 'classifier.verdict', since=since, before=before).rows()
+             if (row.get('payload') or {}).get('verdict') == 'flagged']
     rows.sort(key=lambda row: row.get('occurred_at') or '', reverse=True)
     people = People(store, persona)
     items = []
     for row in rows[:REVIEW_MOST]:
+        if row.get('type') == 'classifier.verdict':
+            items.append(_judged(store, people, row))
+            continue
         said = row['payload']
         task = task_records.get(store, said['task']) if said.get('outside') is True and said.get('task') else None
         if task:
             scene_id, tried = task.get('scene_id'), {'tool': said.get('tool'), 'task': task.get('title') or '',
-                                                     'brief': excerpt(task.get('goal') or '', TRIED_CHARS)}
+                                                     'brief': excerpt(task.get('brief') or task.get('goal') or '', TRIED_CHARS)}
             person = (task.get('whose') or {}).get('person_id') or task.get('requester_id')
             asked_in = scene_id
         else:
@@ -392,6 +399,37 @@ def review(store, persona, since, before):
                       'tried': tried, 'kind': REVIEW_KIND,
                       **({'why': REVIEW_WORDS[said['code']]} if REVIEW_WORDS.get(said.get('code')) else {})})
     return {'items': items, **({'more': len(rows) - REVIEW_MOST} if len(rows) > REVIEW_MOST else {})}
+
+
+def _judged(store, people, row):
+    """One harmful verdict of the classifier, as her review shows it: when, where, the text it judged (from what holds
+    it), that it may cause harm, and whether it was recorded only."""
+    import json
+    from .config import excerpt
+    from .records import episodes as episode_records
+    from .records import ideas as idea_records
+    from .records import scenes as scene_records
+    from .records import tasks as task_records
+    from . import notes
+    said = row.get('payload') or {}
+    ref = said.get('ref') or {}
+    ep = episode_records.get(store, said.get('episode'), fields=['scene_id']) if said.get('episode') else None
+    scene_id, tried = (ep or {}).get('scene_id'), {}
+    if ref.get('task'):
+        task = task_records.get(store, ref['task']) or {}
+        scene_id = task.get('scene_id') or scene_id
+        tried = {'task': task.get('title') or '', 'brief': excerpt(task.get('brief') or task.get('goal') or '', TRIED_CHARS)}
+        if said.get('kind') == 'result':
+            tried['result'] = excerpt(json.dumps(task.get('result'), ensure_ascii=False, default=str), TRIED_CHARS)
+    elif ref.get('note'):
+        tried = {'note': excerpt((notes.get(store, ref['note'], fields=['text']) or {}).get('text') or '', TRIED_CHARS)}
+    elif ref.get('idea'):
+        tried = {'idea': excerpt((idea_records.get(store, ref['idea']) or {}).get('idea') or '', TRIED_CHARS)}
+    elif ref.get('text'):
+        tried = {'errand': excerpt(ref['text'], TRIED_CHARS)}
+    return {'at': row.get('occurred_at'),
+            'where': people.scene_title(scene_records.get(store, scene_id)) if scene_id else '',
+            'tried': tried, 'kind': HARM_KIND, **({'recorded': RECORDED_ONLY} if said.get('mode') == 'shadow' else {})}
 
 
 def _asked_by(store, people, scene_id, person):

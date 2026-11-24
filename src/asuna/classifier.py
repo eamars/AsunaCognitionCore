@@ -1,0 +1,298 @@
+"""A safety classifier on what crosses between outside and home (ADR-135 D9): only traffic in and out of home.
+
+Two classifiers, one per direction, and only one runs per text: inbound (a note from outside to home, an idea written
+outside: it enters her notebook, which home reads) and outbound (a note from home to outside, an errand, a task's
+result shown outside). A brief or a plan written in an outside conversation stays there and is not read. They judge
+concrete security and privacy actions, never her language. Her own chat model, on a lane of its own (`classify`: one
+tool-free session per question), asked one fixed question about one text: the direction's policy
+file is the system text, the same every time; the question is the kind of text and the text, nothing else, and for an
+outbound text one line of the program's reminder when the dictionary check found private words or a credential's
+value (their categories and counts, never a word). The answer is binary by the program's check, as the relevance
+gate's is: only the two words are accepted, anything else is asked again with a repair note (answers.ask); an answer
+still off-format after the repairs counts as flagged (`off_format`), and only a server that cannot be reached counts
+as not switched on (`unchecked`).
+
+It runs alongside her work, never before it: the work is already done or under way when the verdict comes. The
+deployment setting `classifier` is `off` (the default: nothing is asked) or `shadow` (asked and recorded, nothing
+stopped). `stop` is the stop path's (`stop`), which nothing calls until the owner decides after the measurement.
+
+Records, each on the stream of the turn or task the text belongs to: `classifier.asked` when a request starts,
+`classifier.verdict` when it is answered, `classifier.unchecked` when it could not be; at the worker's start an asked
+row with neither becomes `unchecked` (why `restart`). A verdict row is read back only by her review at home.
+"""
+from __future__ import annotations
+
+import hashlib
+import re
+import threading
+import time
+
+from . import answers, clock
+from .config import excerpt, prompt_path
+
+POLICIES = {'inbound': 'classify_inbound.md', 'outbound': 'classify_outbound.md'}
+MODES = ('off', 'shadow')               # `stop` is accepted only once the owner decides (ADR-135 landing 7)
+WORDS = {'有风险': 'flagged', '无风险': 'clear'}
+NEED = '只有一个词：「有风险」或「无风险」'
+TEXT_CHARS = 4000                       # the longest text judged; a longer one is judged by its head
+KINDS = {                               # kind: (direction, what the text is, in the question)
+    'note_home': ('inbound', '在外面写的、送进家里的便条'),
+    'idea': ('inbound', '在外面记下的一个想法'),
+    'note_out': ('outbound', '在家里写的、送到外面的便条'),
+    'errand': ('outbound', '从家里交代的、要在外面办的一件事'),
+    'result': ('outbound', '一件事的结果，要在外面给人看'),
+}
+# The private-words list's categories (private_words.CATEGORIES), as the reminder names them.
+CATEGORY_WORDS = {'person': '真名', 'group': '群名', 'account': '账号号码', 'site': '站点 id', 'host': '主机名',
+                  'email': '邮箱', 'other': '别的私人词'}
+REMINDER = '程序的提醒：这段文字里有%s。'
+SETTLE_DAYS = 2                         # how far back the start-up sweep looks for a request cut by a restart
+
+
+def mode(config):
+    return (config or {}).get('classifier') or 'off'
+
+
+def direction(kind):
+    return KINDS[kind][0]
+
+
+def policy(way):
+    """(text, version) of a direction's policy file: its text and the first 12 characters of its sha256."""
+    text = prompt_path({}, POLICIES[way]).read_text(encoding='utf-8')
+    return text, hashlib.sha256(text.encode('utf-8')).hexdigest()[:12]
+
+
+def question(kind, text, reminder=None):
+    return '这段文字是：%s\n%s\n文字：\n%s' % (KINDS[kind][1], reminder + '\n' if reminder else '',
+                                           excerpt(text, TEXT_CHARS))
+
+
+def check(text):
+    """'flagged' or 'clear' for an answer that is one of the two words (around it only spaces, its 「」 and a full
+    stop); anything else is told back."""
+    word = str(text or '').strip().rstrip('。.').strip()
+    if word.startswith('「') and word.endswith('」'):
+        word = word[1:-1].strip()
+    if word not in WORDS:
+        raise ValueError('上一条回答是「%s」，不是这两个词之一。' % excerpt(str(text or '').strip(), 40))
+    return WORDS[word]
+
+
+# ── the dictionary check, before the outbound classifier only ──
+SECRET_KEYS = re.compile(r'password|token|api.?key|secret', re.I)
+NOT_SECRET = {'token_counter', 'maxTokensField', 'thinkingTokenBudgetField'}
+
+
+def _secret_values(config):
+    """The configured secret values, by the release scan's rule (tools/check_staged_secrets.py secret_scan)."""
+    found = set()
+
+    def collect(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in NOT_SECRET:
+                    continue
+                if SECRET_KEYS.search(str(key)) and isinstance(item, str) and len(item) >= 6:
+                    found.add(item)
+                else:
+                    collect(item)
+        elif isinstance(value, list):
+            for item in value:
+                collect(item)
+    collect(config or {})
+    return found
+
+
+def dictionary(config, text):
+    """(record, reminder) for one outbound text: the private-words list's matches by category and the configured
+    secret values found, as counts; `private_words` is 'unchecked' when the deployment has no list. The reminder is
+    None when nothing matched. Never a word."""
+    from . import private_words
+    text = str(text or '')
+    entries = private_words.load()
+    counts = {}
+    if entries is not None:
+        for _, category, word, _ in entries:
+            if private_words.pattern(word).search(text):
+                counts[category] = counts.get(category, 0) + 1
+    secrets = sum(1 for value in _secret_values(config) if value in text)
+    record = {'private_words': counts if entries is not None else 'unchecked', 'secrets': secrets}
+    parts = []
+    if counts:
+        parts.append(' %d 个私人名单上的词（%s）' % (sum(counts.values()),
+                                               '、'.join(CATEGORY_WORDS.get(c, c) for c in sorted(counts))))
+    if secrets:
+        parts.append(' %d 处像凭据的写法' % secrets)
+    return record, (REMINDER % '，'.join(parts) if parts else None)
+
+
+def _owner(store, person):
+    from . import familiarity
+    return bool(person) and familiarity.level(store, person) == 'owner'
+
+
+def _hash(text):
+    return hashlib.sha256(str(text or '').encode('utf-8')).hexdigest()
+
+
+# ── when a text is judged ──
+def alongside(work):
+    """Run beside her work: she never waits for a verdict."""
+    threading.Thread(target=work, name='asuna-classify', daemon=True).start()
+
+
+def submit(store, lane, ep, kind, text, ref, requester, stream=None):
+    """Ask about one text, alongside, when the setting asks for it. `ref`: what holds the text ({'task': id}, {'note':
+    id}, {'idea': id}, or {'text': ...} when nothing else stores it); `stream`: where the records go
+    (the turn's, else a task's)."""
+    if mode(store.config) == 'off' or not str(text or '').strip():
+        return None
+    way = direction(kind)
+    _, version = policy(way)
+    stream = stream or ep['_id']
+    checked, reminder = dictionary(store.config, text) if way == 'outbound' else (None, None)
+    asked = {'kind': kind, 'direction': way, 'ref': ref, 'sha256': _hash(text), 'owner_asked': _owner(store, requester),
+             'policy_version': version, 'mode': mode(store.config), 'episode': ep['_id'],
+             **({'dictionary': checked} if checked else {})}
+    row = store.audit(stream, 'classifier.asked', asked, ep['scope_key'])
+    request = row['_id']
+    alongside(lambda: judge(store, lane, ep, kind, text, {**asked, 'request': request}, stream, reminder))
+    return request
+
+
+def judge(store, lane, ep, kind, text, asked, stream, reminder=None):
+    """One verdict, recorded: `classifier.verdict` (flagged, clear, or flagged as off_format) or
+    `classifier.unchecked`."""
+    started = time.monotonic()
+    system, body = policy(asked['direction'])[0], question(kind, text, reminder)
+    operation = '%s:CLASSIFY:%s' % (ep['_id'], asked['sha256'][:16])
+
+    def generate(attempt, note):
+        return lane.generate(_binding(store, ep), operation + (':fix-%d' % attempt if attempt else ''), 'CLASSIFY',
+                             note or body, system)
+
+    def rejected(attempt, issue, value):
+        store.audit(stream, 'classifier.rejected', {'request': asked['request'], 'attempt': attempt,
+                                                    'problem': issue}, ep['scope_key'])
+    common = {'request': asked['request'], 'kind': kind, 'direction': asked['direction'], 'ref': asked['ref'],
+              'policy_version': asked['policy_version'],
+              'mode': asked['mode'], 'owner_asked': asked['owner_asked'], 'episode': ep['_id']}
+    try:
+        if lane is None:
+            raise RuntimeError('CLASSIFY_LANE_MISSING')
+        value, verdict = answers.ask(generate, NEED, check, rejected=rejected)
+        if verdict is None:              # not the model's answer: the request ended before the model finished
+            return _unchecked(store, stream, ep, common, value.finish_reason or 'no_finish')
+        code = verdict
+    except answers.Rejected:
+        verdict, code = 'flagged', 'off_format'     # only the judged text changed: breaking the judge buys nothing
+    except Exception as exc:                        # a server that cannot be reached: as if it were not switched on
+        return _unchecked(store, stream, ep, common, type(exc).__name__)
+    latency = round(time.monotonic() - started, 3)
+    row = {**common, 'verdict': verdict, 'code': code, 'latency_s': latency, 'ran': ran(store, kind, asked['ref'])}
+    store.audit(stream, 'classifier.verdict', row, ep['scope_key'])
+    if verdict == 'flagged' and should_stop(store, asked['owner_asked']):
+        stop(store, kind, asked['ref'])
+    return row
+
+
+def _unchecked(store, stream, ep, common, why):
+    row = {**common, 'why': excerpt(str(why), 80)}
+    store.audit(stream, 'classifier.unchecked', row, ep['scope_key'])
+    return row
+
+
+def _binding(store, ep):
+    from .config import character_id
+    binding = '%s:%s:%s:%s' % (character_id(store.config), ep['scene_id'], ep['policy_epoch'], ep['persona'])
+    return binding + ':' + ep['character_context'] if ep.get('character_context') else binding
+
+
+def ran(store, kind, ref):
+    """What of the work had run when the verdict came: a task's steps so far, whether a note was read."""
+    from . import audit
+    if ref.get('task'):
+        return {'steps': audit.events(store, 'tool.time', stream=ref['task']).count()}
+    if ref.get('note'):
+        from . import notes
+        return {'read': bool((notes.get(store, ref['note'], fields=['seen_in']) or {}).get('seen_in'))}
+    return {}
+
+
+# ── what is judged: her calls, and a task's result shown outside ──
+def after_call(tools, ep, name, args, result):
+    """After one of her calls succeeded: the text it carried in or out of home, when it carried one."""
+    if mode(tools.store.config) == 'off' or not isinstance(result, dict):
+        return None
+    from . import guard
+    store = tools.store
+    outside = guard.outside(store, ep)
+    found = None
+    if name == 'note' and result.get('note'):
+        from . import notes
+        row = notes.get(store, result['note']) or {}
+        if outside or row.get('kind') not in (None, 'home'):      # outside, a note goes home; home's, out
+            found = ('note_home' if outside else 'note_out', row.get('text') or args.get('text') or '',
+                     {'note': row['_id']})
+    elif name == 'ideas.note' and outside and result.get('noted'):
+        found = ('idea', args.get('idea') or '', {'idea': result['noted']})
+    elif name == 'errand' and not outside:
+        found = ('errand', args.get('request') or '', {'text': excerpt(str(args.get('request') or ''), TEXT_CHARS),
+                                                       'place': str(args.get('place') or '')[:80]})
+    if not found:
+        return None
+    kind, text, ref = found
+    return submit(store, getattr(tools.coordinator, 'classify', None) or HANDS.get('lane'), ep, kind, text, ref,
+                  guard.asker(store, ep, name, args) or None)
+
+
+def after_result(store, task, ep, value):
+    """A task's result, as it arrives in an outside conversation (tasks.py); `ep`: the turn that handed it over."""
+    import json
+    if mode(store.config) == 'off' or not ep:
+        return None
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+    requester = (task.get('whose') or {}).get('person_id') or task.get('requester_id')
+    return submit(store, HANDS.get('lane'), ep, 'result', text, {'task': task['_id']}, requester, stream=task['_id'])
+
+
+# ── the stop path: built, used only when the owner decides (landing 7) ──
+def should_stop(store, owner_asked):
+    """Whether a harmful verdict stops the work: in `stop` mode only, and never for the owner's own ask."""
+    return mode(store.config) == 'stop' and not owner_asked
+
+
+HANDS = {}            # set at the worker's start: lane (the classify lane)
+
+
+def stop(store, kind, ref):
+    """Stop the crossing a flagged verdict is about, where it stands (not delivered, or the turn it opened stopped,
+    with the classifier's sentence). Nothing calls it before `stop` is accepted (landing 7), which brings each
+    crossing's stop with its cases; until then it only records that a stop was due."""
+    store.audit(ref.get('task') or ref.get('note') or ref.get('idea') or 'classifier', 'classifier.stop_due',
+                {'kind': kind, 'ref': ref}, 'operator')
+    return False
+
+
+# ── a request cut by a restart ──
+def settle(store, moment=None):
+    """At the worker's start: each request asked in the last SETTLE_DAYS with no verdict and no unchecked row becomes
+    `unchecked` (why `restart`). Nothing is held between requests."""
+    from datetime import timedelta
+    from . import audit
+    since = ((moment or clock.now()) - timedelta(days=SETTLE_DAYS)).isoformat()
+    answered = {(row.get('payload') or {}).get('request') for row in audit.events(
+        store, kinds=('classifier.verdict', 'classifier.unchecked'), since=since).rows(fields=['payload'])}
+    cut = 0
+    for row in audit.events(store, 'classifier.asked', since=since).rows(
+            fields=['_id', 'stream_id', 'scope_key', 'payload']):
+        if row['_id'] in answered:
+            continue
+        said = row.get('payload') or {}
+        store.audit(row['stream_id'], 'classifier.unchecked', {
+            'request': row['_id'], 'kind': said.get('kind'), 'direction': said.get('direction'), 'ref': said.get('ref'),
+            'policy_version': said.get('policy_version'), 'mode': said.get('mode'),
+            'owner_asked': said.get('owner_asked'), 'why': 'restart'}, row.get('scope_key') or 'operator')
+        cut += 1
+    return cut

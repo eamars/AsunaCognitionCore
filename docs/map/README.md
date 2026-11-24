@@ -280,6 +280,7 @@ From an input to her words: queueing, context, her tools, the checks, publishing
 - [`unfinished`](../../src/asuna/unfinished.py) — What a restart leaves unfinished (ADR-134): every input that ends ends its turn, and a cut turn is resumed or ended.
 - [`reasons`](../../src/asuna/reasons.py) — The reasons behind her actions: what she did after each thought, and the thought behind each action.
 - [`guard`](../../src/asuna/guard.py) — The guardrail (ADR-135 D8): whether a call is allowed, decided from stored facts before any handler runs.
+- [`classifier`](../../src/asuna/classifier.py) — A safety classifier on what crosses between outside and home (ADR-135 D9): only traffic in and out of home.
 
 ### [Groups and people](people.md)
 
@@ -416,6 +417,7 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`carry.js`](../../packages/cognition-core/src/carry.js) — A conversation that no longer fits the model's window continues in a new session (ADR-028).
 - [`channel.js`](../../packages/cognition-core/src/channel.js) — Channel contribution: a platform plugin (e.g. @asuna/napcat-qq) registers its kind with Core.
 - [`children.js`](../../packages/cognition-core/src/children.js) — Her action brain's children: tasks (catalogued DSH subagents) and the worker's own hidden stages.
+- [`classify.js`](../../packages/cognition-core/src/classify.js) — The safety classifier's preset plugin (ADR-135 D9): a small tool-free session for each question, judging one text against the owner's policy (classifier.py), never speaking itself.
 - [`client.js`](../../packages/cognition-core/src/client.js) — The Web page's Asuna parts in DSH's browser client: the memory tab, the settings card, the two brains' thread, her tool rows, conversation marks and turn titles.
 - [`collab.js`](../../packages/cognition-core/src/collab.js) — The two brains' collaboration thread in her conversation (ADR-011 §7.1).
 - [`compaction.js`](../../packages/cognition-core/src/compaction.js) — Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoint.

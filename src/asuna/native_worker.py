@@ -156,8 +156,10 @@ class NativeLane:
     def __init__(self, worker, config, store, evidence, lane='character', *args):
         self.worker, self.store, self.lane = worker, store, lane
         # The relevance gate (attend) is her own judgment: it uses the character route, at a low effort (index.js).
-        route = {'character': 'character', 'appraiser': 'appraiser', 'attend': 'character'}.get(lane, 'action')
-        self.model = {**config['character' if lane in ('character', 'attend') else 'executor'],
+        # The safety classifier (classify, ADR-135 D9) is her own chat model asked one fixed question: the same route.
+        route = {'character': 'character', 'appraiser': 'appraiser', 'attend': 'character',
+                 'classify': 'character'}.get(lane, 'action')
+        self.model = {**config['character' if lane in ('character', 'attend', 'classify') else 'executor'],
                       **config.get('_native_routes', {}).get(route, {})}
         self.lock = threading.RLock()
 
@@ -166,7 +168,7 @@ class NativeLane:
         shows a stored title as it is and UI words must follow the viewer's language (ADR-011 §2.8)."""
         if self.lane == 'executor' and task:
             return ' '.join(str(task.get('title') or task.get('goal') or task['_id']).split())[:48]
-        if self.lane in ('summary', 'attend'):
+        if self.lane in ('summary', 'attend', 'classify'):
             role = session_records.get(self.store, role_id, fields=['native_title']) or {}
             return role.get('native_title') or ep['scene_id']
         return None
@@ -262,6 +264,9 @@ class NativeLane:
                 native_id = 'asuna-appraiser-' + ep['persona']
             elif self.lane == 'attend':
                 native_id = gate_session_id(binding, operation)
+            elif self.lane == 'classify':
+                # One question per session, its repairs included, as the gate's (ADR-135 D9).
+                native_id = 'asuna-classify-' + sha((binding + ':' + base).encode())[:32]
             else:
                 native_id = role_id
             if self.lane == 'appraiser':
@@ -274,7 +279,7 @@ class NativeLane:
             else:
                 grant = workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
             platform = channel_kinds.of(ep['scene_id'])
-            if self.lane in ('character', 'attend') and platform:
+            if self.lane in ('character', 'attend', 'classify') and platform:
                 cwd = self.worker.channel_workspace(platform)
             else:
                 # Made now: no folder exists before a task of theirs needs it (ADR-107).
@@ -1018,7 +1023,7 @@ class BusinessWorker:
     def bind_session(self, session_id, values):
         prior = session_records.get(self.app.store, session_id)
         identity = ('lane', 'scene_id', 'persona', 'cwd')
-        if values['lane'] not in ('character', 'attend'):       # a group's sessions serve everyone in it
+        if values['lane'] not in ('character', 'attend', 'classify'):   # a group's sessions serve everyone in it
             identity += ('person_id',)
         if prior and any(prior.get(k) != values.get(k) for k in identity):
             raise Denied('NATIVE_BINDING_IDENTITY_CHANGED')

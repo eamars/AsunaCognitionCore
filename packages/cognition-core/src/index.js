@@ -123,8 +123,9 @@ export const Config = z.object({ python: z.string().volatile(), persona: z.strin
 // A reasoning level that turns the model's thinking off (ADR-099: no thoughts to take in thinking mode).
 const NO_THINKING = /^(off|none|disabled|)$/i;
 // Responsibility routes are configured independently; a lane name never implies a model.
-// The relevance gate (attend) is her own judgment, so it uses the character route.
-const routeOf = lane => lane === 'character' || lane === 'attend' ? 'character' : lane === 'appraiser' ? 'appraiser' : 'action';
+// The relevance gate (attend) is her own judgment, so it uses the character route; so does the safety classifier
+// (classify, ADR-135 D9): her own chat model asked one fixed question.
+const routeOf = lane => ['character', 'attend', 'classify'].includes(lane) ? 'character' : lane === 'appraiser' ? 'appraiser' : 'action';
 // Her credentials' records in DSH's credential store: <scope>/<name> (credentialRecords).
 const CREDENTIAL_SCOPE = 'asuna-cognition-core';
 // How long a failed start waits before the next try: the first few soon, then every five minutes, never giving up.
@@ -148,7 +149,8 @@ async function toolReply(call) {
 // dsh-client-ui-deliverables, dsh-web-app.
 export const DSH_DEVELOPER_SECTIONS = [['harness:source', 'HARNESS_SOURCE'],
   ['ui:deliverable-file-references', 'DELIVERABLE_FILE_REFERENCES'], ['app:web-surface', 'WEB_SURFACE']];
-const PRESETS = { executor: 'asuna-action', summary: 'asuna-summary', appraiser: 'asuna-appraiser', attend: 'asuna-attend' };
+const PRESETS = { executor: 'asuna-action', summary: 'asuna-summary', appraiser: 'asuna-appraiser', attend: 'asuna-attend',
+  classify: 'asuna-classify' };
 /** The recovery preset's id (cordis.patch.yml); its sessions route by the publication floor's own route. */
 const RECOVERY_PRESET = 'asuna-recovery';
 const textOf = message => (message?.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
@@ -689,7 +691,7 @@ export class CognitionCore {
   }
 
   effortFor(lane, stage) {
-    if (lane === 'attend') return this.efforts?.attend;
+    if (lane === 'attend' || lane === 'classify') return this.efforts?.attend;
     if (lane === 'character' && stage?.scene_kind === 'group') return this.efforts?.group;
     if (lane === 'summary') return this.efforts?.summary;
     return undefined;

@@ -93,6 +93,16 @@ Her action brain's children: tasks (catalogued DSH subagents) and the worker's o
   - `create`
   - `dispose`
 
+## `classify.js`
+
+[packages/cognition-core/src/classify.js](../../packages/cognition-core/src/classify.js)
+
+The safety classifier's preset plugin (ADR-135 D9): a small tool-free session for each question, judging one text against the owner's policy (classifier.py), never speaking itself.
+
+- def `name` — The safety classifier's preset plugin (ADR-135 D9): a small tool-free session for each question, judging one text against the owner's policy (classifier.py), never speaking itself.
+- def `inject`
+- def `apply`
+
 ## `client.js`
 
 [packages/cognition-core/src/client.js](../../packages/cognition-core/src/client.js)

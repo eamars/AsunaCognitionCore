@@ -658,6 +658,14 @@ class TaskService:
                     original_input_id=(source or {}).get('_id'),brief=task.get('brief') or task['goal'],
                     **({'observations':key} if (key:=key_observations(observations)) else {}),
                     observations_total=len(observations),finished_at=current.get('finished_at'))
+            if outside:
+                # ADR-135 D9: a task's result arriving outside is judged alongside; it never holds up the result.
+                from . import classifier
+                try:
+                    classifier.after_result(self.store,task,original,event['trusted_context_events'][0].get('value'))
+                except Exception as exc:
+                    self.store.audit(task['_id'],'classifier.unchecked',{'kind':'result','why':type(exc).__name__},
+                                     task['scope_key'])
             self.handback(task,'handing',short=short)
             ep=coordinator.ingest(event,persona=original['persona'])
         if ep['state'] in ('PREPARED','TURN','INTERRUPTED'):

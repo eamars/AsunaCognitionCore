@@ -68,7 +68,8 @@ def test_the_review_s_words_never_reach_an_outside_turn(her, monkeypatch):
     denied(her, turn(her), 'set_policy', {'key': 'x', 'value': 1, 'reason': '造的'})
     shown = json.dumps([role_tools.session_specs(her.store, 'g1', 'B'), prepared(her.store, monkeypatch, 'g1')],
                        ensure_ascii=False, default=str)
-    assert not [words for words in (*guard.REVIEW_WORDS.values(), guard.REVIEW_KIND) if words and words in shown]
+    assert not [words for words in (*guard.REVIEW_WORDS.values(), guard.REVIEW_KIND, guard.HARM_KIND, guard.RECORDED_ONLY)
+                if words and words in shown]
 
 
 def test_every_review_reason_is_decided():

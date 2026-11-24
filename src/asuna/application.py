@@ -64,6 +64,12 @@ class Application:
             # The relevance gate's lane: one small session per question, on the character route (attend.py).
             self.attend_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'attend'))
             self.coordinator.attend=self.attend_lane
+            # ADR-135 D9: the safety classifier's lane, one small session per question on the character route.
+            from . import classifier
+            self.classify_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'classify'))
+            self.coordinator.classify=self.classify_lane
+            classifier.HANDS.update(lane=self.classify_lane)
+            classifier.settle(self.store)          # a request a restart cut is recorded unchecked
             if ((config.get('_native_routes') or {}).get('appraiser') or {}).get('provider'):
                 # Optional third responsibility route: proposes affect events only (ADR-009 §6.7).
                 from .affect import Appraiser

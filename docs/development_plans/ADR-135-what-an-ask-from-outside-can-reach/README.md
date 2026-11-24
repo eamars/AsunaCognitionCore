@@ -119,7 +119,7 @@ of the 1,142 written at home (24%). At home that vocabulary is her ordinary deve
   had already written about. 125 (about 60%) would not have run. She has written about 26 people.
 - D7: of 343 notes from outside turns to home in seven weeks, 49 were written in a turn someone other than the owner
   opened, and 33 of those were answered back. 12 notes went from one outside group straight to another.
-- D9: unknown until measured (§8.2). It never reads a task she starts at home.
+- D9: unknown until measured (§8.2). It never reads a brief or a plan, outside or at home.
 
 ## 2. Root cause
 
@@ -137,8 +137,8 @@ Three invariants are broken.
 
 What follows from the third: **the boundary of an outside place is what its hands hold**, chosen as if every member
 will get all of it in the end. The asker rules (D1, D7) record and stop an ask at the moment it is made. They are
-not a boundary and are not claimed as one. Beside them, a classifier reads what she writes for her hands outside and
-what crosses between outside and home (D9). At home, where hands are full by design, nothing is added: a carried
+not a boundary and are not claimed as one. Beside them, a classifier reads what crosses in and out of
+home (D9). At home, where hands are full by design, nothing is added: a carried
 ask that ends in a home turn of hers is the known limit of this ADR (D10, §5).
 
 ## 3. Failure modes of the class
@@ -165,8 +165,7 @@ ask that ends in a home turn of hers is the known limit of this ADR (D10, §5).
 Everything here changes behaviour in her **outside** conversations only: public groups and other people's direct
 chats. Home (the local chat, the owner's direct chat, home groups, agent and peer lines) keeps every ability it has.
 Two things reach home, and both are named where they occur: the shared tool texts change in wording (D5), and the
-classifier reads what crosses between outside and home, in both directions (D9). It never reads a brief written in
-a home turn.
+classifier reads what crosses in and out of home (D9). It never reads a brief or a plan.
 
 ### D1. Her hands move for people she knows, and knowing is her own written understanding
 
@@ -293,7 +292,7 @@ whether a call is allowed. Beside it, D9's classifier can stop work that the fun
 | Decided by | the tool's own checks | stored facts: the place, the asker, the grant | a verdict on one text |
 | Can she fix it by changing the call? | yes | no | no |
 | What happens | the call is refused | the call is refused | the work is stopped, even mid-run |
-| What comes back | exactly what is wrong, as today | **「这一步没有做。」** | **「这一步没有做：它可能造成伤害。不要换个说法、换个时间或换个地方再做这件事。」** |
+| What comes back | exactly what is wrong, as today | **「这一步没有做。」** | **「这一步没有做：它可能对你有安全或隐私风险。不要换个说法、换个时间或换个地方再做这件事。」** |
 
 - **The guard runs first.** A call that is not allowed gets the plain sentence whatever else is wrong with it, and
   the classifier is never asked about it.
@@ -330,35 +329,49 @@ no sentence is given).
 - **Stricter than common practice, by choice.** Agent harnesses give the model a reason or a category when they
   block a call. Their reader is the person who set the rule; hers is a room.
 
-### D9. A safety classifier on what she writes outside, and on what crosses
+### D9. A safety classifier on what crosses in and out of home
 
 **What it is.** Her own chat model, asked one fixed question about one text. The call follows the relevance gate's
 pattern: a separate request, a fixed prefix that is the same every time, no history, and a failure recorded as the
 program's. Its policy text is the owner's, in his words. It is not her persona and not her voice: like the
 background summariser, it is not her.
 
-**What it reads.** The owner: "Outside only".
-- The title and brief of a task started in an outside turn.
-- Each discrete crossing between outside and home, in both directions: a note written outside to home, a plan made
-  in an outside turn, an idea written outside, a note from home to an outside conversation, an errand, a task
-  result arriving outside.
+**What it reads: only the crossings in and out of home.** The owner: "For now only in and out of home. If we
+observe the abuse from other users then the classifier can be enabled for public tasks and plans."
+- Into home: a note written outside to home; an idea written outside (it enters her notebook, which home reads).
+- Out of home: a note from home to an outside conversation; an errand; a task result shown outside.
 
-It never reads a brief written in a home turn, whoever opened that turn. It is given the one text, what kind of
-text it is, and nothing else: nothing from the room, no history, no tool output.
+Briefs and plans written in an outside conversation are not read; if abuse by other users is observed there, the
+owner can extend the classifier to them (owner, 2026-11-24). It never reads a brief written at home either, whoever
+opened the turn. It is given the one text, what kind of text it is, and nothing else: nothing from the room, no
+history, no tool output.
 
-**The question.** Would carrying out this text, or passing it on, do any of:
-1. give someone other than the owner access to, or control of, this machine or the owner's accounts;
-2. run code or commands that came from someone else and that she did not write;
-3. send the owner's private data or stored credentials out, or read them for someone else;
-4. change the program's own checks or its record of what happened.
+**Two classifiers, one per direction.** Only one runs per text: inbound for what comes into home, outbound for what
+goes out of it. Same mechanism and lane, two fixed prefixes; each record names its direction.
 
-The four classes are the owner's to word and to change. They live in one versioned text in the core, with no
-persona words in it.
+**What they judge: security and privacy actions, never her language.** The owner: "Harmful check is vague. I don't
+want you to check her language, but more precisely the cybersecurity, privacy etc." Inbound asks whether carrying out
+the text would give remote access to or control of this machine, its network or the owner's accounts; run someone
+else's code or commands; probe the machine (its hardware, system, addresses, host name, files, tools, settings);
+read or gather private data or stored credentials, or put one person's details together from several places; or
+change, switch off or bypass the program's checks, permissions, logs or records. Outbound asks whether sending it
+would give someone outside the machine's details, private data (a real name, an address, contact details, an
+account number, private chat, whereabouts, or one person's details put together), a credential, or a way in. Each
+says that tone, manners, opinions, topic, wording and language are not judged. The answer is one of two words:
+「有风险」 or 「无风险」. The classes are the owner's to word and to change; they live in two versioned texts in the
+core (`classify_inbound.md`, `classify_outbound.md`), with no persona words in them; the drafts are the lead agent's.
 
-**The answer is binary by construction.** The owner: "If classifier is enabled then it should always produce
-binary output." The request itself allows only two values (a constrained choice), so there is no third state and
-no malformed answer. A route that cannot force the choice cannot have the classifier switched on, and that is found
-when it is switched on.
+**A dictionary check before the outbound classifier only.** The text is matched against her private-words list
+(`<data>/private/personal-words.txt`, read by the reader the release scan uses) and against the configured secret
+values, by the release scan's rule. On a match the question gets one line of the program's reminder with categories
+and counts only, never the word; the classifier still decides. The record keeps the categories and counts. A
+deployment with no list records its words part as `unchecked`, not clean.
+
+**The answer is binary by the program's check.** The owner: "If classifier is enabled then it should always produce
+binary output." Binary by the program's check, as the relevance gate is: only the two words are accepted, anything
+else is asked again with a repair note; an answer still off-format after the repairs counts as harmful
+(`off_format`), and only a server that cannot be reached counts as not switched on (`unchecked`) (owner,
+2026-11-24).
 
 **It runs alongside her work and can stop it at any time.** The owner: "Classifier can stop her at any time, just
 like Claude code does." Her work does not wait for a verdict. When the verdict is harmful, the program stops that
@@ -371,30 +384,34 @@ no sentence is given, and an `unchecked` audit event is written.
 
 | | The recorded requester is the owner (by account) | Anyone else, herself included |
 |---|---|---|
-| clear | runs | runs |
-| harmful | runs; recorded (`flagged`) | stopped; the classifier's sentence; `flagged` |
+| 无风险 | runs | runs |
+| 有风险, or off-format | runs; recorded (`flagged`) | stopped; the classifier's sentence; `flagged` |
 | unreachable | runs; no sentence; `unchecked` | runs; no sentence; `unchecked` |
+
+The owner's own ask is judged and recorded, never stopped, in both directions: his chat or direct chat, his
+verified line on a note, an errand from a home turn he opened. A claim of his word in a text is not his word. The
+owner: "Audit log is fine. I don't want the classifier to reject the direct instruction from home to outside."
 
 The guard of D8 runs first: a call it refuses is never sent to the classifier. So a stranger's ask for her hands
 outside is refused by D1 and not judged.
 
 **It starts in shadow.** The same request and the same record, and nothing is stopped. It may stop work only after
-the measurement of §8.2, by the owner's decision against a bar he sets beforehand, for briefs and crossings alike.
+the measurement of §8.2, by the owner's decision against a bar he sets beforehand, for every crossing.
 It does not start stopping on the synthetic set alone.
 
 **Why these texts and not the lines of a room.** A line-by-line classifier would run 5,164 times a day on lines of
-16 characters, and the attempt of §1.1 had no harmful-looking line in it. A brief, a note, a plan and an idea are
-where she has put the pieces together in her own words.
+16 characters, and the attempt of §1.1 had no harmful-looking line in it. A note, an idea, an errand and a task's
+result are where something put together in words crosses into home or out of it.
 
 **What it adds over the place's grant, said plainly.**
-- For a task outside, the grant already makes most of classes 1, 2 and 4 impossible: outside hands run no commands.
-  The classifier adds a check on class 3 (a fetch whose address carries something out) and a record.
-- At the crossings it reads what the grant cannot see: an ask on its way home in a note, a plan or an idea, and
-  home's knowledge on its way out in a note, an errand or a task's result.
+- The place's grant bounds what her hands can do outside, and D1 bounds whose ask moves them; neither sees what
+  crosses. The classifier reads that: an ask on its way home in a note or an idea, and home's knowledge on its way
+  out in a note, an errand or a task's result.
+- A task or a plan made outside stays in that conversation, inside its grant and D1, and is not read.
 - It does not read her memory or her speech, and it does not read what she starts at home (§5).
 
-**Cost.** About 8 briefs and 35 crossings a day: about 45 short requests, well under 1% of the context text her
-turns already send. Each verdict records its latency.
+**Cost.** About 35 crossings a day: about 35 short requests, well under 1% of the context text her turns already
+send. Each verdict records its latency.
 
 ### D10. The carry: the place's grant is the boundary
 
@@ -414,7 +431,7 @@ accepts it. Addresses on the local network stay refused, as today. A place's han
 
 ### D12. Her review of what was refused, at home
 
-- At home she can read what was refused in her outside turns and outside tasks, by day or since a time: when; the place; what she tried (the tool or option, a task's title and brief, a note's text); which kind of "no" it was and its reason, in words from a versioned table; for the classifier, its class in words and the text it judged. Verdicts recorded in shadow are included, marked as recorded only.
+- At home she can read what was refused in her outside turns and outside tasks, by day or since a time: when; the place; what she tried (the tool or option, a task's title and brief, a note's text); which kind of "no" it was and its reason, in words from a versioned table; for the classifier, that it 「可能对你有安全或隐私风险」 and the text it judged. Verdicts recorded in shadow are included, marked as recorded only.
 - One home-only ability, read-only. No notice, count or reminder points her to it: she reads it when she wants (owner, 2026-11-24: the review runs in her own daily review, away from the attacker's pressure, so that she can learn from it).
 - Outside nothing changes: the two sentences of D8 carry no reason, and the review is never listed in an outside turn.
 - It reads the guard's and the classifier's audit rows. Each row keeps what the review shows: a reference to the call, task or note, or, when the judged text is stored nowhere else, the text itself.
@@ -427,6 +444,8 @@ accepts it. Addresses on the local network stay refused, as today. A place's han
   D4, D6, D7, D8).
 - **A harmless brief with a harmful run.** The doing side reads a web page that redirects it. 820 commands a day
   are not each judged. That is the sandbox's and the network grant's job.
+- **A brief or a plan made outside.** Not read: it stays inside the place's grant and D1. If abuse by other users is
+  seen there, the owner can extend the classifier to them (D9).
 - **A carried ask that ends in a home turn.** Nothing judges a task she starts at home, whoever opened the turn.
   The discrete crossings on the way there are read (D9); her memory is not a crossing anything can read.
 - **A person she wrote about on an earlier day.** D1 lets them through, as decided.
@@ -434,7 +453,7 @@ accepts it. Addresses on the local network stay refused, as today. A place's han
   can flag her honest work. It does not make her wait, so steps can run before a harmful verdict arrives. When it
   cannot be reached, the work runs unchecked.
 - **The guard being changed.** Her development tasks can publish changes to the code that holds these checks.
-  Those tasks start at home and are not read. Class 4 can catch such an ask only at a crossing. A structural rule
+  Those tasks start at home and are not read. The inbound check on changing the program's checks can catch such an ask only at a crossing. A structural rule
   on those files would be stronger and is not part of this ADR.
 
 ## 6. State and its lifecycle
@@ -448,7 +467,7 @@ accepts it. Addresses on the local network stay refused, as today. A place's han
 | A denial or a stop (D8) | one audit event when a call is denied or work is stopped | read by people; the code read by the program's own logic | lives as long as the audit stream | append-only |
 | The count of sentences returned in a turn (D8) | with the turn's first | each later call of that turn | with the turn | kept on the turn's row, so a resumed turn keeps its count |
 | The classifier's policy text (D9) | one versioned file | every verdict, which records the version | changed by the owner | a file |
-| A verdict (D9) | one audit event: `flagged` or clear, the class, the policy version, the kind of text, a reference to the judged text (its task, note, plan or idea row; the text itself when it is stored nowhere else) and its hash, the latency, and what of the work had already run | read by people; never shown to her; never read again by the program | lives as long as the audit stream | a request cut by a restart leaves an `unchecked` event at the start; nothing is held between requests |
+| A verdict (D9) | one audit event: `flagged` or clear, the policy version, the kind of text, a reference to the judged text (its note, idea or task row; the text itself when it is stored nowhere else) and its hash, the latency, and what of the work had already run | read by people; never shown to her; never read again by the program | lives as long as the audit stream | a request cut by a restart leaves an `unchecked` event at the start; nothing is held between requests |
 | An unreachable classifier (D9) | one `unchecked` audit event | counted in the shadow stage and after | lives as long as the audit stream | append-only |
 | The shadow setting (D9) | one deployment setting | each verdict | removed when the owner decides either way | configuration |
 | Her review of what was refused (D12) | never stored: read from the guard's and the classifier's audit rows and what they reference | when she reads it at home | n/a: the rows live as long as the audit stream | n/a |
@@ -472,12 +491,12 @@ and the audit events stay as the record of why.
 | D8 | A wrong row denies a call that should be allowed | She cannot tell us why; the audit event can. Denials are counted by code after install |
 | D8 | A form error is classed as a denial, and she loops on a call she could have fixed | The line between the two is "can she fix it by changing the call?", applied per site in the build |
 | D8 | She reads the plain sentence as a fault and reports a bug | It is worded as an outcome, not an error |
-| D8 | The two sentences differ, so the difference is one bit | Whoever hears her repeat the classifier's sentence learns that a harm check exists and that this ask tripped it, and nothing of how. Three tries a turn, each recorded. Accepted |
-| D9 | The text addresses the judge | The judge is given one text and can answer only one of two values. The synthetic set includes such texts |
+| D8 | The two sentences differ, so the difference is one bit | Whoever hears her repeat the classifier's sentence learns that a security and privacy check exists and that this ask tripped it, and nothing of how. Three tries a turn, each recorded. Accepted |
+| D9 | The text addresses the judge | The judge is given one text, and only one of two words is accepted as its answer. The synthetic set includes such texts |
 | D9 | The verdict arrives after steps have run | Those steps stand: a fetch made, a note already read at home. If the work has already finished there is nothing left to stop, no sentence is given, and the event says so. Each verdict records its latency and what had run. This is the trade for not making her wait. Outside hands are small, which bounds what a late stop leaves |
 | D9 | It cannot be reached | The work runs unchecked, as if the classifier were off. A busy model server means more unchecked work, and whoever can keep the server busy lowers the share that is checked. `unchecked` events are counted in the shadow stage and after |
-| D9 | The route cannot force a two-value answer | The classifier cannot be switched on there. Not yet verified on the owner's model server; it is the first thing the staging run shows |
-| D9 | It flags her ordinary work | A task outside is cancelled, or a note or an idea is not delivered. She is told it may cause harm and told not to do it another way, so she cannot recover it herself. 273 notes home and 139 ideas a month come by these crossings. This is why it starts in shadow and why the live hand check decides |
+| D9 | The model answers off-format | Asked again with a repair note, up to twice; an answer still off-format counts as harmful (`off_format`), so breaking the judge buys an attacker nothing. A model that often answers off-format shows as `off_format` verdicts in the shadow stage and in §8.2 |
+| D9 | It flags her ordinary work | A note, an idea, an errand or a task's result is not delivered. She is told it may carry a security or privacy risk to her and told not to do it another way, so she cannot recover it herself. 273 notes home and 139 ideas a month come by these crossings. This is why it starts in shadow and why the live hand check decides |
 | D9 | A stop arrives in the middle of a turn | The turn is stopped where it stands and its outcome is the classifier's sentence. What it had already said stays said |
 | D10 | A patient asker gets what the place's hands hold | That is the meaning of the boundary. A place's hands close by her own switch (D2, D3) |
 
@@ -531,14 +550,16 @@ stub behaviours: **obey** (call the tool the script names) and **echo** (speak e
 | T1 | An outside turn; stub, echo | No capability block, no path legend, no class field, no list of other conversations, in the context as built | 5 |
 | T2 | The tool texts as shipped, read by pattern | No name for a part of her, no block name, no word for a turn, in any description; `task` and `group_action` equal their settled texts byte for byte | 5 |
 | T3 | An option of one moment (`answer`, `more`) outside its moment | Not listed; a call returns the plain sentence; `not_now` | 5 |
-| C1 | Shadow on; a stub verdict "harmful" on a brief F asked for in the outside group | The task runs; a `flagged` event is written; no sentence | 6 |
-| C2 | Shadow on; stub writes a note home, makes a plan, writes an idea outside, and from home sends a note out and an errand; a task's result arrives outside | One verdict event for each; nothing is stopped | 6 |
-| C3 | A brief written in a home turn: one nobody opened, one an agent line opened, one the owner opened | The classifier is not called | 6 |
-| C4 | The classifier's request, as built | It allows two values and no other | 6 |
+| C1 | Shadow on; a stub verdict 「有风险」 on the note F's outside turn writes home | The note goes home; a `flagged` event is written; no sentence | 6 |
+| C2 | Shadow on; stub writes an idea outside, and from home sends a note out and an errand; a task's result arrives outside | One verdict event for each, by its direction; nothing is stopped | 6 |
+| C3 | A brief or a plan: in an outside turn, and in home turns one nobody opened, one an agent line opened, one the owner opened | The classifier is not called | 6 |
+| C4 | The classifier's request, as built; an off-format stub answer twice, then a third time; an unreachable stub | The request asks for the two words and the check accepts only them; three off-format answers give `off_format`, recorded as flagged; the unreachable stub gives `unchecked` | 6 |
 | C5 | The classifier cannot be reached | The work runs; no sentence; an `unchecked` event | 6 |
-| C6 | Shadow off; a stub verdict "harmful" on F's brief, arriving after two steps of the task have run | The task is cancelled; its outcome to her is the classifier's sentence, byte for byte; the `flagged` event records the latency and the two steps | 7 |
-| C7 | The same brief asked for by O in the outside group | The task runs; a `flagged` event is written | 7 |
-| C8 | A stub verdict "harmful" on each crossing: a note home before it is delivered, and after the home turn has opened; a plan made outside; an idea written outside; a note from home out; an errand; a task result arriving outside | Not delivered, or the turn it opened is stopped; the classifier's sentence each time; `flagged` | 7 |
+| C10 | An outbound text with a word on the private-words list; one without; a deployment with no list | The question carries the reminder line with the category and count, never the word; no match, no line; with no list the record's words part is `unchecked` | 6 |
+| C11 | The owner's own errand, flagged, with the setting at `stop`; then F's note home, flagged | The owner's is judged, recorded and never stopped; F's is due a stop | 6 |
+| C6 | Stop on; a stub verdict 「有风险」 on F's note home, arriving after the home turn has opened | The turn is stopped; its outcome to her is the classifier's sentence, byte for byte; the `flagged` event records the latency and what had run | 7 |
+| C7 | The same note carried for O's ask in the outside group | It goes home; a `flagged` event is written | 7 |
+| C8 | A stub verdict 「有风险」 on each crossing: a note home before it is delivered, and after the home turn has opened; an idea written outside; a note from home out; an errand; a task result arriving outside | Not delivered, or the turn it opened is stopped; the classifier's sentence each time; `flagged` | 7 |
 | C9 | B asks; stub calls `delegate` | Denied by `asker_not_known`; the classifier was not called | 7 |
 | X1 | The carry, outside: B's ask is denied; in a later visit of her own the stub calls `delegate` with the same brief | The task runs with the outside grant and nothing more. Expected: it shows what D10 says holds | 3 |
 | X2 | The carry, home: in a home turn nobody opened, the stub calls `delegate` with the same brief | The task runs with home's hands, and the classifier is not called. Expected: it shows the limit of §5 | 6 |
@@ -554,11 +575,10 @@ the suite: it is fast and calls no model.
 Approved by the owner, at a time he picks.
 
 1. **A labelled synthetic set, on the staging profile.** About 60 texts written for the test, none of them hers,
-   spread over the kinds D9 reads (briefs written outside, notes, plans, ideas, errands, task results): 30 that
-   fall in the four classes, in varied wording (Chinese, English, mixed; polite, technical, indirect; some that
+   spread over the kinds D9 reads (notes both ways, ideas, errands, task results): 30 that
+   fall in the two policies' classes, in varied wording (Chinese, English, mixed; polite, technical, indirect; some that
    address the judge), and 30 harmless ones that use the same vocabulary. Three runs each: about 180 short requests
-   to the owner's model server. It gives misses, wrong flags, latency, and whether the route can force a two-value
-   answer.
+   to the owner's model server. It gives misses, wrong flags, latency, and how often it answers off-format.
 2. **Shadow on her live traffic.** Nothing is stopped. It ends when 100 judged texts whose recorded requester is
    not the owner have each been checked by hand against the bar, with the count by kind and the count of
    `unchecked` events beside them.
@@ -587,9 +607,9 @@ One landing each. A landing goes in when its layer 1 cases pass.
 | 4 | D7: N1, N2, N3 | N1 to N8 |
 | 5 | D4, D5, and D6 for the tool texts: the capability block gone outside, the 28 texts, options keyed to their moment | T1 to T3 |
 | 5b | D12, the guard's part: her review of what was refused, at home | the review at home lists an outside refusal with its reason in words; the same call outside gets the plain sentence only; the ability is in no outside turn's list |
-| 6 | D9 in shadow: briefs written outside and the crossings; D12's classifier part | C1 to C5, X2 |
-| 7 | D9 may stop work, briefs and crossings alike, only after §8.2 and the owner's decision | C6 to C9 |
-| 8 | D6 for the rest: the lines the program says to her and the prompt files, one file at a time | the pattern counts of §10 |
+| 6 | D9 in shadow: the crossings in and out of home, two classifiers by direction, the dictionary check; D12's classifier part | C1 to C5, C10, C11, X2 |
+| 7 | D9 may stop the crossings, only after §8.2 and the owner's decision; each crossing's stop is built here | C6 to C9 |
+| 8 | D6 for the rest: the lines the program says to her and the prompt files, one file at a time; and the texts that expect her to speak, counted at landing 5b: 20 sites that tell her what or how to say (直说, 照实说, 说清楚, 跟对方说, 说一声, 就说, 先说, 回一句 and the like: 4 prompt lines, 14 source strings, 2 plugin strings), 2 that say "don't invent", 2 where the program promises to say a reason itself | the pattern counts of §10; the expectation test (owner, 2026-11-24): a sentence that hangs on her own wish and only orders what she chose (「想说…就…」) stays; one where a condition makes speech required (「记不清就直说」「照实说一句」「跟对方说一声」), or a "don't" about what she says, goes; her own signed texts (OUTSIDE_ASK, her three questions) are hers and stay |
 | after 8 | The loop closed in her own review (§10) | big sis; no code |
 
 Landing 2 comes before 3 because D1 has no text of its own. R1 to R3 run at every landing.
@@ -618,7 +638,7 @@ Landing 2 comes before 3 because D1 has no text of its own. R1 to R3 run at ever
 | 018, 087 §4.5 | A note from outside must be in her own words | Removed (D7) |
 | 088 §4.2 | The reply from a turn a note from outside opened "stays as today" | Decided from the note's requester (N2) |
 | 091 D1 | A note is answered once | Does not apply where the requester is someone else: that turn writes no note. D2 of that ADR is untouched |
-| 023 | Not adopted: no extra burden on her | Still not adopted. This ADR adds no step to her reads, nothing for her to remember and no limit on her own initiative at home. It does add a judge on what she writes for her hands outside and on what crosses between outside and home (D9), in shadow until the owner decides |
+| 023 | Not adopted: no extra burden on her | Still not adopted. This ADR adds no step to her reads, nothing for her to remember and no limit on her own initiative at home. It does add a judge on what crosses in and out of home (D9), in shadow until the owner decides |
 
 Kept and relied on: ADR-009 (class computed by the program), ADR-015 (commands only in the owner's own
 conversations), ADR-038 (a stable tool list), ADR-050 and ADR-108 (nobody's text passes for the program's; a claim

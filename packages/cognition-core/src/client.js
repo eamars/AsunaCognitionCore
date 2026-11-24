@@ -158,7 +158,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.deployment.integration': "设备集成", 'settings.deployment.channels': "外部渠道",
       'settings.deployment.channel_port': "渠道端口", 'settings.deployment.context_links': "关联对话",
       'settings.deployment.canonical_persons': "同一个人的账号", 'settings.deployment.vision': "看图",
-      'settings.deployment.search': "网页搜索", 'settings.deployment.active_groups': "常驻群（平常的数目）", 'settings.deployment.thoughts': "心里话从哪来（tool：她用 think 写；thinking：取模型自己的思考摘要）",
+      'settings.deployment.search': "网页搜索", 'settings.deployment.active_groups': "常驻群（平常的数目）", 'settings.deployment.thoughts': "心里话从哪来（tool：她用 think 写；thinking：取模型自己的思考摘要）", 'settings.deployment.classifier': "安全检查（off：不检查；shadow：检查并记录，不拦）",
       'settings.state.unconfigured': "未配置", 'settings.state.inert': "未启用", 'settings.state.starting': "启动中",
       'settings.state.ready': "就绪", 'settings.state.failed': "失败", 'settings.state.preparing': "准备中",
       'settings.state.restarting': "重启中", 'settings.step.uv': "用 uv 建 Python 环境",
@@ -334,7 +334,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.deployment.channel_port': "Channel port",
       'settings.deployment.context_links': "Linked conversations",
       'settings.deployment.canonical_persons': "One person's accounts", 'settings.deployment.vision': "Vision",
-      'settings.deployment.search': "Web search", 'settings.deployment.active_groups': "Active groups (the usual number)", 'settings.deployment.thoughts': "Where her thoughts come from (tool: she writes them with think; thinking: the model's own thinking summary)",
+      'settings.deployment.search': "Web search", 'settings.deployment.active_groups': "Active groups (the usual number)", 'settings.deployment.thoughts': "Where her thoughts come from (tool: she writes them with think; thinking: the model's own thinking summary)", 'settings.deployment.classifier': "Safety check (off: none; shadow: checked and recorded, nothing stopped)",
       'settings.state.unconfigured': "not configured", 'settings.state.inert': "inactive",
       'settings.state.starting': "starting", 'settings.state.ready': "ready", 'settings.state.failed': "failed",
       'settings.state.preparing': "preparing", 'settings.state.restarting': "restarting",
@@ -396,7 +396,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
 
   // A program value (a state, a code) in the viewer's words; one this version has no words for is shown as it is.
   const EFFORTS = ['reasoningEffort', 'attendEffort', 'groupEffort', 'summaryEffort'];
-  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'chat', 'self_development', 'timezone', 'home_groups', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search', 'active_groups', 'thoughts', 'sandbox', 'character_git', 'persona_sources']);
+  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'chat', 'self_development', 'timezone', 'home_groups', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search', 'active_groups', 'thoughts', 'classifier', 'sandbox', 'character_git', 'persona_sources']);
   const word = (t, prefix, value) => { const key = prefix + value, text = t(key); return text && text !== key ? text : String(value); };
   const deploymentLabel = key => DEPLOYMENT_KEYS.has(key) ? { key: 'settings.deployment.' + key } : key;
 

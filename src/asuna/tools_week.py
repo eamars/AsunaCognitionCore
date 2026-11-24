@@ -244,6 +244,8 @@ def _local_roots(store, persona, since, until):
                                   by=None).each(fields=['payload.sessions']):
         for item in (row.get('payload') or {}).get('sessions') or ():
             lane = item.get('lane')
+            if lane == 'classify':          # not her request: the safety check's (ADR-135 D9)
+                continue
             if lane in LANE_WORDS:
                 where = LANE_WORDS[lane]
             else:

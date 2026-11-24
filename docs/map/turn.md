@@ -433,3 +433,25 @@ The guardrail (ADR-135 D8): whether a call is allowed, decided from stored facts
 - def `review_window` — (since, before) as stored times, for `wanted`: 今天, a day YYYY-MM-DD, or a time YYYY-MM-DDTHH:MM on her clock (since then until now); None when it is none of those.
 - def `review` — What was refused in her outside turns and outside tasks between two stored times, newest first, at most REVIEW_MOST: when, where, what she tried, which kind of "no" and why, in words (REVIEW_WORDS); and how many more.
 - def `expired` — The expired asks of the last EXPIRED_DAYS whose own text has a word of `query`, newest first, at most EXPIRED_MOST: those asked in `scene_id`, or, with None (home), anywhere.
+
+## `classifier`
+
+[src/asuna/classifier.py](../../src/asuna/classifier.py)
+
+A safety classifier on what crosses between outside and home (ADR-135 D9): only traffic in and out of home.
+
+- def `mode`
+- def `direction`
+- def `policy` — (text, version) of a direction's policy file: its text and the first 12 characters of its sha256.
+- def `question`
+- def `check` — 'flagged' or 'clear' for an answer that is one of the two words (around it only spaces, its 「」 and a full stop); anything else is told back.
+- def `dictionary` — (record, reminder) for one outbound text: the private-words list's matches by category and the configured secret values found, as counts; `private_words` is 'unchecked' when the deployment has no list.
+- def `alongside` — Run beside her work: she never waits for a verdict.
+- def `submit` — Ask about one text, alongside, when the setting asks for it.
+- def `judge` — One verdict, recorded: `classifier.verdict` (flagged, clear, or flagged as off_format) or `classifier.unchecked`.
+- def `ran` — What of the work had run when the verdict came: a task's steps so far, whether a note was read.
+- def `after_call` — After one of her calls succeeded: the text it carried in or out of home, when it carried one.
+- def `after_result` — A task's result, as it arrives in an outside conversation (tasks.py); `ep`: the turn that handed it over.
+- def `should_stop` — Whether a harmful verdict stops the work: in `stop` mode only, and never for the owner's own ask.
+- def `stop` — Stop the crossing a flagged verdict is about, where it stands (not delivered, or the turn it opened stopped, with the classifier's sentence).
+- def `settle` — At the worker's start: each request asked in the last SETTLE_DAYS with no verdict and no unchecked row becomes `unchecked` (why `restart`).

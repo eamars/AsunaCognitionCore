@@ -110,6 +110,19 @@
         plugins:
           # One question per session: nothing to compact.
           - name: '@asuna/cognition-core/attend'
+    - id: asuna-classify-preset
+      name: '@asuna/cognition-core/preset'
+      config:
+        id: asuna-classify
+        names:
+          en: Safety check
+          zh: 安全检查
+        descriptions:
+          en: "Judges one text written outside, or crossing between outside and home, without tools"
+          zh: 判断一段在外面写的、或在外面和家里之间传的文字，不用工具
+        plugins:
+          # One question per session: nothing to compact.
+          - name: '@asuna/cognition-core/classify'
     # ADR-012 §8: DSH's own task page and session reminder catalog over the Schedule this plugin mounts, so
     # the owner sees her heartbeat and plans with their next run and delivery records. Only the page: the
     # optional schedule bundle's time context would add the browser's zone to her turns, including public ones.

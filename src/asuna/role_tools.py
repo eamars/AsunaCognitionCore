@@ -1746,7 +1746,17 @@ class RoleTools:
                      report=self.__dict__.pop('report', None), repairs=self.repairs,
                      parts=self.__dict__.pop('parts', None),
                      result=picture_receipt(result) if name == _READ_IMAGE['name'] else result)
+        self._classify(ep, can, args, result)
         return self._local(ep, result), conclude
+
+    def _classify(self, ep, can, args, result):
+        """ADR-135 D9: the text this call carried across, judged alongside; it never fails or holds up her call."""
+        from . import classifier
+        try:
+            classifier.after_call(self, ep, can, args, result)
+        except Exception as exc:
+            self.store.audit(ep['_id'], 'classifier.unchecked', {'tool': can, 'why': type(exc).__name__},
+                             ep['scope_key'])
 
     def _end_turn(self, ep, call_id, args):
         """ADR-131 D3: end_turn ends the turn. It is under the gate of what this turn may use (NOT_NOW: a consult and

@@ -101,6 +101,9 @@ def test_N3_a_note_for_her_own_account_after_someone_she_does_not_know_spoke(hom
     assert list(caught.value.codes) == ['asker_not_known']
     own = notes.get(home.store, note(home, ep, {'to': '家里', 'text': '造的：我自己记一下', 'for': notes.OWN}, 1)['note'])
     assert own['whose']['by'] == 'own' and 'line' not in own
+    at_home = home_turn(home, own)                         # it acts for her own ask, so it may write back
+    assert whose.of(home.store, at_home)['by'] == 'own' and guard.check(
+        home.store, at_home, 'note', {'to': places.place_id('g2'), 'text': '造的：知道了'}) is None
 
 
 def test_N5_from_outside_a_note_goes_home_only_and_no_other_conversation_is_named(home):

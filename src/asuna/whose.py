@@ -97,6 +97,10 @@ def of_turn(store, ep, event, steps=0):
         first = notes.opening_for(store, event)
         cls = visibility.session_class(store.config, store, _scene(store, scene_id), person_id)
         if notes.outside_class(store, {'episode_kind': kind, 'manifest': {'session_class': cls}}, first):
+            # The requester the note stored (ADR-135 N1), in the writer's place; a note from before that, the writer's.
+            kept = (first or {}).get('whose')
+            if kept and kept.get('scene_id') == (first or {}).get('from_scene')                     and not _private(store, kept['scene_id'], kept.get('person_id')):
+                return kept
             writer = episode_records.get(store, (first or {}).get('from_episode'))
             if not writer:
                 return None

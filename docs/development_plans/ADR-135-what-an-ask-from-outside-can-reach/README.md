@@ -1,6 +1,10 @@
 # ADR-135: What an ask from outside can reach
 
-Status: **Installed** 2026-11-24 19:13 (`571671890af6`): landings 1 to 9 installed, the classifier set to `stop`
+Status: **Closed** 2026-11-24 by the owner ("Closing both … close now, and note down didn't do"), with landings 1
+to 9 installed and the classifier at `stop`. **Not done:** §10's reading of the next 100 denials. 6 real denials
+had been read at the close, each with its code and each plain sentence one of D8's two constants; the other 94 were
+not waited for.
+Before: **Installed** 2026-11-24 19:13 (`571671890af6`): landings 1 to 9 installed, the classifier set to `stop`
 (18:39), her daily-review skill read and the findings told to her (§10). Open until §10's reading of the next 100
 denials. D6's counts read 2026-11-24 by §1.4's patterns (the part names, `_from_program`, 回合): 0 part names in the
 tool text, the prompt files and the source strings; the one 回合 left where she reads it (the heartbeat setting's

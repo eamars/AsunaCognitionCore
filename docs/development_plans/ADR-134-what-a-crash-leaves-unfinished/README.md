@@ -1,6 +1,10 @@
 # ADR-134: What a crash leaves unfinished
 
-Status: **Installed** 2026-11-23 16:05 (`99ea57d5429d`, §8), D5 installed 2026-11-24 18:01 (`45a2df01cd77`, §8); open until §5's reading after the next 10 Host stops.
+Status: **Closed** 2026-11-24 by the owner ("Closing both … close now, and note down didn't do"), with D1-D5
+installed. **Not done:** §5's reading after the next 10 Host stops, per start (12 stops had passed). Read instead,
+once, after D5's install: 0 episodes in `RESUMABLE` (big sis 18:02, her 0656). D5's own path (`ended_by`
+`TASK_CANCELLED:*`) had not yet run on real traffic: 0 rows at the close.
+Before: **Installed** 2026-11-23 16:05 (`99ea57d5429d`, §8), D5 installed 2026-11-24 18:01 (`45a2df01cd77`, §8); open until §5's reading after the next 10 Host stops.
 Before: **Proposed** 2026-11-23 by big sis (Claude Code), at the owner's word ("Yes please start", 2026-11-23 14:5x,
 after big sis proposed it as the one task of the day). Everything in §1 was read 2026-11-23 14:20-15:10 from the code
 on `main` (`7abb07feb935`) and from her profile, read-only: episode and input rows by state, kind and time only.

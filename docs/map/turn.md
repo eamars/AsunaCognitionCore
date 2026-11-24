@@ -421,6 +421,7 @@ The guardrail (ADR-135 D8): whether a call is allowed, decided from stored facts
 - def `authority` — The class her turn acts with (RoleTools._cls): home's on an errand, the origin's in a home turn a note from outside opened, else its conversation's.
 - def `place` — The class of the conversation her turn is in.
 - def `opened_from_outside` — The note from outside that opened this home turn ({} when it is gone), or None (RoleTools._outside).
+- def `from_outside` — The one test of a home turn opened from outside: `first`, the note that opened it ({} when it is gone), when that note came from outside; else None.
 - def `outside` — Whether her turn is an outside one: its conversation is outside, or a note from outside opened it at home.
 - def `task_outside` — Whether a task is an outside one: given in a conversation that is not one of the owner's own.
 - def `check` — (code, rule) when this call of hers is not allowed here and now, else None.

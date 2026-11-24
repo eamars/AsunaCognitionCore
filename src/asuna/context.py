@@ -769,9 +769,7 @@ class ContextBuilder:
             'available':bool(grant) and 'delegate' not in switched_off(self.store,{'scene_id':scene['_id']}),'route':'用 delegate 动手做事；补话、接着做或叫停用 task（message、stop）。文件、网页、沙箱、原话检索和看图都在动手时做。',
             'cancellation_available':True,
             'network':'动手时可以按需搜索公共网页并读取页面。',
-            'delivery':('程序自动执行委托，结果作为独立事件返回当前场景（外面托的写 for，结果回家里）；等待时仍可聊天。'
-                        if session_class==visibility.OWNER_PRIVATE else
-                        '程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。')}
+            'delivery':'程序自动执行委托，结果作为独立事件返回当前场景（外面托的写 for，结果回家里）；等待时仍可聊天。'}
         from .grants import for_whose
         from . import whose as _whose_of
         # ADR-111 §2.4: the development tools only where this turn's whose earns them.
@@ -784,9 +782,6 @@ class ContextBuilder:
             # What she cannot hand over, said as such (ADR-010 D5); never how the machine is set up.
             context['action_capabilities_from_program']['not_available']=(
                 '跑代码、改自己的能力、接管集成这几件事现在交不出去：没有可用的隔离环境。别答应要做这些。')
-        elif session_class!=visibility.OWNER_PRIVATE:
-            context['action_capabilities_from_program']['run_code']=(
-                '在这里动手，不能跑代码或命令；那只在主人那边做。')
         # ADR-098: the placeholders by name and meaning (never their values), and which this place hands over.
         from . import local_roots as _local_roots
         context['action_capabilities_from_program']['paths']=_local_roots.context_line(
@@ -1333,8 +1328,12 @@ class ContextBuilder:
             context['understanding_update_from_program']={
                 'available':True,'target':target_note,
                 'note':UNDERSTANDING_NOTE}
-        # What her hands can do is said at home only; outside the list is the statement (ADR-135 D4).
-        if session_class==visibility.OWNER_PRIVATE:
+        # What her hands can do is said at home only, never in a home turn a note from outside opened: outside the
+        # list is the statement (ADR-135 D4). The guard's own test of such a turn decides it.
+        from . import guard, notes
+        probe={'episode_kind':event.get('episode_kind','external'),'manifest':{'session_class':session_class}}
+        if session_class==visibility.OWNER_PRIVATE and guard.from_outside(
+                self.store,probe,notes.opening_for(self.store,event)) is None:
             self._capabilities(context,scene,event,session_class)
         if event.get('episode_kind')=='visit':
             # ADR-012 §4.2: nobody called her; the room as it is now, and what she came for. The person on the

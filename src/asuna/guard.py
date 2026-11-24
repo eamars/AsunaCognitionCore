@@ -56,7 +56,14 @@ def opened_from_outside(store, ep):
     from .role_tools import turn_kind
     if turn_kind(ep) not in ('note', 'visit') or not ep.get('_id'):
         return None
-    first = notes.opening(store, ep)
+    return from_outside(store, ep, notes.opening(store, ep))
+
+
+def from_outside(store, ep, first):
+    """The one test of a home turn opened from outside: `first`, the note that opened it ({} when it is gone), when
+    that note came from outside; else None. `ep` needs its kind and its class (`manifest.session_class`); the turn
+    being built (context.prepare) passes the note its event carries."""
+    from . import notes
     return (first or {}) if notes.outside_class(store, ep, first) else None
 
 

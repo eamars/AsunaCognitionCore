@@ -23,7 +23,7 @@ FIND_LIMIT = 10
 ROLES = ('owner', 'admin', 'member')
 ROLE_WORDS = {'owner': '群主', 'admin': '管理员'}
 BLOCK_NOTE = ('这个群的成员名单（程序定时从平台拉的，不是谁都跟你说过话）。这里只列一部分：你在这里认识的人、最近说过话的、'
-              '刚被 @ 过的；带标签的可以照抄标签 @ 他。找名单里别的人用 find_member，它给的也是标签。')
+              '刚被 @ 过的；带标签的可以照抄标签 @ 这个人。找名单里别的人用 find_member，它给的也是标签。')
 # Her own row in the list (the account her channel speaks with here): her names here, never a member to @.
 YOU_HERE = '你自己在这个群里的号：%s；你的发言在这里标作「%s」。'
 FIND_YOU = '这是你自己（%s）。'
@@ -150,7 +150,7 @@ def _active(member, moment):
     """When they last spoke, as a timestamp field (shown on the local clock), or that nobody saw them speak."""
     sent = member.get('last_sent_time')
     if not sent:
-        return {'active': '没见他说过话'}
+        return {'active': '没见说过话'}
     return {'last_spoke_at': datetime.fromtimestamp(sent, timezone.utc).isoformat(timespec='seconds')}
 
 

@@ -633,11 +633,11 @@ class ScheduleService:
         _, route, channel = found
         done = places.errands_lately(self.store, clock.now())
         if done >= places.ERRANDS_PER_DAY:
-            raise ValueError('ERRAND_LIMIT: 最近一天已经跑了 %d 趟，上限 %d 趟；跟托你的人说明天再办'
+            raise ValueError('ERRAND_LIMIT: 最近一天已经跑了 %d 趟，上限 %d 趟；明天才能再办'
                              % (done, places.ERRANDS_PER_DAY))
         person = places.visitor(route, channel)
         if not person:
-            raise ValueError('ERRAND_PLACE_UNKNOWN: 「%s」那边没有可以接待你的成员授权（不是你的错），这趟去不了；跟托你的人说清楚' % place)
+            raise ValueError('ERRAND_PLACE_UNKNOWN: 「%s」那边没有可以接待你的成员授权（不是你的错），这趟去不了' % place)
         from . import outbound_media
         if artifact_id and artifact_id not in {item['artifact_id'] for item in outbound_media.produced_images(self.store, limit=50)}:
             raise ValueError('ERRAND_PICTURE_NOT_HERS: 「%s」不是你自己做的图；照抄 image_artifacts_from_program 或 your_pictures_from_program 里的，或不带图'

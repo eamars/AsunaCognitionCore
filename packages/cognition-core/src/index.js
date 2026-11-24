@@ -141,7 +141,7 @@ const notDone = text => ({ isError: true, error: { message: text }, content: [{ 
 // A tool's own refusal comes back from the worker written for the brain that called it. A lost connection
 // (the worker exited or is restarting) is not, and its text names this machine's files: say what it means instead.
 const WORKER_DOWN = 'ASUNA_WORKER_UNAVAILABLE: 处理工具的后台进程这会儿断开了（它会自己重启），这次调用没有完成——不是参数的问题；'
-  + '这回合别再重试，没做成的事照实说（行动里写进报告）';
+  + '这一次再试也一样：这一步没有做成。';
 async function toolReply(call) {
   try { return await call(); } catch (error) { throw error?.reply ? error : new Error(WORKER_DOWN); }
 }
@@ -1441,7 +1441,7 @@ export class CognitionCore {
       const usable = [...exposed].join('、') || '（没有）';
       return lane === 'character' ? `这个对话里没有 ${exec.name} 这个工具；有的是：${usable}。用其中一个，或者不用工具接着说。`
         : this.state(exec.agent.session.id).refusals?.[exec.name]
-          ?? `CAPABILITY_DENIED: 这个任务没有 ${exec.name}：这件任务交的时候没给它。不是参数的问题，重试也一样：要用它就在报告里写明，让说话的那一半在给它的地方另交一件。`;
+          ?? `CAPABILITY_DENIED: 这个任务没有 ${exec.name}：这件任务交的时候没给它。不是参数的问题，重试也一样：要用它就在报告里写明，回到对话时在给它的地方另交一件。`;
     });
     scope.on('tools/pre-execute', async (exec, next) => {
       exec.signal.throwIfAborted();

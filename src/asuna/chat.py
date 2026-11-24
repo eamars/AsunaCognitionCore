@@ -476,7 +476,7 @@ class Chat:
                     self._schedule(task_id)
                 if result['state'] == 'FAILED_PROTOCOL':
                     # Her turn failed its check; it is told to her and the developer where it ended (ADR-128 D3).
-                    self.emit(f"[系统] 她这一回合没跑成，状态：{result['state']}。请展开本轮执行详情查看原始过程。")
+                    self.emit(f"[系统] 这一次没跑成，状态：{result['state']}。请展开本轮执行详情查看原始过程。")
                 elif not ready and result.get('silent_reason'):
                     self.emit('[系统] 角色明确选择本轮不发言；请查看本轮执行详情中的原因。')
                 elif not ready and not messages:

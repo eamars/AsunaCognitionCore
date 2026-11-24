@@ -70,7 +70,7 @@ ASKED = '问出去了：答了没有、到几点不等，看 questions_from_prog
 CLOSED_TOOK = {'answered': '程序收的：都有了结果，有回答', 'unanswered': '程序收的：没有回答',
                'open': '程序收的：问出去一周了还没回音'}
 MIGRATED_TOOK = '从开发者留言箱搬过来的'
-THANKS = '答你的有：%s。想谢谢他们、或告诉他们后来怎样，由你。'
+THANKS = '答你的有：%s。想谢谢这些人、或告诉这些人后来怎样，由你。'
 NOBODY = '这个问题没人答。'
 RETAKEN = '这个问题早就结束了；took 换成了你这次写的（原来是「%s」）。'
 KEEP_HINT = ('要记下学到的：别人告诉你的，写的时候 from 写 别人说的；你自己的判断被回答证实了，用 replace_section '

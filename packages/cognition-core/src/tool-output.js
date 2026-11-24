@@ -17,8 +17,7 @@ export async function attachImage(ctx, value) {
   // A result is JSON: the inline bytes are dropped, never set to undefined, so the reason reaches her.
   const { image: _bytes, ...rest } = value;
   const unseen = reason => ({ ...rest, visual: `unavailable:${reason}`,
-    note: `图拉到了，但没能成为这回合能看的附件（${reason}）：这回合看不到它，用同一个 ref 重试也一样；`
-      + '要么不看这张图继续，要么照实说没看到（行动里写进报告）。' });
+    note: `图拉到了，但没能成为这一次能看的附件（${reason}）：这一次看不到它，用同一个 ref 重试也一样。` });
   if (typeof ctx.attachments?.saveImage !== 'function') return unseen('ATTACHMENT_SERVICE_MISSING');
   try {
     const image = await ctx.attachments.saveImage({

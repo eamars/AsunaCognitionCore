@@ -470,7 +470,7 @@ export class PublicationFloor {
     // An unattended self-improvement turn never stacks a change on one that has not run yet (ADR-021 D4).
     if (origin.unattended && (await this.selected()).projects?.[project.id]?.state === 'HOST_RESTART_REQUIRED')
       throw new Error(`DEVELOPMENT_PUBLISH_WAITING_RESTART: 项目 ${project.id} 上一次发布的改动还在等宿主重启，`
-        + '重启前没人在场的自我开发回合不能再往它发布，免得没验过的改动叠上去；重试也一样：这次改动留在候选里，'
+        + '重启前，没人在场时的自我开发不能再往它发布，免得没验过的改动叠上去；重试也一样：这次改动留在候选里，'
         + '这一段做别的项目或只读检查，重启生效、验过以后再发布');
     // The reason becomes the commit message of a public repository: nothing on her list and no number shaped like
     // a QQ or group number goes into it. Refused before anything is frozen, packed or selected. (Where the publication

@@ -26,9 +26,9 @@ from .config import echoed
 
 PERSON_SCOPE = 'person'
 NO_PERSON = '你还没写过这个人在哪儿都成立的那一层。'
-NO_HERE = '你还没写过他在这里是什么样。'
-PART = '这只是他的一部分，不是他的全部'
-PART_ELSEWHERE = '；你在另外 %d 个对话里还各有一份他在那儿的样子，这里看不到'
+NO_HERE = '你还没写过这个人在这里是什么样。'
+PART = '这只是这个人的一部分，不是全部'
+PART_ELSEWHERE = '；你在另外 %d 个对话里还各有一份这个人在那儿的样子，这里看不到'
 ASK = ('写之前当场问自己三句：① 这条换个群还成立吗？成立才写进 person（人那层），不成立写 here（这里那层）。'
        '② 这条在一个正经的场合说出口，当事人会不会不舒服？会就别进人那层，留在这里那层。'
        '③ 这条是他说的、你看到的，还是你推的？推的标明是推的。人那层不是他的全部。')
@@ -197,7 +197,7 @@ def _name(store, people, person):
 # 「名单」 grows with everyone she writes: the newest that fit, then how many earlier ones there are (B15: a listing
 # with no bound runs past what a tool result carries inline).
 LISTED_CHARS = 8000
-EARLIER_PEOPLE = '还有 %d 个人是更早写的，没列出（共 %d 个）：要看谁，recall 的 person 写他的标签。'
+EARLIER_PEOPLE = '还有 %d 个人是更早写的，没列出（共 %d 个）：要看谁，recall 的 person 写这个人的标签。'
 
 
 def listing(store, persona, limit=None):
@@ -285,4 +285,4 @@ def resolve(store, ep, scene, value, persona, home=False, for_read=False):
             return rows[0]['person']
         raise Unknown('「%s」%s：照抄「名单」里的名字（recall 的 person 写「名单」看）。'
                       % (echoed(text), '指的不止一个人' if rows else '不在名单上'))
-    raise Unknown('这里只有跟你说话的这个人，person 不写就是他。')
+    raise Unknown('这里只有跟你说话的这个人，person 不写就是这个人。')

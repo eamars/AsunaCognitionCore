@@ -16,7 +16,7 @@ import { isAgentLoopRequest, markAgentLoopRequest } from '@deepseek-ai/dsh-llm';
 /** Her lanes (index.js laneOf): whatever the model reads there is hers. */
 export const HER_LANES = new Set(['character', 'attend', 'classify', 'appraiser', 'summary']);
 export const MISSING = 'ASUNA_ROOT_TABLE_MISSING';
-const MISSING_TEXT = MISSING + ': 程序没有拿到本机路径表，这一回合没有发给模型（不是你的错）；已经报给开发者了，'
+const MISSING_TEXT = MISSING + ': 程序没有拿到本机路径表，这一次没有发给模型（不是你的错）；已经报给开发者了，'
   + '重试也一样，等程序修好';
 const DONE = Symbol('asuna.roots');
 const WRAPPED = Symbol('asuna.roots.fs');

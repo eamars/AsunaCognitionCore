@@ -142,7 +142,7 @@ UNDERSTANDING_NOTE = ('有值得留下的理解变化时，用 understand_person
                       '同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 about_current_speaker '
                       '说有当前说话人自己的话的摘要，才会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。')
 MEMORY_SOURCE_RULES = ('reported_speech 是那个人说过的话，不是核实过的事实；同一人的原话按 scene_seq 从旧到新排，'
-                       '他自己的东西、喜好和更正以他较新的明确说法为准。public_statement 只证明说过，答应不等于做到；'
+                       '这个人自己的东西、喜好和更正，以这个人较新的明确说法为准。public_statement 只证明说过，答应不等于做到；'
                        'character_interpretation 是你当时的理解或猜测。旧说法再出现不推翻已有的更正；旧记录是历史，再想起它不是新经历。'
                        'derived_summary 是程序从一段原文整理的摘要：source_window 是它覆盖的 scene_seq 范围，'
                        'source_event_ids 能回读原文；它只证明那段里说过什么，和同一人较新的明确说法冲突时以说法为准，'
@@ -1250,7 +1250,7 @@ class ContextBuilder:
             elif group.get('wake_reason') == 'awaited_answer':
                 # Her last line here @-ed this person or answered them (channels.awaited_answer); her words, 0495.
                 continuity['awaited_from_program'] = {
-                    'note': '你上一句 @ 了他或是在回他；这句没 @ 你也没引用你，是不是在回你由你判断。'}
+                    'note': '你上一句 @ 了这个人，或是在回这个人；这句没 @ 你也没引用你，是不是在回你由你判断。'}
             context['group_continuity_from_program'] = continuity
 
     def _tools(self, f):
@@ -1306,9 +1306,9 @@ class ContextBuilder:
         if doc_refs:context['doc_refs_from_program']=doc_refs
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'person_revision':person_head[0]['revision_id'] if person_head else None,'person_entity_key':person_entity+'|'+_understanding.PERSON_SCOPE,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[key for m in memories for key in m.get('joined_ids') or [m['_id']]],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         if shown_stops:manifest.setdefault('told',{})['host_stops']=shown_stops
-        target_note=('只更新对当前说话人的理解：layer=person 写人那层（你在哪儿遇到他都看得到），layer=here 写这里那层'
+        target_note=('只更新对当前说话人的理解：layer=person 写人那层（你在哪儿遇到这个人都看得到），layer=here 写这里那层'
                      + ('（只在这个对话里看得到）' if not target['shared'] else
-                        '（配置认定他与另一个入口是同一个人，这里那层共用 %s 那一份）' % target['scope'])
+                        '（配置认定这个人与另一个入口是同一个人，这里那层共用 %s 那一份）' % target['scope'])
                      + '；不修改全局人格或权限。' + _understanding.ASK)
         if scene['kind']=='group':
             # ADR-082: a group is read by people. The person who starts the turn (and whoever's @ or reply to her waits

@@ -68,8 +68,8 @@ def _error_detail(body):
 
 
 # What to do when no retry can bring this picture back (both brains read it).
-GIVE_UP = '重试也一样：不看这张，照实说没看到'
-TRY_LATER = '可以过一会儿再试一次；还不行就不看这张，照实说没看到'
+GIVE_UP = '重试也一样：这张看不了'
+TRY_LATER = '可以过一会儿再试一次；还不行，这张就看不了'
 
 
 def _too_large(cap):

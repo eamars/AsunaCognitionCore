@@ -115,7 +115,7 @@ class MemoryService:
         entity=person_entity(self.store.config,self.store,person_id)
         key=entity+'|'+PERSON_SCOPE if base is not None else episode['manifest'].get('person_entity_key')
         if key!=entity+'|'+PERSON_SCOPE:
-            raise Denied('UNDERSTANDING_PERSON_NOT_IN_CONTEXT: 这回合没给你看他的人那层（不是你的错）；重试也一样，下回合再写')
+            raise Denied('UNDERSTANDING_PERSON_NOT_IN_CONTEXT: 这一次没给你看这个人的人那层（不是你的错）；重试也一样，下次再写')
         base_id=(base or {}).get('person') if base is not None else episode['manifest'].get('person_revision')
         found=head_records.revision(self.store,base_id,entity=key) if base_id else None
         if base_id and not found:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')

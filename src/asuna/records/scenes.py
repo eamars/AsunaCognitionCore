@@ -10,7 +10,7 @@ from ..store.words import AnyOf, Exists, Increase, Larger, Not, Set, Unset
 from .view import ANY, pinned
 
 COLLECTION = 'scenes'
-MEMBERSHIP_DENIED = 'SCENE_MEMBERSHIP_DENIED: 这个人不在这个对话的成员里（或对话已经不在），这一步不能代他做；重试也一样'
+MEMBERSHIP_DENIED = 'SCENE_MEMBERSHIP_DENIED: 这个人不在这个对话的成员里（或对话已经不在），这一步不能代这个人做；重试也一样'
 
 
 def _rows(store):

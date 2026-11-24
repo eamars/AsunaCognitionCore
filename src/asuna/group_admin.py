@@ -103,10 +103,10 @@ def queue(store, ep, index, item, key=None, ready=None):
     if len(found) != 1:
         raise Denied('GROUP_ACTION_TARGET_UNCLEAR: 「%s」对得上 %s；who 用标签里的 #编号' % (
             echoed(item.get('who')), '、'.join(people.label(d) for d in found[:5])) if found else
-            'GROUP_ACTION_TARGET_NOT_FOUND: 这个群里找不到「%s」；who 照抄他的标签，如 [名字 #4] 或 #4' % echoed(item.get('who')))
+            'GROUP_ACTION_TARGET_NOT_FOUND: 这个群里找不到「%s」；who 照抄这个人的标签，如 [名字 #4] 或 #4' % echoed(item.get('who')))
     doc = found[0]
     if doc.get('person') == people.self_id or people.is_owner(doc):
-        raise Denied('GROUP_ACTION_TARGET_PROTECTED: %s 是主人或你自己，管理动作不能对他用；重试也一样' % people.label(doc))
+        raise Denied('GROUP_ACTION_TARGET_PROTECTED: %s 是主人或你自己，管理动作不能对这个人用；重试也一样' % people.label(doc))
     if doc.get('role') in ('owner', 'admin'):
         raise Denied('GROUP_ACTION_TARGET_IS_ADMIN: %s 是%s，只能动普通成员；重试也一样'
                      % (people.label(doc), ROLE_WORDS[doc['role']]))

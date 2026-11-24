@@ -242,8 +242,7 @@ def require_current_feedback(store, episode):
             or (task['scene_id'], task['requester_id'], task['scope_key'], task['policy_epoch']) !=
                (episode['scene_id'], episode['person_id'], episode['scope_key'], episode['policy_epoch'])
             or scene['policy_epoch'] != episode['policy_epoch']):
-        raise FeedbackStale('FEEDBACK_TASK_STALE: 这回合依据的那件事已经变了（被叫停、暂停或改过交代），不是你出错；重试也一样：'
-                            '把现在的情况照实说给对方')
+        raise FeedbackStale('FEEDBACK_TASK_STALE: 这一次依据的那件事已经变了（被叫停、暂停或改过交代），不是你出错；重试也一样。')
 
 # ADR-011 §4: the action brain's two ways to reach her. ask_character waits for her answer; report_progress
 # only leaves a note she reads on her next turn (and it shows in their thread).

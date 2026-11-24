@@ -29,13 +29,13 @@ WATCH_MAX = 5
 WATCH_MAX_HOURS = 72
 WATCH_QUIET_MINUTES = 10
 MODES = ('once', 'burst')
-MODE_WORDS = {'once': '他第一次说话时叫你，然后就不盯了',
-              'burst': '他每次沉默十分钟以上再开口都叫你，到期为止'}
+MODE_WORDS = {'once': '这个人第一次说话时叫你，然后就不盯了',
+              'burst': '这个人每次沉默十分钟以上再开口都叫你，到期为止'}
 LEFT_WORDS = ((1, '不到一小时'), (6, '几个小时'), (24, '今天之内'), (None, '一天以上'))
 APPEARED_WORDS = ((1, '一次也没出现'), (2, '出现过一次'), (3, '出现过两次'), (None, '出现过好几次'))
-WATCHING_NOTE = ('这是你在盯着的人（watch）：他在你任何一个对话里说话，你会在那个对话里知道。'
+WATCHING_NOTE = ('这是你在盯着的人（watch）：这个人在你任何一个对话里说话，你会在那个对话里知道。'
                  '不想盯了用 watch 的 off（id 照抄）；到期会自己停。')
-WATCHED_NOTE = ('你在盯着这个人（watch），他刚在这里说话了；这句不一定是对你说的，接不接由你。'
+WATCHED_NOTE = ('你在盯着这个人（watch），这个人刚在这里说话了；这句不一定是对你说的，接不接由你。'
                 '这是名单上的人出现了，跟你刚那句在不在等回话（awaited_from_program）是两回事。')
 
 
@@ -204,7 +204,7 @@ def watching_block(store, persona, cls, moment):
     for row in rows:
         until = _at(row['until'])
         if until and until <= moment:
-            ended.append({'who': row['name'], 'ended': '到期了，盯着的这段时间他' + _tier(APPEARED_WORDS, row.get('appeared') or 0)})
+            ended.append({'who': row['name'], 'ended': '到期了，盯着的这段时间这个人' + _tier(APPEARED_WORDS, row.get('appeared') or 0)})
             save(store, {**row, 'state': 'ended', 'ended_at': now()}, expected=row['revision'],
                  stream='watches:' + persona)
             continue

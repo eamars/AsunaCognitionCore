@@ -107,6 +107,12 @@ scope_key 那一格在不在（scope 字面值从 `scenes` 读、`source` 前缀
 写成「两枪都有」「都会加」这一类全称句就红（black_border_no_universal_claim），把那句现象口径删掉也红
 （black_border_phenomenon_wording）。限定在黑边族所在那一格——讲色温、指头数的那些「两枪」不在这一族，不许连坐。
 
+2026-11-25 起「edit／改图通路读数」那一节进判据面（此前该节标题不在任何切片名单里，11-19 那条账自己写着）：
+节标题进 SECTIONS，节内 13 条字面押在该节切片上——尺寸锁源取 32 倍（两枚实例并排：11-07 与 11-22）、
+小特征下限 ≈8～10 px 与「预留本地像素贴那一手」、这类单默认按两趟排、「只改一处」是愿望不是保证与逐样回话、
+软不软要按解码像素量、源件真实格式看解码不看文件名、投递面不许先答应发私聊、交回契约指向「只画一次」⑨。
+一枚钉只钉得住那半句字面，同一格其余字面被删不红。
+
 不联网、不调生图服务、不生成图、不写 Mongo、不发 QQ。
 
 用法：
@@ -269,6 +275,26 @@ EDIT = [
     ("edit_no_burn_backtoback", "别连烧"),
 ]
 
+# 「edit／改图通路读数」这一族（2026-11-25 起）。这一节此前不在任何切片判据面里
+# （CHANGELOG 11-19 那条自己写着「该节标题不在任何切片判据的名单里」），11-25 新写的几格先配钉：
+# 一枚钉只钉得住那半句字面，同一格其余字面被删不红。
+EDIT_READOUT_HEADING = "## edit／改图通路读数"
+EDIT_READOUT = [
+    ("pin_edit_readout_size_rule", "输出尺寸锁源尺寸、按 32 的倍数取整"),
+    ("pin_edit_readout_size_two_instances", "同一条规矩，两枚实例"),
+    ("pin_edit_readout_size_instance_1122", "822×1200 → 832×1216"),
+    ("pin_edit_readout_small_feature_floor", "小特征的尺寸控不住"),
+    ("pin_edit_readout_pixel_floor", "≈8～10 px"),
+    ("pin_edit_readout_local_pixel_paste", "预留本地像素贴那一手"),
+    ("pin_edit_readout_two_pass_default", "默认按两趟排"),
+    ("pin_edit_readout_one_change_not_guaranteed", "「只改一处」是愿望不是保证"),
+    ("pin_edit_readout_report_locked_items", "纸上点名保住的每一样还在不在"),
+    ("pin_edit_readout_measure_softness_first", "按解码后的像素量过再说"),
+    ("pin_edit_readout_format_by_decode", "源件真实格式看解码，不看文件名"),
+    ("pin_edit_readout_no_dm_promise", "不许先答应「好了发你私聊」"),
+    ("pin_edit_readout_points_to_once_contract", "指向「只画一次」⑨"),
+]
+
 # 往群里发图之前的自检：这一节必须在，四条要点必须都在这一节里（不是正文随便哪处）。
 # 只在这一节的范围内查——正文别处合法提到历史口径（版本段引用「不发群」旧边界、
 # 试用记录里的旧句子）不算缺，也不算多。
@@ -326,6 +352,7 @@ SECTIONS = [
     "## 人像实测：构图决定拉链、自拍别指望手机、交图前放大复核",
     "## 只画一次（一单一画，崩了不修）",   # 2026-11-06 新增：一单一画、崩了不修
     "## 直路速查：loras／pose／poses",       # 2026-11-23 新增：追加在末尾，老编号不动（与下面 QUICK_HEADING 同字）
+    "## edit／改图通路读数",   # 2026-11-25 新增：追加在末尾，老编号不动
 ]
 
 # 已经过期的说法：出站图片能力上线后、DECIDE 退役后不能再这么写（只看散文，反引号里的引用不算）
@@ -997,6 +1024,14 @@ def main():
     check("quick_section_present", bool(quick_slice), "「直路速查」一节切不出正文（标题被改或删）")
     for name, token in QUICK:
         check(name, token in quick_slice, "「%s」不在「直路速查」这一节里（切片 %d 字）" % (token, len(quick_slice)))
+
+    # edit／改图通路读数（2026-11-25）：标题被删 → 切片为空 → 下面几条一起红：切片为空不等于查过。
+    edit_readout = section_slice(body, EDIT_READOUT_HEADING)
+    check("edit_readout_section_present", bool(edit_readout),
+          "「edit／改图通路读数」一节切不出正文（标题被改或删）")
+    for name, token in EDIT_READOUT:
+        check(name, token in edit_readout,
+              "「%s」不在「edit／改图通路读数」这一节里（切片 %d 字）" % (token, len(edit_readout)))
     check("description_mentions_loras_and_poses", "loras" in desc and "poses" in desc,
           "frontmatter description 没提 loras／poses（工具面 11-23 起直接收）")
 

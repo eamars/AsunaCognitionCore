@@ -451,12 +451,12 @@ A safety classifier on what crosses between outside and home (ADR-135 D9): only 
 - def `alongside` — Run beside her work: she never waits for a verdict.
 - def `submit` — Ask about one text, alongside, when the setting asks for it.
 - def `judge` — One verdict, recorded: `classifier.verdict` (flagged, clear, or flagged as off_format) or `classifier.unchecked`.
-- def `ran` — What of the work had run when the verdict came: a task's steps so far, whether a note was read.
+- def `ran` — What of the work had run when the verdict came: a task's steps so far, whether a note was read, and how many lines the turn the crossing opened has said (`spoken`).
 - def `after_call` — After one of her calls succeeded: the text it carried in or out of home, when it carried one.
 - def `result_text` — What a result says, without its stored keys and ids: the judge reads only that.
 - def `after_result` — A task's result, as it arrives in an outside conversation (tasks.py); `ep`: the turn that handed it over.
 - def `should_stop` — Whether a harmful verdict stops the work: in `stop` mode only, and never for the owner's own ask.
 - def `turn_of` — The id of the turn a crossing opens (it may not exist yet), or None when it opens none.
-- def `stop` — Hold the crossing a flagged verdict is about, where it stands: STOPPED when something was held in time, TOO_LATE when the work had already been done (nothing is stopped then, and nothing is said).
+- def `stop` — Hold the crossing a flagged verdict is about, where it stands: STOPPED when something was held in time, TOO_LATE when the work had already been done (nothing is stopped then, and nothing is said), or when an outbound crossing's turn had alr
 - def `held` — The mark when this turn was opened by a crossing the classifier held (its input row, the note that opened it, or the task whose result it carries), else None.
 - def `settle` — At the worker's start: each request asked in the last SETTLE_DAYS with no verdict and no unchecked row becomes `unchecked` (why `restart`).

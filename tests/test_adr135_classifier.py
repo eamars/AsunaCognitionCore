@@ -211,7 +211,7 @@ def test_the_owner_s_own_errand_is_judged_and_recorded_and_never_stopped(judged,
     store = judged.store
     store.config['classifier'] = 'stop'
     stopped = []
-    monkeypatch.setattr(classifier, 'stop', lambda store, kind, ref, request=None: stopped.append(kind))
+    monkeypatch.setattr(classifier, 'stop', lambda store, kind, ref, request=None, **_: stopped.append(kind))
     judged.lane.answers = ['有风险', '有风险']
     errand(judged, 'own', '造的：替%s问一句' % WORD)
     [verdict] = events(store, 'classifier.verdict')

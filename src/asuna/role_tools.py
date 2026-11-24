@@ -3864,11 +3864,15 @@ class RoleTools:
         place = self._as_place(ep)          # a turn a note from outside opened reads the tasks of where it came from
         fence = {} if home else {'scene': place['scene_id'], 'scope': place['scope_key'],
                                  'epoch': place['policy_epoch']}
-        task = task_records.get(self.store, task_id, ['result.text', 'title', 'goal', 'intent_revision'], **fence)
+        task = task_records.get(self.store, task_id, ['result.text', 'title', 'goal', 'intent_revision',
+                                                      'classifier_held'], **fence)
         if not task:
             raise Refused('「%s」不是%s的任务；task 照抄交回来的结果里的 task，或你手上的事里的 id。%s'
                           % (echoed(task_id), '你' if home else '这个对话里', refs_usable([ep.get('task_id'), *self._listed_tasks(ep)])),
                           ['TASK_UNKNOWN'])
+        if task.get('classifier_held') and not home:
+            from . import guard
+            raise Refused(guard.HARMFUL, ['flagged'])            # ADR-135 D9: a held result is not read outside
         text = (task.get('result') or {}).get('text')
         if not isinstance(text, str) or not text:
             raise Refused('这个任务还没有报告：它还在跑，或者没交回文字。', ['TASK_NO_REPORT'])

@@ -91,6 +91,9 @@ def status_words(task, continued_by=None):
     """What she reads about one task: where its run and its result stand. `continued_by`: the task that carried
     this one on, which is the one to go by."""
     state = task.get('state')
+    if task.get('classifier_held'):
+        from .guard import HARMFUL
+        return HARMFUL                       # ADR-135 D9: its result was held, never shown
     if continued_by and state not in ('READY', 'RUNNING'):
         return '后来接着做了一趟，以 %s 那条为准' % continued_by
     if state == 'READY':

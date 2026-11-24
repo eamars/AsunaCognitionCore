@@ -195,10 +195,14 @@ def judge(store, lane, ep, kind, text, asked, stream, reminder=None):
         return _unchecked(store, stream, ep, common, type(exc).__name__)
     latency = round(time.monotonic() - started, 3)
     done = ran(store, kind, asked['ref'])
-    outcome = stop(store, kind, asked['ref'], asked['request']) \
-        if verdict == 'flagged' and should_stop(store, asked['owner_asked']) else None
+    outcome = failed = None
+    if verdict == 'flagged' and should_stop(store, asked['owner_asked']):
+        try:
+            outcome = stop(store, kind, asked['ref'], asked['request'], spoken=done.get('spoken', 0))
+        except Exception as exc:            # the verdict is recorded whatever the hold did
+            failed = type(exc).__name__
     row = {**common, 'verdict': verdict, 'code': code, 'latency_s': latency, 'ran': done,
-           **({outcome: True} if outcome else {})}
+           **({outcome: True} if outcome else {}), **({'hold_failed': failed} if failed else {})}
     store.audit(stream, 'classifier.verdict', row, ep['scope_key'])
     return row
 
@@ -216,14 +220,20 @@ def _binding(store, ep):
 
 
 def ran(store, kind, ref):
-    """What of the work had run when the verdict came: a task's steps so far, whether a note was read."""
+    """What of the work had run when the verdict came: a task's steps so far, whether a note was read, and how many
+    lines the turn the crossing opened has said (`spoken`)."""
     from . import audit
+    done = {}
     if ref.get('task'):
-        return {'steps': audit.events(store, 'tool.time', stream=ref['task']).count()}
+        done['steps'] = audit.events(store, 'tool.time', stream=ref['task']).count()
     if ref.get('note'):
         from . import notes
-        return {'read': bool((notes.get(store, ref['note'], fields=['seen_in']) or {}).get('seen_in'))}
-    return {}
+        done['read'] = bool((notes.get(store, ref['note'], fields=['seen_in']) or {}).get('seen_in'))
+    turn = turn_of(store, kind, ref)
+    if turn:
+        from .records import messages as message_records
+        done['spoken'] = message_records.turn_parts(store, turn, outbound=True).count()
+    return done
 
 
 # ── what is judged: her calls, and a task's result shown outside ──
@@ -299,11 +309,14 @@ def turn_of(store, kind, ref):
     if kind == 'errand' and ref.get('event_id'):
         return episode_id({'scene_id': ref['scene_id'], 'event_id': ref['event_id'], 'episode_kind': 'visit'})
     if kind == 'result' and ref.get('task'):
+        from .records import episodes as episode_records
         from .records import tasks as task_records
         task = task_records.get(store, ref['task']) or {}
         if task:
-            return episode_id({'scene_id': task['scene_id'], 'event_id': handover.result_event_id(task),
-                               'episode_kind': 'task_feedback'})
+            ids = [episode_id({'scene_id': task['scene_id'], 'event_id': handover.result_event_id(task, short),
+                               'episode_kind': 'task_feedback'}) for short in (False, True)]
+            # a short hand-back after a full one that failed has a turn of its own
+            return next((ep_id for ep_id in ids if episode_records.get(store, ep_id, fields=['_id'])), ids[0])
     return None
 
 
@@ -315,15 +328,49 @@ def _finished(store, ep_id):
 
 
 def _mark(store, collection_get, collection_save, row_id, mark, stream):
-    row = collection_get(store, row_id)
-    if row and not row.get(HOLD):
-        collection_save(store, {**row, HOLD: mark}, expected=row.get('revision'), stream=stream)
-    return row
+    """The mark on one row, read fresh; tried again once when the row moved under it (the chat loop writes an input
+    row while its turn runs)."""
+    from .state import Conflict
+    for attempt in range(2):
+        row = collection_get(store, row_id)
+        if not row or row.get(HOLD):
+            return row
+        try:
+            return collection_save(store, {**row, HOLD: mark}, expected=row.get('revision'), stream=stream)
+        except Conflict:
+            if attempt:
+                raise
+    return None
 
 
-def stop(store, kind, ref, request=None):
+OUTBOUND_TURNS = ('note_out', 'errand', 'result')     # a turn that speaks outside: what it said cannot be unsaid
+
+
+def _cancel_tasks(store, turn):
+    """The tasks a held turn started that are still ready or running, cancelled as her stop would (ADR-134 D5 ends
+    their consult and time-up turns too)."""
+    from .records import episodes as episode_records
+    from .records import tasks as task_records
+    ep = episode_records.get(store, turn, fields=['task_ids']) if turn else None
+    ids = (ep or {}).get('task_ids') or []
+    if not ids:
+        return []
+    service = HANDS.get('tasks')
+    if service is None:
+        from .tasks import TaskService
+        service = TaskService(store)
+    cancelled = []
+    for task in task_records.many(store, ids).rows(fields=['_id', 'state']):
+        if task.get('state') in ('READY', 'RUNNING'):
+            service.cancel(task['_id'], 'classifier_held', operator=True, turn=turn)
+            cancelled.append(task['_id'])
+    return cancelled
+
+
+def stop(store, kind, ref, request=None, spoken=0):
     """Hold the crossing a flagged verdict is about, where it stands: STOPPED when something was held in time, TOO_LATE
-    when the work had already been done (nothing is stopped then, and nothing is said)."""
+    when the work had already been done (nothing is stopped then, and nothing is said), or when an outbound crossing's
+    turn had already spoken outside (that turn still ends, and the tasks it started are cancelled)."""
     from . import notes
     from .records import ideas as idea_records
     from .records import messages as message_records
@@ -350,7 +397,8 @@ def stop(store, kind, ref, request=None):
             return TOO_LATE
     if turn:
         _mark(store, message_records.get, message_records.save, 'in-' + turn, mark, turn)
-    return STOPPED
+        _cancel_tasks(store, turn)
+    return TOO_LATE if kind in OUTBOUND_TURNS and spoken else STOPPED
 
 
 def held(store, ep):

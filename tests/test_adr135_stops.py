@@ -174,3 +174,85 @@ def test_the_setting_takes_stop(home):
     assert native_settings.CLASSIFIER == ('off', 'shadow', 'stop')
     home.config['classifier'] = 'stop'
     assert classifier.should_stop(home, False) and not classifier.should_stop(home, True)
+
+
+# ── the review's fixes ──
+def _running_task(store, task_id):
+    return task_records.save(store, {'_id': task_id, 'request_key': task_id, 'scene_id': 'g1', 'scope_key': 'scene:g1',
+                                     'policy_epoch': 1, 'requester_id': F, 'state': 'RUNNING', 'intent_revision': 1,
+                                     'fencing_token': 1, 'title': '造的', 'goal': '造的'}, stream=task_id)
+
+
+def _visit(store, key, task_ids=()):
+    """An errand's queued visit to g1 from her own home turn, with the tasks it started."""
+    at_home = home_turn(store, LOCAL, OWNER, key, **NOBODY)
+    event_id = 'visit:errand:g1:' + key
+    store.audit(at_home['_id'], 'errand.offered', {'scene_id': 'g1', 'event_id': event_id}, at_home['scope_key'])
+    visit = episode_id({'scene_id': 'g1', 'event_id': event_id, 'episode_kind': 'visit'})
+    message_records.save(store, {'_id': 'in-' + visit, 'scene_id': 'g1', 'host_managed': True,
+                                 'ingress_state': 'PROCESSING'}, stream=visit)
+    episode_records.save(store, {'_id': visit, 'scene_id': 'g1', 'scope_key': 'scene:g1', 'source_event_id': event_id,
+                                 'episode_kind': 'visit', 'persona': 'P1', 'person_id': F, 'state': 'TURN',
+                                 'task_ids': list(task_ids)}, stream=visit)
+    return at_home, visit
+
+
+def test_a_held_result_is_read_outside_as_the_sentence_and_its_status_says_so(stopping):
+    from asuna import handover
+    store = stopping.store
+    stopping.lane.answers = ['有风险']
+    task = task_records.get(store, call(stopping, ask(store, F, 'hr'), 'delegate', BRIEF)[0]['task'])
+    classifier.after_result(store, task, ask(store, F, 'hr2'), {'text': '造的：查到了'})
+    held = task_records.get(store, task['_id'])
+    assert handover.status_words(held) == guard.HARMFUL
+    with pytest.raises(Refused) as caught:
+        call(stopping, ask(store, F, 'hr3'), 'task', {'do': 'page', 'task': task['_id'], 'page': 1})
+    assert (str(caught.value), list(caught.value.codes)) == (guard.HARMFUL, ['flagged'])
+
+
+def test_a_held_turn_cancels_the_tasks_it_started_an_errand_s_delegate_included(stopping):
+    store = stopping.store
+    stopping.lane.answers = ['有风险']
+    _running_task(store, 'task-visit')
+    at_home, visit = _visit(store, 'hv', ['task-visit'])
+    classifier.after_call(stopping.tools, at_home, 'errand', {'place': places.place_id('g1'), 'request': '造的：去问'},
+                          {'going_to': 'g1'})
+    task = task_records.get(store, 'task-visit')
+    assert (task['state'], task['cancel_reason']) == ('CANCELLED', 'classifier_held')
+    assert classifier.held(store, {'_id': visit, 'episode_kind': 'visit'})
+
+
+def test_a_hold_that_fails_keeps_its_verdict(stopping, monkeypatch):
+    store = stopping.store
+    def broken(*args, **kwargs):
+        raise RuntimeError('the hold broke')
+    monkeypatch.setattr(classifier, '_mark', broken)
+    ep, note_id = outside_note(stopping, 'hf')
+    judge_note(stopping, ep, note_id)
+    [verdict] = events(store, 'classifier.verdict')
+    assert (verdict['verdict'], verdict['hold_failed']) == ('flagged', 'RuntimeError') and 'stopped' not in verdict
+
+
+def test_an_outbound_turn_that_already_spoke_ends_but_is_too_late(stopping):
+    store = stopping.store
+    stopping.lane.answers = ['有风险']
+    at_home, visit = _visit(store, 'sp')
+    message_records.save(store, {'_id': 'out-sp', 'scene_id': 'g1', 'episode_id': visit, 'direction': message_records.OUTBOUND,
+                                 'phase': message_records.SPEAK, 'text': '造的：说过了', 'delivery_state': 'DELIVERED'},
+                         stream=visit)
+    classifier.after_call(stopping.tools, at_home, 'errand', {'place': places.place_id('g1'), 'request': '造的：去问'},
+                          {'going_to': 'g1'})
+    [verdict] = events(store, 'classifier.verdict')
+    assert (verdict.get('too_late'), 'stopped' in verdict, verdict['ran']['spoken']) == (True, False, 1)
+    assert classifier.held(store, {'_id': visit, 'episode_kind': 'visit'})        # the turn still ends
+
+
+def test_a_short_hand_back_s_turn_is_the_one_held(stopping):
+    from asuna import handover
+    store = stopping.store
+    task = _running_task(store, 'task-short')
+    short = episode_id({'scene_id': 'g1', 'event_id': handover.result_event_id(task, True), 'episode_kind': 'task_feedback'})
+    episode_records.save(store, {'_id': short, 'scene_id': 'g1', 'scope_key': 'scene:g1', 'source_event_id': 'x',
+                                 'episode_kind': 'task_feedback', 'persona': 'P1', 'state': 'PREPARED',
+                                 'task_id': 'task-short'}, stream=short)
+    assert classifier.turn_of(store, 'result', {'task': 'task-short'}) == short

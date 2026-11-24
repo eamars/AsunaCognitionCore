@@ -68,7 +68,7 @@ class Application:
             from . import classifier
             self.classify_lane=self.lanes.enter_context(self.lane_factory(config,self.store,self.evidence,'classify'))
             self.coordinator.classify=self.classify_lane
-            classifier.HANDS.update(lane=self.classify_lane)
+            classifier.HANDS.update(lane=self.classify_lane,tasks=self.service)
             classifier.settle(self.store)          # a request a restart cut is recorded unchecked
             if ((config.get('_native_routes') or {}).get('appraiser') or {}).get('provider'):
                 # Optional third responsibility route: proposes affect events only (ADR-009 §6.7).

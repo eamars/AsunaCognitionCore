@@ -408,10 +408,15 @@ queue:
 - the turn a crossing opens (a woken note's, an errand's visit, a task result's) does not start, or, when it is
   already running, ends at her next call: that call, `speak` included, gets the classifier's sentence and the turn
   concludes; what she had said before stays said (the classifier never judges what she says);
-- an idea written outside leaves her notebook.
+- an idea written outside leaves her notebook;
+- the tasks a held turn started that are still ready or running are cancelled, as her stop would cancel them (an
+  errand's visit whose first call handed work over included);
+- a held result reads, outside, as the classifier's sentence, both as its status and when its pages are asked for.
 
 The mark is on the note, the task, the idea, or the input row of the turn, so it survives a restart and ends with
-its row. The owner's own ask is never held. A verdict that comes after the work is done holds nothing and says
+its row. A hold that fails does not lose its verdict: the verdict is recorded with `hold_failed`. An outbound
+crossing whose turn had already spoken outside before the verdict still has its turn ended, and is `too_late`, with
+what it said counted. The owner's own ask is never held. A verdict that comes after the work is done holds nothing and says
 nothing (`too_late`); a classifier that cannot be reached holds nothing (`unchecked`).
 
 **Why these texts and not the lines of a room.** A line-by-line classifier would run 5,164 times a day on lines of

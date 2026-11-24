@@ -41,8 +41,11 @@ BODY_PINS = [
     ("pin_wording_no_nas_self_check", "不许写「NAS 自己校验过」"),
     ("pin_path_from_base_directory", "`Base directory` 为准，现读，不抄旧号"),
     # 11-23 第二趟：第六节按现场更正，跟着重命名两枚钉（旧钉钉的是已被现场推翻的断言）
-    ("pin_nas_delete_never_run", "NAS 侧删除至今没真跑过一次"),
-    ("pin_first_nas_delete_watch_output", "**第一次真删 NAS 的那趟盯整份输出**"),
+    # 11-25：NAS 首删落地，旧两枚钉（钉旧事实）换成钉新事实
+    ("pin_nas_first_delete_date_in_sec6", "NAS 首删＝2026-11-25（`retain --do`）"),
+    ("pin_nas_delete_two_way_confirm", "删后新进程列目录双向确认无孤儿"),
+    ("pin_nas_seven_rolling", "从明天起 NAS 日份稳定在 7 枚滚动"),
+    ("pin_nas_host_read_from_push_log", "从上一跑的 push 日志现读"),
     ("pin_weekly_cap_four_script_no_clear", "最多 4 份（我这侧的规矩）。脚本不清它。"),
     ("pin_probe_not_cleared", "`probe-<日期>.txt` 不清"),
     # 11-23 加：三格新口径各一枚（拆掉对应段要能红）
@@ -131,6 +134,7 @@ def main():
     check("no_ascii_colon_space_in_values", not any(": " in v.strip() for v in vals))
     for name, token in BODY_PINS:
         check(name, token in body, token)
+    check("old_nas_delete_never_run_gone", "NAS 侧删除至今没真跑过" not in body and "第一次真删 NAS 的那趟" not in body, "旧事实又回来了")
     check("no_ip_like_in_skill", not IP_LIKE.search(text), "SKILL.md 里不写设备地址")
 
     all_text = text

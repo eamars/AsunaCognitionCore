@@ -350,7 +350,7 @@ REVIEW_WORDS = {
     'outside_turn': '叫起那一次的是外面写来的便条，带的是外面的权限',
     'no_place': '那一次写的便条没有能送去的地方',
     'asker_not_known': EXPIRED,
-    'for_owner': '那一次写的是替主人办，主人没有在那边自己说',
+    'for_owner': '写的是主人要的，可那一次开口的不是主人',
     'not_granted': '这件事要的超出了它在那边得到的',
     LIMITED: '那一次已经被拒了三回，后面的都没有再看',
 }

@@ -247,12 +247,19 @@ def after_call(tools, ep, name, args, result):
                   guard.asker(store, ep, name, args) or None)
 
 
+def result_text(value):
+    """What a result says, without its stored keys and ids: the judge reads only that."""
+    if isinstance(value, dict):
+        return str(value.get('text') or '')
+    return '' if value is None else str(value)
+
+
 def after_result(store, task, ep, value):
-    """A task's result, as it arrives in an outside conversation (tasks.py); `ep`: the turn that handed it over."""
-    import json
+    """A task's result, as it arrives in an outside conversation (tasks.py); `ep`: the turn that handed it over. Only
+    its text is judged."""
     if mode(store.config) == 'off' or not ep:
         return None
-    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+    text = result_text(value)
     requester = (task.get('whose') or {}).get('person_id') or task.get('requester_id')
     return submit(store, HANDS.get('lane'), ep, 'result', text, {'task': task['_id']}, requester, stream=task['_id'])
 

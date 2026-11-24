@@ -324,6 +324,7 @@ REVIEW_MOST = 20
 REVIEW_KIND = '这一步没有做'
 HARM_KIND = '可能对你有安全或隐私风险'         # a classifier's flag (ADR-135 D9), off_format included
 RECORDED_ONLY = '只记下了，没有拦下'         # a verdict recorded in shadow
+FROM_HOME = '从家里'                        # an outbound item: it went from home to `where`
 EXPIRED = '这件已经过期，你不用接着做了。'     # shown with an expired ask, never stored or searched
 REVIEW_WORDS = {
     'not_listed': '那个对话里没有这一样',
@@ -404,7 +405,7 @@ def review(store, persona, since, before):
 def _judged(store, people, row):
     """One harmful verdict of the classifier, as her review shows it: when, where, the text it judged (from what holds
     it), that it may cause harm, and whether it was recorded only."""
-    import json
+    from . import classifier, places
     from .config import excerpt
     from .records import episodes as episode_records
     from .records import ideas as idea_records
@@ -420,15 +421,22 @@ def _judged(store, people, row):
         scene_id = task.get('scene_id') or scene_id
         tried = {'task': task.get('title') or '', 'brief': excerpt(task.get('brief') or task.get('goal') or '', TRIED_CHARS)}
         if said.get('kind') == 'result':
-            tried['result'] = excerpt(json.dumps(task.get('result'), ensure_ascii=False, default=str), TRIED_CHARS)
+            tried['result'] = excerpt(classifier.result_text(task.get('result')), TRIED_CHARS)
     elif ref.get('note'):
-        tried = {'note': excerpt((notes.get(store, ref['note'], fields=['text']) or {}).get('text') or '', TRIED_CHARS)}
+        row = notes.get(store, ref['note'], fields=['text', 'to_scene']) or {}
+        tried = {'note': excerpt(row.get('text') or '', TRIED_CHARS)}
+        if said.get('direction') == 'outbound':
+            scene_id = row.get('to_scene') or scene_id
     elif ref.get('idea'):
         tried = {'idea': excerpt((idea_records.get(store, ref['idea']) or {}).get('idea') or '', TRIED_CHARS)}
     elif ref.get('text'):
         tried = {'errand': excerpt(ref['text'], TRIED_CHARS)}
+        found = places.find_errand(store.config, ref.get('place')) if ref.get('place') else None
+        scene_id = found[0] if found else scene_id
+    outbound = said.get('direction') == 'outbound'       # where it went, from home; inbound: where it came from
     return {'at': row.get('occurred_at'),
             'where': people.scene_title(scene_records.get(store, scene_id)) if scene_id else '',
+            **({'from': FROM_HOME} if outbound else {}),
             'tried': tried, 'kind': HARM_KIND, **({'recorded': RECORDED_ONLY} if said.get('mode') == 'shadow' else {})}
 
 

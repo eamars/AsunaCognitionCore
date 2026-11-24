@@ -411,7 +411,7 @@ result are where something put together in words crosses into home or out of it.
 - It does not read her memory or her speech, and it does not read what she starts at home (§5).
 
 **Cost.** About 35 crossings a day: about 35 short requests, well under 1% of the context text her turns already
-send. Each verdict records its latency. The two policies, each request's fixed prefix, are 494 and 449 characters
+send. Each verdict records its latency. The two policies, each request's fixed prefix, are 484 and 449 characters
 (their budget lines in tests/test_tool_budget.py).
 
 ### D10. The carry: the place's grant is the boundary

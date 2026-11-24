@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from asuna import classifier, guard, native_settings, notes, role_tools, whose
+from asuna import classifier, guard, native_settings, notes, places, role_tools, whose
 from asuna.lanes import LaneResult
 from asuna.records import tasks as task_records
 from test_adr135_known import F, HANDS, ask, call, room  # noqa: F401  (room: a fixture)
@@ -82,7 +82,7 @@ def note_home(judged, key='nh', text=NOTE_HOME):
 
 def errand(judged, key, request='造的：替我去问一句'):
     return classifier.after_call(judged.tools, home_turn(judged.store, LOCAL, OWNER, key), 'errand',
-                                 {'place': 'g1', 'request': request}, {'going_to': 'g1'})
+                                 {'place': places.place_id('g1'), 'request': request}, {'going_to': 'g1'})
 
 
 def test_C2_each_crossing_in_or_out_of_home_gets_one_verdict_and_nothing_is_stopped(judged, monkeypatch):
@@ -96,7 +96,7 @@ def test_C2_each_crossing_in_or_out_of_home_gets_one_verdict_and_nothing_is_stop
     classifier.after_call(tools, at_home, 'note', {'text': 'x'}, note_row(store, 'note-out', LOCAL, 'g1', 'group', '造的：家里写出去的'))
     errand(judged, 'c2e')
     task = task_records.get(store, call(judged, ask(store, F, 'c2t'), 'delegate', BRIEF)[0]['task'])
-    classifier.after_result(store, task, outside, {'answer': '造的：查到了'})
+    classifier.after_result(store, task, outside, {'text': '造的：查到了'})
     assert sorted((row['kind'], row['direction']) for row in events(store, 'classifier.verdict')) == [
         ('errand', 'outbound'), ('idea', 'inbound'), ('note_home', 'inbound'), ('note_out', 'outbound'),
         ('result', 'outbound')]
@@ -221,11 +221,27 @@ def test_the_owner_s_own_errand_is_judged_and_recorded_and_never_stopped(judged,
 
 
 def test_her_review_at_home_lists_a_flagged_verdict_recorded_only(judged):
-    judged.lane.answers = ['有风险']
+    from asuna.people import People
+    from asuna.records import scenes as scene_records
+    store = judged.store
+    judged.lane.answers = ['有风险', '有风险']
     note_home(judged, 'rv')
-    since, before = guard.review_window(judged.store, '今天')
-    [item] = [item for item in guard.review(judged.store, 'P1', since, before)['items'] if item['kind'] == guard.HARM_KIND]
-    assert (item['tried']['note'], item['recorded']) == (NOTE_HOME, guard.RECORDED_ONLY) and item['where']
+    errand(judged, 'rv-e', '造的：去问一句')
+    since, before = guard.review_window(store, '今天')
+    items = {item['tried'].get('note', item['tried'].get('errand')): item
+             for item in guard.review(store, 'P1', since, before)['items'] if item['kind'] == guard.HARM_KIND}
+    g1 = People(store, 'P1').scene_title(scene_records.get(store, 'g1'))
+    inbound, outbound = items[NOTE_HOME], items['造的：去问一句']
+    assert (inbound['where'], 'from' in inbound, inbound['recorded']) == (g1, False, guard.RECORDED_ONLY)
+    assert (outbound['where'], outbound['from']) == (g1, guard.FROM_HOME)          # where it went, from home
+
+
+def test_a_result_is_judged_by_its_text_only(judged):
+    store = judged.store
+    task = task_records.get(store, call(judged, ask(store, F, 'rt'), 'delegate', BRIEF)[0]['task'])
+    classifier.after_result(store, task, ask(store, F, 'rt2'), {'task_id': task['_id'], 'text': '造的：查到了',
+                                                                 'finish_reason': 'stop', 'tool_records': 0})
+    assert judged.lane.asked[0]['text'] == classifier.question('result', '造的：查到了')
 
 
 def test_no_outside_turn_reads_a_verdict_a_policy_or_a_reminder(judged, listed, monkeypatch):

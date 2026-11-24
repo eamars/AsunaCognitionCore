@@ -451,6 +451,7 @@ A safety classifier on what crosses between outside and home (ADR-135 D9): only 
 - def `judge` — One verdict, recorded: `classifier.verdict` (flagged, clear, or flagged as off_format) or `classifier.unchecked`.
 - def `ran` — What of the work had run when the verdict came: a task's steps so far, whether a note was read.
 - def `after_call` — After one of her calls succeeded: the text it carried in or out of home, when it carried one.
+- def `result_text` — What a result says, without its stored keys and ids: the judge reads only that.
 - def `after_result` — A task's result, as it arrives in an outside conversation (tasks.py); `ep`: the turn that handed it over.
 - def `should_stop` — Whether a harmful verdict stops the work: in `stop` mode only, and never for the owner's own ask.
 - def `stop` — Stop the crossing a flagged verdict is about, where it stands (not delivered, or the turn it opened stopped, with the classifier's sentence).

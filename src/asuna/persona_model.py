@@ -26,7 +26,7 @@ CORE_WRITABLE_KEYS = {
     # Her heartbeat's pace is hers; the heartbeat itself belongs to the program (ADR-012 §4.3).
     'heartbeat.every_min': {'type': 'integer', 'min': 15, 'max': 240, 'what': '心跳间隔（分钟）'},
     'heartbeat.min_gap_min': {'type': 'integer', 'min': 0, 'max': 720,
-                              'what': '没有找你的新事时，两次心跳回合之间至少隔多久（分钟）'},
+                              'what': '没有找你的新事时，两次心跳之间至少隔多久（分钟）'},
     'heartbeat.pause_min': {'type': 'integer', 'min': 0, 'max': 720,
                             'what': '让心跳安静一阵（分钟，0 = 马上恢复）；到时自动恢复'},
     'heartbeat.visits': {'type': 'boolean', 'what': '心跳时可以出门，去你在的群里看看'},

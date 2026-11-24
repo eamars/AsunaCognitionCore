@@ -1,6 +1,12 @@
 # ADR-135: What an ask from outside can reach
 
-Status: **Proposed** 2026-11-24 by the study agent (a Claude Code session) and big sis (Claude Code), at the owner's
+Status: **Installed** 2026-11-24 19:13 (`571671890af6`): landings 1 to 9 installed, the classifier set to `stop`
+(18:39), her daily-review skill read and the findings told to her (§10). Open until §10's reading of the next 100
+denials. D6's counts read 2026-11-24 by §1.4's patterns (the part names, `_from_program`, 回合): 0 part names in the
+tool text, the prompt files and the source strings; the one 回合 left where she reads it (the heartbeat setting's
+words) removed in the closing commit; the 回合 still in the source are in the audit export, a developer fault line and
+the appraiser's prompt, none of which she reads.
+Before: **Proposed** 2026-11-24 by the study agent (a Claude Code session) and big sis (Claude Code), at the owner's
 word: "I approve in principle. … I'd approve all if both of you agrees. Unlike other ADR. You don't need to get
 approval from [her] this time." Everything in §1 was read 2026-11-24 from the code on `main` and from her profile,
 read-only: rows by state, kind, class and time, program text, and counts. No model was called.

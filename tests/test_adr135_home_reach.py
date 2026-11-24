@@ -138,6 +138,30 @@ def test_at_home_task_stop_is_offered_while_a_task_of_any_conversation_runs(reac
     assert 'task.stop' not in role_tools.exposed(store, store.collection('episodes').get(outside(reach, [])))
 
 
+def test_a_home_group_writes_another_group_s_notes_by_name_and_its_own_without(reach):
+    from asuna import role_tools
+    from asuna.documents import DocumentStore
+    from asuna.group_admin import notes_slug
+    from asuna.people import People
+    from asuna.records import scenes as scene_records
+    store = reach.store
+    store.config['home_groups'] = ['g2']                  # her home is a group
+    scene_records.next_seq(store, 'g1', name='造的群')
+    name = People(store, PERSONA).scene_title(scene_records.get(store, 'g1'))
+    spec = {s['name']: s for s in role_tools.session_specs(store, 'g2', 'A')}['write_document']
+    assert role_tools.WRITE_GROUP_FROM_HOME in spec['description'] and 'group' in spec['parameters']
+
+    def at_home():
+        return turn(reach, ['write_document'], scene='g2', person='A', cls=visibility.OWNER_PRIVATE)
+    call(reach, at_home(), 'write_document', {**NOTES, 'group': name, 'heading': '造的：那个群'})
+    call(reach, at_home(), 'write_document', {**NOTES, 'group': None, 'heading': '造的：这个群'})
+
+    def headings(scene_id):
+        doc = DocumentStore(store, PERSONA).read(notes_slug(scene_id))[1] or {}
+        return [section['heading'] for section in doc.get('sections') or []]
+    assert (headings('g1'), headings('g2')) == (['造的：那个群'], ['造的：这个群'])
+
+
 def test_a_group_name_two_groups_share_is_refused(reach):
     store = reach.store
     from asuna.people import People

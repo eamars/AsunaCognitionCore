@@ -285,7 +285,7 @@ PLAN_LINE = 'create 时可以写 place：你想到点在那条线里醒来，之
 # ADR-135 landing 9: what a home turn reaches in her other conversations.
 PLAN_ELSEWHERE = 'cancel 也能取消别的对话里的计划：plan_id 照抄它的。'
 TASK_ELSEWHERE = '；stop 也认别的对话里还在做的一件'
-WRITE_GROUP_FROM_HOME = '在家里也能写一个群的笔记：doc 写 group_notes，group 写那个群的名字（照你回顾里写的地方）。'
+WRITE_GROUP_FROM_HOME = '在家里也能写别的群的笔记：doc 写 group_notes，group 写那个群的名字（照你回顾里写的地方）。'
 NOTE_DELIVER = 'deliver：wake 你想马上叫醒那边（排在那边手上的事后面），next_time 那边下次醒来时看到。'
 NOTE_HOME_LENGTH = '这两处之间 %d 字以内，过了 %d 字不收。' % (soft(_notes.HOME_NOTE_CHARS), _notes.HOME_NOTE_CHARS)
 NOTE_WAKES_A_GROUP = '叫醒一个群算一次出门。'
@@ -905,11 +905,9 @@ def placed_spec(spec, cls, scene_kind, listed):
         return {**spec, 'description': text.replace(IDEAS_CHOOSE, '：note ') if ops == ['note'] else text,
                 'parameters': fields}
     if name == 'write_document':
-        parts = ((WRITE_GROUP_NOTES, scene_kind == 'group'), (WRITE_OWN_DOCS, home),
-                 (WRITE_GROUP_FROM_HOME, home and scene_kind != 'group'))
+        parts = ((WRITE_GROUP_NOTES, scene_kind == 'group'), (WRITE_OWN_DOCS, home), (WRITE_GROUP_FROM_HOME, home))
         gone = [text for text, keep in parts if not keep]
-        fields = spec['parameters'] if home and scene_kind != 'group' else \
-            {k: v for k, v in spec['parameters'].items() if k != 'group'}
+        fields = spec['parameters'] if home else {k: v for k, v in spec['parameters'].items() if k != 'group'}
         return {**spec, 'description': _without(spec['description'], *gone), 'parameters': fields}
     if home:
         return spec

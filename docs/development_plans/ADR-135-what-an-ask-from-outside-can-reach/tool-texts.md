@@ -33,7 +33,8 @@ Now:
 Settled:
 > 你正在做的事，do 选一样：message 你想补一句（补信息、改目标，或让做完的再做一遍）；answer 你想好了做的时候冒出来的那个问题，写下你的答案；stop 你决定把这件事停下来；page 你想看做完的那份长报告原文，翻到哪一页；more 你想多给这件事一些时间；settle 这件没做成，你写下你怎么看它。新的事用 delegate。
 
-`answer` and `more` are options of one moment: listed only then. Field `task`: 「哪一件：照抄它旁边的 id」.
+`answer` and `more` are options of one moment: listed only then. Field `task`: 「哪一件：照抄它旁边的 id」. At home
+only (landing 9) it goes on: 「；stop 也认别的对话里还在做的一件」.
 
 **`errand`** (a home ability) (J)
 

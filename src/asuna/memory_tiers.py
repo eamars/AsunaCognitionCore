@@ -127,7 +127,7 @@ CANNOT_FIT = '这一处就算把你在这里随身带的节都放下，也还超
 WAITS = {'felt_wait': FELT_WAIT, 'tie_wait': TIE_WAIT}
 SHOWN_WAIT_SECONDS = 3600
 # Her choice when a store is over its cap (her ask, 2026-10-18; no keep act, ADR-062): what is carried, and the default.
-OVER_LINE = ('随身满了（%s %d/%d）：随身的有 %s。想换就 let_go 一条；这一回合不挑，下一回合程序照旧放最久没用到的「%s」。')
+OVER_LINE = ('随身满了（%s %d/%d）：随身的有 %s。想换就 let_go 一条；这一次不挑，下一次程序照旧放最久没用到的「%s」。')
 SEARCHED = '找了：随身、手边、收着'
 NOTHING = '随身、手边、收着三处都没找到'
 # A tag never carries an item back (no pin, owner 2026-10-13): only a changed rewrite does (ADR-062 §4.2 step 7).
@@ -140,7 +140,7 @@ def told_text(config):
     from .persona_model import effective
     return effective((config or {}).get('persona_model') or {}, 'memory.tiers_told')
 THINGS_NOTE = ('你的东西在哪：活账和群笔记的随身还能放多少条，其余的随身、手边、收着各有几条；moved 是程序挪过的，每件只说一次'
-               '（又用到、改写出变化就回来）；identity_room 是各处每回合随身带的（%s 合起来）用了上限的多少：%s；变了才说；'
+               '（又用到、改写出变化就回来）；identity_room 是各处每次随身带的（%s 合起来）用了上限的多少：%s；变了才说；'
                'identity_over 是哪一处超了上限：随身的节按程序会放的先后列着，各腾出多少，先由你挑；'
                'came_back 是最近一天里各样东西按词回来过几次，每天说一次；'
                'self_items 是把 current_self 拆成条的提议。')

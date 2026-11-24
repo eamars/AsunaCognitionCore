@@ -55,7 +55,7 @@ MAX_LINES, MAX_CHARS = 40, 4000
 REASON_LIMIT = 60
 PASSED_KIND = 'passed_line'
 PASSED_MAX, PASSED_KEPT = 10, 50             # listed in one turn; kept per conversation before the oldest go
-PASSED_NOTE = '上回合以后，你在这个群看过、当时没接的话：谁、什么时候，括号里是你当时的理由；只给这一次。'
+PASSED_NOTE = '上次以后，你在这个群看过、当时没接的话：谁、什么时候，括号里是你当时的理由；只给这一次。'
 
 
 def hold_passed(store, scene_id, message_id, received_at):

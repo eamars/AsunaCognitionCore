@@ -240,15 +240,14 @@ def from_words(model, item):
     scale = model.get('scale') or CORE['scale']
     kind = kind_key(model, item.get('kind'))
     if item.get('intensity') not in scale['val']:
-        raise AffectError('AFFECT_INTENSITY_UNKNOWN', '%s；intensity 只能是 %s（how_to_record_from_program.intensity）'
+        raise AffectError('AFFECT_INTENSITY_UNKNOWN', '%s；intensity 只能是 %s'
                           % ('没写 intensity' if item.get('intensity') is None else '「%s」不在词表里' % echoed(item['intensity']),
                              '、'.join(scale['val'])))
     spec = model.get('kinds', {}).get(kind) or {}
     # ADR-086 D3: the kind's own arousal word when she writes none; the scale's lowest word when the kind has none.
     arousal = item.get('arousal') or spec.get('arousal') or min(scale['arl'], key=scale['arl'].get)
     if arousal not in scale['arl']:
-        raise AffectError('AFFECT_AROUSAL_UNKNOWN', '「%s」不在词表里；arousal 只能是 %s（how_to_record_from_program.arousal），'
-                          '也可以不写' % (echoed(arousal), '、'.join(scale['arl'])))
+        raise AffectError('AFFECT_AROUSAL_UNKNOWN', '「%s」不在词表里；arousal 只能是 %s，也可以不写' % (echoed(arousal), '、'.join(scale['arl'])))
     valence = spec.get('valence')
     direction = item.get('direction') or {'positive': '好', 'negative': '坏'}.get(valence)
     if direction not in ('好', '坏'):
@@ -560,7 +559,7 @@ class AffectLedger:
     def _kinds(self):
         return '、'.join(spec.get('label') or key for key, spec in self.model.get('kinds', {}).items()) or '（种类表是空的）'
 
-    def check(self, item, refs, where='这回合的 ref_index、memories 或 task_state_from_program'):
+    def check(self, item, refs, where='这次给你的引用、记忆或手上的事'):
         """Program gates for a committed event (§6.4): any failure refuses only this item."""
         if not self.enabled:
             raise AffectError('AFFECT_DISABLED', '情感账没开；重试也一样')
@@ -578,7 +577,7 @@ class AffectLedger:
                                   % ('intensity' if axis == 'val' else 'arousal'))
         kind = item.get('kind') or ''
         if kind and kind not in self.model.get('kinds', {}):
-            raise AffectError('AFFECT_KIND_UNKNOWN', 'kind「%s」不在种类表里；照抄 how_to_record_from_program.kinds 里的一个：%s%s'
+            raise AffectError('AFFECT_KIND_UNKNOWN', 'kind「%s」不在种类表里；照抄种类表里的一个：%s%s'
                               % (echoed(kind), self._kinds(), '，或者不写 kind、写 direction' if self.model.get('allow_untyped', True) else ''))
         if not kind and not self.model.get('allow_untyped', True):
             raise AffectError('AFFECT_KIND_REQUIRED', '这份情感账要写 kind：how_to_record_from_program.kinds 里的一个：%s'
@@ -648,7 +647,7 @@ class AffectLedger:
             found = events_of(self.store, self.persona, prefix=str(item['event_id'])).rows(limit=2)
             target = found[0] if len(found) == 1 else None
         if not target:
-            raise AffectError('AFFECT_EVENT_UNKNOWN', 'event_id「%s」%s；照抄 affect_from_program.reasons 里那一笔的 event_id'
+            raise AffectError('AFFECT_EVENT_UNKNOWN', 'event_id「%s」%s；照抄你心情的来由里那一笔的 event_id'
                               % (echoed(item['event_id']), '对得上不止一笔' if len(found) > 1 else '不是你记过的一笔'))
         if not self.readable(target.get('source_scope'), ep['scope_key'], cls):
             raise AffectError('AFFECT_EVENT_NOT_READABLE', '「%s」是在别的对话里记的，这里改不了；回到记它的地方或家里再 %s'
@@ -726,8 +725,7 @@ class AffectLedger:
     def adopt(self, ep, index, item, cls, *, key=None):
         proposal = ledger_row(self.store, PROPOSALS, item['proposal_id'], persona=self.persona, kind_row='proposal')
         if not proposal or not self.readable(proposal['source_scope'], ep['scope_key'], cls):
-            raise AffectError('AFFECT_PROPOSAL_UNKNOWN', '没有 proposal_id「%s」；照抄 affect_proposals_from_program 里的 '
-                              'proposal_id' % echoed(item['proposal_id']))
+            raise AffectError('AFFECT_PROPOSAL_UNKNOWN', '没有 proposal_id「%s」；照抄心情提案里的 proposal_id' % echoed(item['proposal_id']))
         word = 'accepted_edited' if item['decision'] == 'edit' else item['decision']
         decided = ledger_row(self.store, PROPOSALS, 'decision:' + proposal['_id'])
         if decided and decided.get('episode_id') == ep['_id'] and decided.get('decision') == word:

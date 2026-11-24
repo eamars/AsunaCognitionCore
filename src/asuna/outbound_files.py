@@ -64,9 +64,9 @@ OOXML = ((b'word/', 'application/vnd.openxmlformats-officedocument.wordprocessin
          (b'xl/', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
          (b'ppt/', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'))
 
-REGISTERED_NOTE = ('交回去后，说话的那一半在能发文件的群里用 speak 的 file 发（artifact_id 照抄这个）；只发得进群。'
+REGISTERED_NOTE = ('交回去后，回到对话时在能发文件的群里用 speak 的 file 发（artifact_id 照抄这个）；只发得进群。'
                    '字节留 %d 天，从最后一次发出算，没发过就从登记算；过期了从 /task 再登记一次。' % KEEP_DAYS)
-OFFER_NOTE = ('你的任务登记过、这一回合能发进这个群的文件（新的在前）。发就用 speak 的 file，artifact_id 照抄，'
+OFFER_NOTE = ('你的任务登记过、这一次能发进这个群的文件（新的在前）。发就用 speak 的 file，artifact_id 照抄，'
               '它不是文件路径也不是文件名；一个文件单独一条消息，进群文件。没列出的发不了：要发别的，先让任务用 offer_file 登记。')
 NO_LIST = '这台机器上没有「别带出去」名单，名字没查'
 LISTED = '名字里有「别带出去」名单上的词：%s。不拦，照样能发；要换名字，换个 name 再登记一次'
@@ -386,9 +386,9 @@ def check(store, ep, scene, artifact_id):
         return None, expired_words(item, local_time.her_zone(store))
     offered = ((ep.get('context') or {}).get('file_artifacts_from_program') or {}).get('items') or ()
     if artifact_id not in {row.get('artifact_id') for row in offered if isinstance(row, dict)}:
-        return None, '不在 file_artifacts_from_program 里：artifact_id 照抄那里列出的'
+        return None, '不在能发的文件里：artifact_id 照抄那里列出的'
     if not item or item.get('state') != 'DONE' or item.get('storage') != artifact_records.STORED:
-        return None, '这个文件已经不在了；换 file_artifacts_from_program 里别的'
+        return None, '这个文件已经不在了；换能发的文件里别的'
     from . import blobs
     if not blobs.exists(store, item[artifact_records.BLOB_FIELD]):
         return None, '这个文件的字节不在存储里了（不是你的错）；要再发就让任务从文件夹里重新登记'

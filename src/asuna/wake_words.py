@@ -10,9 +10,9 @@ WAKE_VERSION = 2
 
 # Episode kind -> the words. `note` names the place the note was written in (a %s).
 WAKE_WORDS = {
-    'task_feedback': '你交给行动脑的事交回了结果；event 里是行动脑写的',
-    'consult': '行动脑做事时有话问你；event 里是行动脑写的',
-    'task_time': '你交给行动脑的一件事到了时间上限，程序来问你要不要接着做；event 里是程序写的',
+    'task_feedback': '你动手做的事交回了结果；event 里是动手时写的',
+    'consult': '你动手做事时冒出一个问题；event 里是动手时写的',
+    'task_time': '你动手做的一件事到了时间上限，程序来问你要不要接着做；event 里是程序写的',
     'scheduled': '你自己定的计划到点了',
     'visit': '你自己出门来这里看看',
     'presence': '心跳到了',

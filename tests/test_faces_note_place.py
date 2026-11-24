@@ -13,7 +13,7 @@ HOME_SCENE = {'_id': 'scene:local-dm', 'kind': 'dm'}
 # What a conversation with no QQ no longer pays for: that line and its newline off the guide, measured here
 # 2026-10-30 (6,509 characters with it, 6,142 without). A re-worded note has to come back and move this number,
 # the way a grown tool description has to raise its line in tests/test_tool_budget.py.
-FACES_LINE = 367
+FACES_LINE = 351
 
 
 def qq_scene(kind='group'):

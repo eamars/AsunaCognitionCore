@@ -49,9 +49,9 @@ DEV_TEXT = '这是一次内部自我开发机会，不是有人跟你说话，�
 HINTS = {
     'nothing': '这一拍本来不叫你；叫你是因为有只在心跳里看得到、再等一小时就会丢的事（见下面的资料）。',
     'interesting': '想说一句、出门看看、写点什么，都算。',
-    'self_development': '翻翻想法本、接着做手上的改进，或者交一件给行动脑。',
-    'self_evaluation': 'self_review_from_program 是你今天的原始读数，带出处，没替你总结。',
-    'review_dice': 'dice_review_from_program 是上次复盘以来每一掷的原始读数和你现在的两张表；要调就 set_policy。',
+    'self_development': '翻翻想法本、接着做手上的改进，或者动手做一件。',
+    'self_evaluation': '今天的复盘读数是原始读数，带出处，没替你总结。',
+    'review_dice': '掷骰复盘里是上次复盘以来每一掷的原始读数和你现在的两张表；要调就 set_policy。',
     'reach_out': '从家里写便条（note）到你的一条线（%s），找谁、说不说，由你。',
 }
 # The idle beat's hint is the persona model's `heartbeat.idle_hint` (a persona words it; the core default is neutral).

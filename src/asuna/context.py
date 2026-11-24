@@ -47,7 +47,7 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
 
 # ADR-018 §5.7 (owner 2026-10-07): one sentence in public turns. No content from her other conversations.
 # ADR-064 phase 2: where she speaks only through reply.
-REPLY_SENT=('一回合 speak 的 text 加起来平时 %d 行以内，硬线 %d 行：每一行都算，不管分成几条消息；'
+REPLY_SENT=('一次 speak 的 text 加起来平时 %d 行以内，硬线 %d 行：每一行都算，不管分成几条消息；'
             '空行不算，一个代码块算一行；表情包、图、戳、点表情不算。')
 ONE_SELF = '你是一个人，同时在好几个对话里；在这里说的话，就是你说的。'
 # ADR-079 §9.5: the one line of a turn where others spoke after the line that called her.
@@ -126,18 +126,18 @@ def landing_lost(verification):
 UNDELIVERED_WORDS = {'READY': '还没发', 'QUEUED_EXTERNAL': '排着队，还没发出去', 'SENDING': '在发', 'FAILED': '没发出去',
                      'UNKNOWN': '平台没给准话：多半已经发出去了，先看看那边有没有再决定，别直接重发'}
 # What these blocks are for, said once in her system prompt (block_guide.py, ADR-056).
-IDEAS_NOTE = ('这是你的「改进想法」本里还没处理完的想法（来自你自己或行动脑做事时）。逐条用 ideas 的 review 写下处理结果'
-              '（采纳、暂缓或放弃，附理由）；采纳的用 delegate 交代行动脑去做，它会带开发工具，'
+IDEAS_NOTE = ('这是你的「改进想法」本里还没处理完的想法（来自你自己，或你动手做事时）。逐条用 ideas 的 review 写下处理结果'
+              '（采纳、暂缓或放弃，附理由）；采纳的用 delegate 动手去做，做的时候带开发工具，'
               '改动只经 development_publish 生效。灵感可以来自别人，写进代码、技能和文档的东西不能带别人的个人信息。')
 EXPERIENCE_NOTE = ('真实历史片段与行动结果；每条保留来源场景。别人的原话只列你私人的对话；群和别人的私聊里只列你自己'
-                   '说过的话，那边的情况心跳时看 places_from_program。想把那边的东西带回来，用想法本或夜间沉淀，写成你自己的话。')
+                   '说过的话，那边的情况心跳时看能去的地方。想把那边的东西带回来，用想法本或夜间沉淀，写成你自己的话。')
 DOC_REFS_NOTE = ('你能引用的文档小节：写文档、记想法或记感受要指向某一节时，照抄这里的 doc:… 引用。')
 THOUGHTS_NOTE = '这是你此前在这里的心里话（最近的在最后），是当时的看法，不是说出口的话。'
 # Said once in her system prompt (block_guide), not in every turn (measured 2026-10-16: in 92% of turns).
-PEOPLE_NOTE = ('叫你的人：开启这一回合的人，和排在后面 @ 你、回你的人；熟悉程度、那一档的态度，和你写过的一句话（short 是人那层的，'
+PEOPLE_NOTE = ('叫你的人：开启这一次的人，和排在后面 @ 你、回你的人；熟悉程度、那一档的态度，和你写过的一句话（short 是人那层的，'
                'here 是这里那层的；那层还没写 short 时给的是全文 short_body、here_body）。本会话里给过、还在眼前的不再给；同一个人两份都在眼前时，以后给的为准。short 是给你自己的提示，'
                '不是要说出口的话。完整的理解用 recall 的 person 读；没写过的人只有熟悉程度。')
-UNDERSTANDING_NOTE = ('有值得留下的理解变化时，用 understand_person 写下那一层完整的新理解（两层各自一回合最多写一次）；无需每轮更新。'
+UNDERSTANDING_NOTE = ('有值得留下的理解变化时，用 understand_person 写下那一层完整的新理解（两层各自一次最多写一次）；无需每轮更新。'
                       '本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；'
                       '同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 about_current_speaker '
                       '说有当前说话人自己的话的摘要，才会被登记成这条关系的来源，盖不到人的摘要会带着原因记为未登记（照样给你看，只是不算这个人的证据）。')
@@ -766,9 +766,9 @@ class ContextBuilder:
         from .role_tools import switched_off
         context['action_capabilities_from_program']={
             # not where the task tools are switched off here: they are not in the list (ADR-135 D2)
-            'available':bool(grant) and 'delegate' not in switched_off(self.store,{'scene_id':scene['_id']}),'route':'用 delegate 把事交给行动脑；补话、接着做或叫停用 task（message、stop）。文件、网页、沙箱、原话检索和看图都是行动脑的事。',
+            'available':bool(grant) and 'delegate' not in switched_off(self.store,{'scene_id':scene['_id']}),'route':'用 delegate 动手做事；补话、接着做或叫停用 task（message、stop）。文件、网页、沙箱、原话检索和看图都在动手时做。',
             'cancellation_available':True,
-            'network':'行动脑可以按需搜索公共网页并读取页面。',
+            'network':'动手时可以按需搜索公共网页并读取页面。',
             'delivery':('程序自动执行委托，结果作为独立事件返回当前场景（外面托的写 for，结果回家里）；等待时仍可聊天。'
                         if session_class==visibility.OWNER_PRIVATE else
                         '程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。')}
@@ -777,7 +777,7 @@ class ContextBuilder:
         # ADR-111 §2.4: the development tools only where this turn's whose earns them.
         if for_whose(self.store, _whose_of.of_turn(self.store, None, event)):
             context['action_capabilities_from_program']['development'] = {
-                'candidate':'持久的有效项目候选（代码、技能、提示、种子）；可委托行动脑检查、修改和自行发布。',
+                'candidate':'持久的有效项目候选（代码、技能、提示、种子）；动手时可以检查、修改和自行发布。',
                 'guide':'先读核心技能 asuna-self-improvement：改什么走哪层、怎么自检、怎么发布、什么会触发重启。'}
         from . import sandbox_backend
         if not sandbox_backend.available(self.store.config):
@@ -786,19 +786,19 @@ class ContextBuilder:
                 '跑代码、改自己的能力、接管集成这几件事现在交不出去：没有可用的隔离环境。别答应要做这些。')
         elif session_class!=visibility.OWNER_PRIVATE:
             context['action_capabilities_from_program']['run_code']=(
-                '在这里交出去的事，行动脑不能跑代码或命令；那只在主人那边做。别在这里答应跑代码。')
+                '在这里动手，不能跑代码或命令；那只在主人那边做。')
         # ADR-098: the placeholders by name and meaning (never their values), and which this place hands over.
         from . import local_roots as _local_roots
         context['action_capabilities_from_program']['paths']=_local_roots.context_line(
             session_class==visibility.OWNER_PRIVATE)
         context['action_capabilities_from_program']['history_query']=(
-            '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
+            '动手时可以查当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
             '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')
         from .vision import vision_capability
         if vision_capability(self.store.config)['supported']:
             context['action_capabilities_from_program']['read_image']=(
-                '图片按 Pull 模式接：入站只带元数据与占位符，read_image(ref) 才把字节拉成这一回合真实的视觉输入；'
-                '行动脑也有同一个工具，交代要按图做的事时把 ref 写进 brief。没调用就是没看过，占位符只证明那里有过一张图。')
+                '图片按 Pull 模式接：入站只带元数据与占位符，read_image(ref) 才把字节拉成这一次真实的视觉输入；'
+                '动手时也有同一个工具，交代要按图做的事时把 ref 写进 brief。没调用就是没看过，占位符只证明那里有过一张图。')
         context['action_capabilities_from_program']['group_discussion']=(
             '可按需整理当前授权群指定时间／主题的讨论：参与者、后续更正、个人意见、未决事项与实际覆盖范围分开返回，'
             '每条带 message_id 供原文回读；分类是按字面线索的机械标注不是结论，more=true 表示只覆盖了部分'
@@ -808,13 +808,13 @@ class ContextBuilder:
         from .image_generation import available as image_available
         if image_available(self.store.config):
             context['action_capabilities_from_program']['image_generation']=(
-                '行动脑能用本机的生图服务画图；画好的图登记成你自己的，之后可以随消息发出去（群里只发全年龄的图）。'
+                '动手时能用本机的生图服务画图；画好的图登记成你自己的，之后可以随消息发出去（群里只发全年龄的图）。'
                 '外部公开的生图服务也能用，但那样只能给链接。')
         from .integration import event_profile
         integration_profile = event_profile(self.store.config, event, self.store)
         if integration_profile == 'agent_home':
             context['action_capabilities_from_program']['integration'] = {
-                'grant': '这条线的家里回合带窄集成授权：只有 integration_start（只启用已发布的适配器版本）和 '
+                'grant': '这条线在家里带窄集成授权：只有 integration_start（只启用已发布的适配器版本）和 '
                          'integration_status（只读）。没有试运行，也没有停止；RUNNING 不等于平台连上或发送成功。'}
         elif integration_profile:
             context['action_capabilities_from_program']['integration'] = {
@@ -875,7 +875,7 @@ class ContextBuilder:
         if target['shared']:
             context['relationship_shared_from_program']={
                 'scope':target['scope'],
-                'note':'这个人在配置里与另一个入口是同一个人，关系与偏好只维护那一份；这一回合的理解更新'
+                'note':'这个人在配置里与另一个入口是同一个人，关系与偏好只维护那一份；这一次的理解更新'
                        '会写进 scope 那个场景的那一份，来源仍只取本轮场景里真实给过你的证据。'}
         if event.get('episode_kind') == 'self_development' and isinstance(event.get('night_stage'), dict):
             from .rhythm import night_stage_block
@@ -1470,8 +1470,8 @@ class ContextBuilder:
             # How her words leave is said once, in her turn guide (block_guide.WORDS); here only what is this turn's,
             # and QQ's line count where QQ's rules apply.
             speak={**({'sent':REPLY_SENT%(most,SPEAK_HARD_LINES)} if replying else {}),
-                   'new_lines':'这段对话里新来的话——包括你这回合中途才到的——你看见了就算你接住了：'
-                               '要回就在这回合一起回，它们不会再单独叫你一次。'}
+                   'new_lines':'这段对话里新来的话——包括你这次中途才到的——你看见了就算你接住了：'
+                               '要回就在这次一起回，它们不会再单独叫你一次。'}
             # Her channel lost or regained a function she uses: said once here, at this turn (ADR-079 §9.7).
             from .capabilities import change_line
             leg=change_line(self.store,scene)

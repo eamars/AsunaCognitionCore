@@ -90,7 +90,7 @@ def test_a_field_the_schema_named_is_not_named_twice_and_a_wrong_type_is_a_probl
 def test_a_permission_refusal_stops_alone(world):
     ep = turn(world, thought=False, tools=['think'])
     outcome, said, codes = call(world, ep, 'write_document', {'doc': 'x', 'why': 1})
-    assert outcome == 'refused' and '这一回合用不了' in said and '处要改' not in said and codes == ('NOT_NOW',), said
+    assert outcome == 'refused' and '这一次用不了' in said and '处要改' not in said and codes == ('NOT_NOW',), said
 
 
 def test_a_call_with_problems_does_none_of_its_effect(world):
@@ -172,11 +172,11 @@ def test_a_long_refusal_cuts_each_candidate_list_and_drops_no_problem(world):
 def test_a_permission_refusal_ends_with_what_does_the_job_here_only_from_this_turns_tools(world):
     here = turn(world, thought=True, tools=['think', 'task.message', 'plan'])
     said = role_tools.not_now(world.store, here, 'task.answer')
-    assert said.endswith('这一回合能做这件事的是：task 的 message（给行动脑补话、改目标）。'), said
+    assert said.endswith('这一次能做这件事的是：task 的 message（给做着的事补话、改目标）。'), said
     assert role_tools.not_now(world.store, turn(world, tools=['think']), 'task.answer') == role_tools._why_not_now(
         world.store, turn(world, tools=['think']), 'task.answer'), 'nothing here does it: when it can be used, as before'
-    assert role_tools.instead_words(here, 'visit') == '这一回合能做这件事的是：plan（把这件事留到将来再想）。'
-    assert role_tools.instead_words(turn(world, tools=['visit']), 'errand') == '这一回合能做这件事的是：visit（自己出门去那个群看看）。'
+    assert role_tools.instead_words(here, 'visit') == '这一次能做这件事的是：plan（把这件事留到将来再想）。'
+    assert role_tools.instead_words(turn(world, tools=['visit']), 'errand') == '这一次能做这件事的是：visit（自己出门去那个群看看）。'
     assert role_tools.instead_words(here, 'recall') == '', 'an ability with no entry says nothing more'
 
 
@@ -239,7 +239,7 @@ def test_a_delegate_past_the_hand_off_limit_and_with_no_brief_says_both(world):
     ep = world.store.put('episodes', {**ep, 'delegation_depth': role_tools.DELEGATION_DEPTH_MAX}, expected=ep['revision'], stream=ep['_id'])
     outcome, said, codes = call(world, ep, 'delegate', {'title': '查天气'})
     assert outcome == 'refused' and said.startswith('这次调用有 2 处要改')
-    assert any('先停下来' in line for line in numbered(said)) and any(line.startswith('缺 brief') for line in numbered(said))
+    assert any('先停在这里' in line for line in numbered(said)) and any(line.startswith('缺 brief') for line in numbered(said))
     assert codes == ('ARGS_MISSING', 'DELEGATION_DEPTH')
 
 

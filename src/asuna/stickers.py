@@ -59,7 +59,7 @@ FACES_NOTE = ('小黄脸：平台自带的小表情，每个有名字。别人�
               '别人之间的几个折成一行「这期间的点表情：…」，都不是谁打的字。'
               '表情包又是一样：整条消息是一张图，读作「[表情包]」或「[表情包:名字]」，拿得到的下面标着表情包 ref。'
               '三样里有重名的（比如「赞」），看形状分，不看名字。'
-              '有 faces_from_program 的对话里，你自己说话时把小黄脸写成「[表情:名字]」夹在话里，会变成真的小黄脸'
+              '有小黄脸表的对话里，你自己说话时把小黄脸写成「[表情:名字]」夹在话里，会变成真的小黄脸'
               '（seen_here 是这里最近有人用过的，别处见过的也行），不认识的名字会被退回；点表情用 speak 的 react。')
 REVIEW_NOTE = ('这是你的表情包架子，每周看一眼。下面是收了以后一直没发、或很久没发的几个：'
                '还喜欢的留着，不想要的用 sticker 的 drop 放下，名字或用法不顺手的用 rename 改。'
@@ -258,7 +258,7 @@ def _when(value):
 
 
 ALREADY_KEPT = 'STICKER_ALREADY_KEPT: 在架子上叫「%s」；想改名字或用法用 rename'
-CANDIDATE_GONE = 'STICKER_CANDIDATE_GONE: 「%s」；照抄 sticker_candidates_from_program 里现在还在的 candidate'
+CANDIDATE_GONE = 'STICKER_CANDIDATE_GONE: 「%s」；照抄候选的表情包里现在还在的 candidate'
 
 
 def _ref_problem(ref):
@@ -449,7 +449,7 @@ def speech_problem(store, ep, speech):
         return '这里发不出表情包或小黄脸：把「[表情包:…]」「[表情:…]」去掉，用话说。'
     for name in stickers:
         if not find(store, ep['persona'], name):
-            return '架子上没有叫「%s」的表情包：照抄 stickers_from_program 里的名字，或者不发。' % name
+            return '架子上没有叫「%s」的表情包：照抄架子上的名字，或者不发。' % name
     known = channel_kinds.faces_of(scene['_id'])
     unknown = [name for name in faces if name not in known]
     if unknown:

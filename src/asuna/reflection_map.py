@@ -189,13 +189,13 @@ def block(store, persona, moment=None, *, tag=None):
         affect.count_events(store, persona, still_open=True)))
     ideas = collections.Counter(i.get('state') for i in idea_records.of_persona(store, persona, by=None).rows(fields=['state']))
     index.append('想法本：没处理 %d、暂缓 %d（ideas 的 read）' % (ideas.get('open', 0), ideas.get('deferred', 0)))
-    index.append('计划：生效中 %d（plans_from_program）；问题：还开着 %d（ask 的 read）' % (
+    index.append('计划：生效中 %d；问题：还开着 %d（ask 的 read）' % (
         plan_records.count_status(store, 'ACTIVE'),
         questions.count_open(store, persona)))
     index.append('便条：上次以来写了 %d 张' % note_owner.count_since(store, persona, since))
     errands = (places.errands_block(store, persona, moment) or {}).get('items') or []
     on_way = [e for e in errands if e.get('state') in (places.ERRAND_STATES['pending'], places.ERRAND_STATES['sending'])]
-    index.append('差事：最近 %d 趟，还在路上 %d 趟（下场在 errands_from_program）' % (len(errands), len(on_way)))
+    index.append('差事：最近 %d 趟，还在路上 %d 趟（下场在差事那一栏）' % (len(errands), len(on_way)))
     live = switches.on(store, moment=moment)
     index.append('你开着的开关：%d 个' % len(live) + ('，' + '；'.join('%s %s' % (switches.WORDS[r['kind']] + '：' + r['label'],
                                                                        '到 ' + r['until'][:16] if r.get('until') else switches.OPEN)

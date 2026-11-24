@@ -107,10 +107,10 @@ def consult_problem(value):
     """What keeps the end of a consult turn from answering the action brain, in words for her."""
     if value.finish_reason == 'length':
         return CUT
-    return '你还没回答行动脑：用 task 的 answer 写下回答；这里写的正文不会发给任何人。'
+    return '你还没回答那个问题：用 task 的 answer 写下回答；这里写的正文不会发给任何人。'
 
 
 def turn_note(issue):
     """The program's words back to her after a consult turn's end failed its check, in the same turn."""
-    return ('程序检查：' + issue + '这段还没发出去：请在这一回合里把要说的话整段重新写一遍，这次写的会整段代替上一段发出去；'
+    return ('程序检查：' + issue + '这段还没发出去：请在这一次里把要说的话整段重新写一遍，这次写的会整段代替上一段发出去；'
             '只改这个问题，不改变你的意思。')

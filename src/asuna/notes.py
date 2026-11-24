@@ -46,18 +46,18 @@ PUBLIC_HOME_PER_SCENE = 10       # public -> home (the Web chat), per sending co
 PUBLIC_PAIR = 3                  # public -> public, per pair of conversations
 PUBLIC_TOTAL = 10                # public -> public, in all
 MAX_HOP = 2                      # a note, its reply, and no more
-REPLY_ENDS = ('这一回合是一张回信叫起来的，不能再写便条了（便条、回信，到此为止）：这张回信不用再回，想说的就在这一回合里说；'
-              '要晚点递回那边，用 plan 定个时间，到点那一回合能写。')
+REPLY_ENDS = ('这一次是一张回信叫起来的，不能再写便条了（便条、回信，到此为止）：这张回信不用再回，想说的就在这一次里说；'
+              '要晚点递回那边，用 plan 定个时间，到点那一次能写。')
 KEEP_HOURS = 72                  # unread past this: expired
 SHOWN = 5
 EXCERPT = 60
 OWNER_LINE_CHARS = 300
-OWNER_SAID = '写这张便条时叫你的那句，是主人本人在那边说的（程序按主人的账号核对过）：主人托的事，这一回合可以用 errand 去办。'
+OWNER_SAID = '写这张便条时叫你的那句，是主人本人在那边说的（程序按主人的账号核对过）：主人托的事，这一次可以用 errand 去办。'
 # A group that cannot be woken now, with no deliver given, gets the note next time (ADR-087 §4.4).
-NEXT_TIME_INSTEAD = '那个群现在叫不醒（%s），改成那边下次有回合时看到；三天（72 小时）没读就过期了，读没读在 notes_sent_from_program 看。'
+NEXT_TIME_INSTEAD = '那个群现在叫不醒（%s），改成那边下次有你的时候看到；三天（72 小时）没读就过期了，读没读在你送出的便条里看。'
 # The same group, from where a note can only wake it (a group, a turn a note from outside opened): nothing is sent.
 WAKE_ONLY_NOT_NOW = ('现在叫不醒那个群：%s。从这里写的便条只能马上叫醒那边，这张没送出去；'
-                     '想晚点递过去，用 plan 定个时间，到点那一回合能写。')
+                     '想晚点递过去，用 plan 定个时间，到点那一次能写。')
 TRUSTED, UNTRUSTED = 'trusted', 'untrusted'
 WAKE, NEXT_TIME = 'wake', 'next_time'
 FINISHED = ('COMMITTED', 'WAITING_TASK')
@@ -77,7 +77,7 @@ def modes(cls, kind, reply):
 
 
 KIND_WORDS = {'home': '家里', 'group': '群', 'dm': '私聊'}
-MODE_WORDS = {WAKE: '马上叫醒那边（排在那边手上的事后面）', NEXT_TIME: '那边下次有回合时看到'}
+MODE_WORDS = {WAKE: '马上叫醒那边（排在那边手上的事后面）', NEXT_TIME: '那边下次有你的时候看到'}
 TRUST_WORDS = {TRUSTED: '你在家里写的', UNTRUSTED: '你在外面写的'}
 STATE_WORDS = {'waiting': '送到了，还没读', 'read': '读了，没回（读到不等于办了：要确认，再写一张问一句）',
                'replied': '读了，回了你', 'expired': '三天没读，过期了'}
@@ -93,13 +93,13 @@ TRUSTED_NOTE = '这是你自己在%s写给这里的便条，这里没人发它�
 OWNER_CHAT_NOTE = '主人看不到便条，只看得到你在这里说的话：这里是主人的私聊。这是你在%s写的便条。'
 OWNER_CHAT_REPLY = '在这里说的主人马上看得到；要回%s就写便条（只回这一次）。'
 OUTSIDE_NOTE = '这是你在%s写的便条，这里的人看不到它。你在这里说的话就是你自己在这里说的。'
-HIDDEN_SUMMARY = '外面写来的便条：自我开发的回合带着开发工具，不显示内容；别的回合（有人说话、心跳、闹钟、夜间沉淀）再看。'
-WAITING_OWN_TURN = '等它自己那一回合'          # a note from outside, in other home turns while it waits (ADR-088 §4.4)
+HIDDEN_SUMMARY = '外面写来的便条：自我开发的时候带着开发工具，不显示内容；别的时候（有人说话、心跳、闹钟、夜间沉淀）再看。'
+WAITING_OWN_TURN = '等它自己那一次'          # a note from outside, in other home turns while it waits (ADR-088 §4.4)
 RECEIVED_NOTE = '别的对话里的你写给这里的便条（新的在前）。不是这里有人说的话。'
 SENT_NOTE = '你从这里写出去的便条，那边怎么样了（只有状态，回信会作为便条回来）。'
-PLACES_NOTE = '写便条（note）能送到的地方。那边的回合会读到它，也可能照着说出来。'
+PLACES_NOTE = '写便条（note）能送到的地方。那边下一次会读到它，也可能照着说出来。'
 HOME_NAME, OWNER_CHAT_NAME = '家里', '主人的私聊'      # how home's places are named in an outside turn (ADR-135 N3)
-OUTSIDE_PLACES = '这一回合是外面的便条叫起来的：从这里写的便条算你在外面写的，回给写它的那边，或者送到群里。'
+OUTSIDE_PLACES = '这一次是外面的便条叫起来的：从这里写的便条算你在外面写的，回给写它的那边，或者送到群里。'
 
 
 class NoteRefused(Exception):
@@ -347,7 +347,7 @@ def places_view(store, persona, scene_id, cls, first):
         for kind in kinds}
     note = PLACES_NOTE
     if outside:
-        note += OUTSIDE_PLACES if cls == visibility.OWNER_PRIVATE else '这一回合是外面的便条叫起来的：只能回给写它的那边。'
+        note += OUTSIDE_PLACES if cls == visibility.OWNER_PRIVATE else '这一次是外面的便条叫起来的：只能回给写它的那边。'
     return {'items': items, 'arrives': how, 'note': note}
 
 
@@ -402,7 +402,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
         names = '、'.join('%s（%s）' % (people.scene_title(scene_records.get(store, sid)), p)
                          for p, (sid, _) in found.items())
         raise NoteRefused('NOTE_TARGET_UNKNOWN', ('送不到「%s」。能送到的：%s。照抄 place。' % (echoed(args.get('to')), names))
-                          if names else '这一回合没有能送便条的地方。')
+                          if names else '这一次没有能送便条的地方。')
     to_scene, kind = found[place]
     asked, line = requester(store, ep, args.get('for'))
     text = str(args.get('text') or '').strip()
@@ -416,7 +416,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
         from .config import too_long
         raise NoteRefused('NOTE_TOO_LONG', (too_long('text', text, limit, ask, as_list=True)
                                             + '送到%s的便条也可以原样拆成两张接着发，开头标 1/2、2/2，'
-                                            '让那边知道是接续（一回合最多 %d 张）。') % (KIND_WORDS[kind], PER_TURN))
+                                            '让那边知道是接续（一次最多 %d 张）。') % (KIND_WORDS[kind], PER_TURN))
     reply = None if question else first if first and first['from_scene'] == to_scene else last_seen_from(
         store, to_scene, ep['scene_id'], ep['_id'])
     if reply and reply.get('hop', 1) >= MAX_HOP:
@@ -430,7 +430,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
                           % (KIND_WORDS[kind], MODE_WORDS[choices[0]], choices[0]))
     sent_here = count_sent(store, ep['_id'])
     if not question and sent_here >= PER_TURN:
-        raise NoteRefused('NOTE_TURN_LIMIT', '这一回合已经写了 %d 张便条（上限 %d 张），先到这里；还要说的下回合再写。'
+        raise NoteRefused('NOTE_TURN_LIMIT', '这一次已经写了 %d 张便条（上限 %d 张），先到这里；还要说的下次再写。'
                           % (sent_here, PER_TURN))
     # A note on from a home turn a note from outside opened continues that note's chain (ADR-088 §4.2).
     onward = first and first.get('trust') == UNTRUSTED and here == visibility.OWNER_PRIVATE
@@ -493,7 +493,7 @@ def result(store, row):
     return {'note': row['_id'], 'to': People(store, row['persona']).scene_title(scene), 'arrives': MODE_WORDS[row['mode']],
             **({'length': 'text ' + longer} if longer else {}),
             'how': '那边会知道是你自己%s写的，不会当成那里有人说的话。' % ('在家里' if row['trust'] == TRUSTED else '在外面'),
-            'later': '那边读没读、回没回，之后在这里的 notes_sent_from_program 看。'}
+            'later': '那边读没读、回没回，之后在这里你送出的便条里看。'}
 
 
 # ── what a turn sees ────────────────────────────────────────────────

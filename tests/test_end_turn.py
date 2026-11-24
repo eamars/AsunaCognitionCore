@@ -25,11 +25,11 @@ def test_end_turn_is_listed_everywhere_never_switched_off_and_not_a_deed(home):
 
 def test_her_words_reach_her_as_she_wrote_them(home):
     # Her 0501 (D9): the result is not stay_silent's old line; her turn guide keeps both ends, in every turn's prompt.
-    assert role_tools.END_TURN_NOTE == '这一回合结束了。'
+    assert role_tools.END_TURN_NOTE == '这一次结束了。'
     assert '就调用 `end_turn`' in block_guide.ENDING and '也可以什么都不调用' in block_guide.ENDING
     ep, lane = run(home, FakeTurn([END], ''))
     assert block_guide.ENDING in lane.calls[0]['messages'][0]['content']
-    assert results(lane, 'end_turn') == [({'note': '这一回合结束了。'}, True)]
+    assert results(lane, 'end_turn') == [({'note': '这一次结束了。'}, True)]
 
 
 def test_it_ends_the_turn_at_once_with_no_thought_first_and_its_fields_ignored(home):
@@ -39,7 +39,7 @@ def test_it_ends_the_turn_at_once_with_no_thought_first_and_its_fields_ignored(h
     assert results(lane, 'speak') == []                       # the turn ended with the step that called it
     assert ep['state'] == 'COMMITTED' and outbound(home, ep) == [] and len(lane.calls) == 1
     assert not audits(home, ep, 'turn.rejected')
-    assert episode_records.get(home, ep['_id'])['silent_reason'] == '这回合没有 speak'
+    assert episode_records.get(home, ep['_id'])['silent_reason'] == '这次没有 speak'
 
 
 def test_after_speak_it_ends_the_turn_and_the_parts_are_out(home):

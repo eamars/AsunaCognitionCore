@@ -33,8 +33,8 @@ NIGHT_TICK_SECONDS = 600
 HANDOFF_LATE_SECONDS = 300
 HANDOFF_UNSEEN = '定时那一拍没把它递过来，原因没记下来'
 INTENT_CHARS = 1000
-NOT_IN_SCOPE = 'SCHEDULE_PLAN_NOT_IN_SCOPE: 「%s」不是这个对话里的安排（别处建的要在那里改）；照抄 plans_from_program 里的 plan_id'
-SOURCE_STALE = 'SCHEDULE_SOURCE_STALE: 这个对话的授权刚变过（不是你的错），这回合安排不了；重试也一样，下回合再安排'
+NOT_IN_SCOPE = 'SCHEDULE_PLAN_NOT_IN_SCOPE: 「%s」不是这个对话里的安排（别处建的要在那里改）；照抄你的计划里的 plan_id'
+SOURCE_STALE = 'SCHEDULE_SOURCE_STALE: 这个对话的授权刚变过（不是你的错），这次安排不了；重试也一样，下次再安排'
 NATIVE_INCOMPLETE = ('NATIVE_SCHEDULE_CREATE_INCOMPLETE: 定时服务没有确认这条提醒（不是你的错）；再试一次，'
                      '还不行就在回话里说没安排上')
 
@@ -587,22 +587,22 @@ class ScheduleService:
         found = places.find(self.app.config, place)
         scene = found and scene_records.get(self.store, found[0])
         if not scene:
-            raise ValueError('VISIT_PLACE_UNKNOWN: 「%s」不在 places_from_program 里；照抄那里的 place' % place)
+            raise ValueError('VISIT_PLACE_UNKNOWN: 「%s」不在能去的地方里；照抄那里的 place' % place)
         _, route, channel = found
         if not scene.get('channel_id'):
-            raise ValueError('VISIT_PLACE_UNKNOWN: 「%s」没接到平台，去不了（不是你的错）；挑 places_from_program 里别的' % place)
+            raise ValueError('VISIT_PLACE_UNKNOWN: 「%s」没接到平台，去不了（不是你的错）；挑能去的地方里别的' % place)
         moment = schedule_rules._aware(now())
         date = places.local_date(self.app.config, moment)
         plan = plan_records.get(self.store, PRESENCE_PLAN) or {}
         can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date)
         if not can:
-            raise ValueError('VISIT_NOT_NOW: %s；哪儿现在能去看 places_from_program 里的 can_visit，想晚点再去就用 plan 定个时间' % why)
+            raise ValueError('VISIT_NOT_NOW: %s；哪儿现在能去看能去的地方里的 can_visit，想晚点再去就用 plan 定个时间' % why)
         if artifact_id and artifact_id not in {item['artifact_id'] for item in outbound_media.produced_images(self.store, limit=50)}:
-            raise ValueError('VISIT_PICTURE_NOT_HERS: 「%s」不是你自己做的图；照抄 your_pictures_from_program 里的，或不写 artifact_id'
+            raise ValueError('VISIT_PICTURE_NOT_HERS: 「%s」不是你自己做的图；照抄你自己的图里的，或不写 artifact_id'
                              % artifact_id)
         person = places.visitor(route, channel)
         if not person:
-            raise ValueError('VISIT_NOT_NOW: 这个群里没有可以接待你的成员授权（不是你的错）；重试也一样，挑 places_from_program 里别的群')
+            raise ValueError('VISIT_NOT_NOW: 这个群里没有可以接待你的成员授权（不是你的错）；重试也一样，挑能去的地方里别的群')
         event_id = 'visit:%s:%s' % (scene['_id'], ep['source_event_id'])
         # Her own moment in the group, not a platform input: no channel envelope (that would be shown in the
         # group's session as a member's message). It wakes as a scene tick; publishing targets the group's route.
@@ -619,7 +619,7 @@ class ScheduleService:
                                                           'intent': intent, 'from': ep['_id']}, scene['scope_key'])
         from .people import People
         return {'going_to': People(self.store, persona).scene_title(scene), 'for': places.INTENTS[intent],
-                'note': '程序会在那个群里给你开一个回合；你在那儿看了现场再决定说不说、说什么。结果下次心跳带回来。'}
+                'note': '程序会在那个群里给你开一次；你在那儿看了现场再决定说不说、说什么。结果下次心跳带回来。'}
 
     def errand(self, ep, call_id, place, request, exactly, artifact_id=None):
         """An errand someone at home gave her: a turn in that chat with home's authority (errands.py), in its own copy of
@@ -629,7 +629,7 @@ class ScheduleService:
         found = places.find_errand(self.app.config, place)
         scene = found and scene_records.get(self.store, found[0])
         if not scene or not scene.get('channel_id'):
-            raise ValueError('ERRAND_PLACE_UNKNOWN: 「%s」不在 errand_places_from_program 里；照抄那里的 place' % place)
+            raise ValueError('ERRAND_PLACE_UNKNOWN: 「%s」不在能去办差的地方里；照抄那里的 place' % place)
         _, route, channel = found
         done = places.errands_lately(self.store, clock.now())
         if done >= places.ERRANDS_PER_DAY:
@@ -640,7 +640,7 @@ class ScheduleService:
             raise ValueError('ERRAND_PLACE_UNKNOWN: 「%s」那边没有可以接待你的成员授权（不是你的错），这趟去不了' % place)
         from . import outbound_media
         if artifact_id and artifact_id not in {item['artifact_id'] for item in outbound_media.produced_images(self.store, limit=50)}:
-            raise ValueError('ERRAND_PICTURE_NOT_HERS: 「%s」不是你自己做的图；照抄 image_artifacts_from_program 或 your_pictures_from_program 里的，或不带图'
+            raise ValueError('ERRAND_PICTURE_NOT_HERS: 「%s」不是你自己做的图；照抄你能发的图或你自己的图里的，或不带图'
                              % artifact_id)     # outside home only her own pictures go (any of hers may)
         from .evidence import canonical, sha
         from .people import People
@@ -661,7 +661,7 @@ class ScheduleService:
                                                        'author': author},
                          scene['scope_key'])
         return {'going_to': people.scene_title(scene),
-                'note': ('程序会在那边开一回合，带着家里的权限，排在那边手上的事后面；%d 分钟内轮不到就不发了（话题过去了）。'
+                'note': ('程序会在那边开一次，带着家里的权限，排在那边手上的事后面；%d 分钟内轮不到就不发了（话题过去了）。'
                          '办没办成，下次在家会看到。' % errands.PATIENCE_MINUTES)}
 
     def note(self, ep, cls, args, call_id, question=None):
@@ -685,7 +685,7 @@ class ScheduleService:
                 raise notes.NoteRefused('NOTE_VISIT_NOT_NOW', notes.WAKE_ONLY_NOT_NOW % why)
             if not can and args.get('mode'):
                 raise notes.NoteRefused('NOTE_VISIT_NOT_NOW', ('现在叫不醒那个群：%s。想晚点叫醒就用 plan 定个时间，到时再递；'
-                                                        '或者改成 next_time，下次在那边有回合时看到（那个群歇着的话可能要等很久，三天没读就过期）。') % why)
+                                                        '或者改成 next_time，下次在那边有你的时候看到（那个群歇着的话可能要等很久，三天没读就过期）。') % why)
             if not can:
                 # No deliver given (ADR-087 §4.4): the note waits for that group's next turn, and the result says so.
                 draft, deferred = {**draft, 'mode': notes.NEXT_TIME}, notes.NEXT_TIME_INSTEAD % why

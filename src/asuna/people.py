@@ -590,7 +590,7 @@ class People:
         text = str(value or '').strip().strip('〔〕[]「」 ')
         if text == '这条':
             row = message_records.pointable(self.store, scene['_id'], line='in-' + episode_id, by=None).first()
-            return (row, None) if row else (None, '这一回合没有叫你的那条，要引就写编号')
+            return (row, None) if row else (None, '这一次没有叫你的那条，要引就写编号')
         row = message_records.pointable(self.store, scene['_id'], seq=int(text), by=None).first() \
             if text.isdigit() else None
         if row:

@@ -43,10 +43,10 @@ ATTACHMENT_KEY = 'attachment'
 SKIPPED_KEY = 'attachment_skipped'
 NO_CAPABILITY = 'channel_does_not_declare_image'
 MAX_ITEMS_OFFERED = 6                 # 一轮最多给她看几张可引用的图
-IMPORTED_NOTE = ('这张图已经登记进这个场景的存储，可以在要发图的那一回合从 '
-                 'image_artifacts_from_program 里引用；同一主人的另一个私聊入口也能引用它。')
+IMPORTED_NOTE = ('这张图已经登记进这个场景的存储，可以在要发图的那一次从你能发的图里'
+                 '引用；同一主人的另一个私聊入口也能引用它。')
 
-SPEAK_OFFER_NOTE = ('这些是程序已经存好、这一回合可以发的图片：用 speak 的 picture（artifact_id 照抄下面列出的值，'
+SPEAK_OFFER_NOTE = ('这些是程序已经存好、这一次可以发的图片：用 speak 的 picture（artifact_id 照抄下面列出的值，'
                     '它不是文件路径也不是文件名）。没列出的图片不能发。')
 # A group may receive only pictures she produced (owner, 2026-10-05): bytes she imported from her own
 # generator (import_register), never a picture someone sent her. Any group she is in; she picks.
@@ -256,8 +256,8 @@ def produced_images(store, *, limit=MAX_ITEMS_OFFERED):
 
 
 # A read of the pictures that failed (ADR-119 F1, her wording): never the words of an empty list, nor of a full one.
-OFFER_UNREAD = '能发的图这次没读出来（读库出错）——这里既不是「没有图」，也不代表有图能发；下一回合会再读。'
-OWN_UNREAD = '你画的图这次没读出来（读库出错）——这里既不是「没有图」，也不代表有图；下一回合会再读。'
+OFFER_UNREAD = '能发的图这次没读出来（读库出错）——这里既不是「没有图」，也不代表有图能发；下一次会再读。'
+OWN_UNREAD = '你画的图这次没读出来（读库出错）——这里既不是「没有图」，也不代表有图；下一次会再读。'
 OWN_PICTURES_NOTE = ('这些是你自己画的图（新的在前）。这里发不出去，只是给你看：想看哪张，就用 read_image 传它的 '
                      'artifact_id。没调用就是没看过。')
 

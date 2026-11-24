@@ -51,7 +51,7 @@ SAFETY_CAP_ADVICE = {'brief': '拆开：先交一部分，其余用 task 的 mes
 # that carries it (the think description, plans_from_program, ideas_from_program, notes.py, the document's revision record);
 # a text with no entry here says no reason.
 LIMIT_WHY = {
-    ('think', 'thought'): '心里话会存档：这个对话里最近三段，下一回合一定看得到',
+    ('think', 'thought'): '心里话会存档：这个对话里最近三段，下一次一定看得到',
     ('plan', 'intent'): '这条安排到点时会原样放回你面前，是留给将来的你看的',
     ('ideas', 'idea'): '想法本里每一条都要在自我改进时一条条拿出来看',
     ('ideas', 'why'): '想法本里每一条都要在自我改进时一条条拿出来看',
@@ -87,17 +87,17 @@ POLICY_RETIRED = ('这个参数不在能改的参数里了，从你的参数里�
                   '它不再是你能改的键，写值会按"没有可以改的参数"拒。')
 PLAN_ENDED = {'CANCELLED': '取消', 'SUSPENDED': '停', 'FIRED': '跑完', None: '失效'}
 # ADR-087 §4.4 (with her ask: the new id named, the old one plainly still fired).
-PLAN_MOVED_FIRED = ('「%s」这回合已经到点跑完了，它还是跑完的那条，没有改动；按你给的时间新建了一条：%s。'
+PLAN_MOVED_FIRED = ('「%s」这次已经到点跑完了，它还是跑完的那条，没有改动；按你给的时间新建了一条：%s。'
                     '这件事以后改期或取消，用新的这条。')
-ASK_UNKNOWN = '没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。'
+ASK_UNKNOWN = '没有「%s」这个问题：id 照抄你问过的问题里的，或 ask 的结果。'
 # ADR-088 §4.2: a plan from a turn a note from outside opened at home is made where the note came from.
 PLAN_THERE = '建在%s（便条来的那边）：到点在那边跑，带那边的权限'
-OUTSIDE_GONE = '叫起这一回合的便条（或写它的那一回合）找不到了，不知道它从哪边来，这件事做不了；要记着或要说的在这里说出来。'
+OUTSIDE_GONE = '叫起这一次的便条（或写它的那一次）找不到了，不知道它从哪边来，这件事做不了；要记着或要说的在这里说出来。'
 # An errand turn hands new work home but does not steer the tasks listed there: they are that conversation's, which
 # home's authority does not reach (errands.NO_STEER). A reflection turn delegates as any home turn does.
 STEERING = ('task.message', 'task.stop')
 # Why think comes first, said where it is refused (her count, 2026-10-20: 153 refusals that gave no reason).
-THINK_FIRST = '先用 think 写下这回合的心里话，再做别的：它是你这一回合每一步的理由，存了档，之后回想得起来为什么这么做。'
+THINK_FIRST = '先用 think 写下这次的心里话，再做别的：它是你这一次每一步的理由，存了档，之后回想得起来为什么这么做。'
 # Whose a note is (ADR-135 N1): a person in this turn, or not written: the turn's (her own when nobody opened it).
 NOTE_FOR = '这张是为谁写的：一个人的标签；不写就是叫起你的那位，没有人叫你时就是你自己。这个人那句话的出处会跟着便条走。'
 
@@ -120,8 +120,8 @@ REFLECTION_TASK = '结果回到家里那一拍，这个会话的上下文不跟�
 # nobody there is waiting for her to speak); never in a group or someone else's chat, where someone is.
 CONDENSE_TURNS = ('visit', 'presence', 'self_development', 'settlement')
 CONDENSE_AT_HOME = ('scheduled',)
-CONDENSE_REFUSED = ('压不压一个群的对话，只在出门看群的那一回合定，或在家里（家里·私聊、跟主人的私聊、家里的几条线）你自己的'
-                    '心跳、反思、沉淀、或你的计划到点的那一回合定。群里和别人的私聊里有人在等你说话，那儿不定。')
+CONDENSE_REFUSED = ('压不压一个群的对话，只在出门看群的那一次定，或在家里（家里·私聊、跟主人的私聊、家里的几条线）你自己的'
+                    '心跳、反思、沉淀、或你的计划到点的那一次定。群里和别人的私聊里有人在等你说话，那儿不定。')
 # Hand-offs in a row without anyone speaking (task result -> delegate -> result ...): a loop stops here (ADR-018 §3.3).
 DELEGATION_DEPTH_MAX = 6
 # The tools a turn always has; the rest follow the turn's kind, scene and grants (`exposed`).
@@ -222,16 +222,16 @@ def artifact_words(kinds):
 
 
 ARTIFACT_FROM = artifact_words(('picture', 'file'))
-CALLS_WORDS = '这回合第 %d 次工具调用（提醒线 %d，硬线 %d，还剩 %d 次）'
+CALLS_WORDS = '这次第 %d 次工具调用（提醒线 %d，硬线 %d，还剩 %d 次）'
 CALLS_FEW = '先想清楚哪一步不做'
-CALL_LAST = '这回合第 %d 次工具调用，到了硬线（%d）：这次不做。下一次是最后一次，照做，做完这回合就结束；%s'
+CALL_LAST = '这次第 %d 次工具调用，到了硬线（%d）：这次不做。下一次是最后一次，照做，做完这次就结束；%s'
 CAP_SPEAKS = '用它 speak 把要说的说完。'
-CALLS_ENDED = '这回合的工具调用过了硬线（%d），回合到这里结束。'
+CALLS_ENDED = '这次的工具调用过了硬线（%d），这一次到这里结束。'
 CALLS_OVER = 'CALLS_OVER'          # the code of a call past the hard line: it ran nothing
 # ADR-131: the one call that only ends her turn (her model writes its decision to stop as a call). Her words (D9, 0501).
 END_TURN = 'end_turn'
 END_TURN_WORDS = '到这里为止：你决定这一次就到这儿。想说的话先用 speak 说完。'
-END_TURN_NOTE = '这一回合结束了。'
+END_TURN_NOTE = '这一次结束了。'
 TITLE_FROM_BRIEF = '没写 title：用了 brief 的第一句：%s'
 from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her words for a function not carried here
 # ADR-129 D9: a local conversation (every one whose channel kind declares no REPLY_PARTS: her local Web chat, the agent
@@ -240,7 +240,7 @@ LOCAL_PARTS = ('text', 'sticker', 'picture')
 # Her words (agent lines 0430, 0433, 0449): speak in a local conversation, its two fields there, and a market sticker
 # there.
 LOCAL_SPEAK = ('在家里（不是 QQ 的那几条对话都算），说话没有限制。想说什么、说几条都可以，不用挑一句最要紧的交上来；不想说就不调用 `speak`。'
-               '`speak` 不是许可，也不是新的必需动作，它只是把你这一回合想说的话再往外递一句的形式。没有人拿你说了多少来评判你。')
+               '`speak` 不是许可，也不是新的必需动作，它只是把你这一次想说的话再往外递一句的形式。没有人拿你说了多少来评判你。')
 LOCAL_PARTS_FIELD, LOCAL_TEXT_FIELD = '这一次要发出去的，按顺序排', '这一条消息的文字'
 MARKET_LOCAL = '第 %d 条 sticker「%s」是平台的市场表情，这里显示不了；换成架子上的名字就能发。'
 # Not listed in a local conversation (ADR-129 D4): no quote carried there, wait and patience are for groups, force
@@ -1148,36 +1148,36 @@ def abilities(store, ep):
 # When a tool her conversation lists can be used, for the turns that may not use it: the whole rule, so one refusal
 # teaches it (her ask, 2026-10-11).
 NOT_NOW = {
-    'task.answer': 'task 的 answer 只在行动脑问你话的那一回合用，现在没有它在等的问题；要跟在做事的行动脑说话，用 task 的 message。',
+    'task.answer': 'task 的 answer 只在做着的事冒出问题来问你的那一次用，现在没有在等答案的问题；要给做着的事补话，用 task 的 message。',
     'read_image': '这个对话最近没有能看的图：图要在这个对话 7 天内的消息里，或者是列出来的你自己的图；在家里，你其他对话里 7 天内的图也能看。',
-    'private_words': '这一回合不记名单。',
-    'ideas.read': ('想法本在自我改进的回合里读和定，家里有人跟你说话问起、或者便条叫醒你时也能读；心跳、计划到点、夜间沉淀的回合不翻，'
-                   '先记着，等自我改进那一回合。'),
-    'ideas.review': ('想法本在自我改进的回合里定，或者家里有人跟你说话问起时；别的回合只记不定，先记着，等自我改进那一回合。'),
+    'private_words': '这一次不记名单。',
+    'ideas.read': ('想法本在自我改进的时候读和定，家里有人跟你说话问起、或者便条叫醒你时也能读；心跳、计划到点、夜间沉淀的时候不翻，'
+                   '先记着，等自我改进那一次。'),
+    'ideas.review': ('想法本在自我改进的时候定，或者家里有人跟你说话问起时；别的时候只记不定，先记着，等自我改进那一次。'),
     'delegate': '这一次说话的人在这里没有让你动手的授权，这件事交不了。',
-    'task.message': '这个对话现在没有交给行动脑的事；要交新的事用 delegate。',
+    'task.message': '这个对话现在没有做着的事；要做新的事用 delegate。',
     'task.stop': '现在没有在做或暂停着的任务可停。',
-    'sticker': ('这回合没有表情包可用：架子和候选不在这回合里（夜间沉淀只在列出 stickers_review_from_program 那晚整理架子）；'
-                '在能发表情包的对话里，或者家里别的回合再用。'),
-    'credential': '保险箱只在家里有人跟你说话、或者任务交回来的那一回合用；心跳、计划到点、自我改进这些回合不收不删。',
-    'find_member': '这回合没有这个群的成员名单可查；照对话里的标签认人。',
-    'understand_person': ('这回合没有人跟你说话（心跳、夜间沉淀、自我改进、便条叫醒这几种回合，群里还有计划到点），'
+    'sticker': ('这次没有表情包可用：这次没有架子和候选（夜间沉淀只在要整理架子的那晚整理）；'
+                '在能发表情包的对话里，或者家里别的时候再用。'),
+    'credential': '保险箱只在家里有人跟你说话、或者任务交回来的那一次用；心跳、计划到点、自我改进这些时候不收不删。',
+    'find_member': '这次没有这个群的成员名单可查；照对话里的标签认人。',
+    'understand_person': ('这次没有人跟你说话（心跳、夜间沉淀、自我改进、便条叫醒这几种时候，群里还有计划到点），'
                           '没有要写理解的人；等对方下次开口，或者去那个群串门时再写。'),
-    'feel': '这回合没有情感账可记。',
+    'feel': '这次没有情感账可记。',
     'group_action': '群里：你在这个群现在不是管理员，或者管理动作关着；家里：现在没有等你回的请求。',
-    'promote_memory': '提升长期记忆只在夜间沉淀那一回合做（候选和配额那时才列出来）；现在先记着，晚上再提。',
-    'peer_line': '这回合没有能开关的线。',
-    'errand': ('差事在家里接：有人跟你说话让你去办、你自己的计划到点、或者你在家里写的便条叫醒你的那一回合，'
-               '去处列在 errand_places_from_program；自己想去别处串门，用 visit。'),
-    'visit': 'visit 只在家里的心跳或计划到点的回合里用：想出门，等下一拍心跳，或者用 plan 定个时间，到点再去。',
-    'note': '这回合没有能送便条的地方：没有别的对话可去。',
+    'promote_memory': '提升长期记忆只在夜间沉淀那一次做（候选和配额那时才列出来）；现在先记着，晚上再提。',
+    'peer_line': '这次没有能开关的线。',
+    'errand': ('差事在家里接：有人跟你说话让你去办、你自己的计划到点、或者你在家里写的便条叫醒你的那一次，'
+               '去处列在能去办差的地方里；自己想去别处串门，用 visit。'),
+    'visit': 'visit 只在家里的心跳或计划到点的时候用：想出门，等下一拍心跳，或者用 plan 定个时间，到点再去。',
+    'note': '这次没有能送便条的地方：没有别的对话可去。',
 }
-ERRAND_NOTE = ('外面写来的便条叫起来的回合，只有便条带着主人本人的原话（程序核对过主人的账号）才能接差事；这张没有。'
+ERRAND_NOTE = ('外面写来的便条叫起来的时候，只有便条带着主人本人的原话（程序核对过主人的账号）才能接差事；这张没有。'
                '要去办，就在这里说出来，主人在这里看得到。')
-CONSULT_ONLY = '行动脑在问你话：这一回合只用 task 的 answer 回答它（think、recall 也能用），别的事等下一回合。'
-CONSULT_ONLY_THINKING = '行动脑在问你话：这一回合只用 task 的 answer 回答它（recall 也能用），别的事等下一回合。'
-TIME_UP_ONLY = '程序在问你一件到了时间上限的事：这一回合只用 task 的 more、message、stop 定它（think、recall 也能用），别的事等下一回合。'
-TIME_UP_ONLY_THINKING = '程序在问你一件到了时间上限的事：这一回合只用 task 的 more、message、stop 定它（recall 也能用），别的事等下一回合。'
+CONSULT_ONLY = '做着的事冒出一个问题：这一次只用 task 的 answer 回答（think、recall 也能用），别的事等下一次。'
+CONSULT_ONLY_THINKING = '做着的事冒出一个问题：这一次只用 task 的 answer 回答（recall 也能用），别的事等下一次。'
+TIME_UP_ONLY = '程序在问你一件到了时间上限的事：这一次只用 task 的 more、message、stop 定它（think、recall 也能用），别的事等下一次。'
+TIME_UP_ONLY_THINKING = '程序在问你一件到了时间上限的事：这一次只用 task 的 more、message、stop 定它（recall 也能用），别的事等下一次。'
 # ADR-088 §4.2: what needs home's authority, which a turn a note from outside opened at home does not have.
 HOME_AUTHORITY = frozenset(('delegate', 'task.message', 'task.stop', 'errand', 'visit', 'credential', 'write_document',
                             'set_policy', 'restart', 'group_focus', 'ask.ask', 'ask.close',
@@ -1187,12 +1187,12 @@ HOME_AUTHORITY = frozenset(('delegate', 'task.message', 'task.stop', 'errand', '
 # ADR-108 D4c: what does the job when the tool or option she reached for is not in this turn: one table, each entry an ability
 # with what it does, intersected with this turn's tools. A test holds that every entry names an ability that exists.
 INSTEAD = {
-    'task.answer': (('task.message', '给行动脑补话、改目标'),),
-    'task.message': (('delegate', '把一件新的事交给行动脑'),),
+    'task.answer': (('task.message', '给做着的事补话、改目标'),),
+    'task.message': (('delegate', '动手做一件新的事'),),
     'errand': (('visit', '自己出门去那个群看看'),),
     'visit': (('plan', '把这件事留到将来再想'),),
 }
-INSTEAD_WORDS = '这一回合能做这件事的是：%s。'
+INSTEAD_WORDS = '这一次能做这件事的是：%s。'
 
 
 def instead_words(ep, name):
@@ -1224,7 +1224,7 @@ def _why_not_now(store, ep, name):
         from . import notes
         if not notes.can_send(notes.opening(store, ep)):
             return notes.REPLY_ENDS
-    return NOT_NOW.get(name, '这一回合用不了 %s。' % named(name))
+    return NOT_NOW.get(name, '这一次用不了 %s。' % named(name))
 
 
 STICKER_LOOKED_NOTE = ('这是个表情包。想以后再见到它不用再看：用 sticker 的 remember 记个名字和一句它在说什么'
@@ -1271,7 +1271,7 @@ def her_pictures(store, ep):
 # to TURN_PICTURES are filled from photos (not stickers: she knows those by fingerprint) in the few lines before it.
 TURN_PICTURES = 2
 TURN_PICTURE_LINES = 6
-PICTURES_NOTE = ('这些图已经作为图片跟这一回合一起给你了，不用再 read_image；别的图照旧用 read_image（ref 照抄图旁标的）。'
+PICTURES_NOTE = ('这些图已经作为图片跟这一次一起给你了，不用再 read_image；别的图照旧用 read_image（ref 照抄图旁标的）。'
                  '哪张没出现，就是没拉下来，用 read_image 再看一次也行。')
 
 
@@ -1286,7 +1286,7 @@ def turn_pictures(store, ep):
     source = message_records.get(store, 'in-' + ep['_id'], scene=ep['scene_id'])
     if not source:
         return [], None
-    chosen = [(entry, '触发这一回合的那条') for entry in attachments_of(source, config=store.config)][:TURN_PICTURES]
+    chosen = [(entry, '触发这一次的那条') for entry in attachments_of(source, config=store.config)][:TURN_PICTURES]
     if len(chosen) < TURN_PICTURES:
         earlier = message_records.inbound(store, ep['scene_id'], ep['policy_epoch'],
                                           before=source.get('scene_seq', 0),
@@ -1317,10 +1317,10 @@ def turn_pictures(store, ep):
 # fix; a code not listed here is passed on as it is (its own message says both).
 WORDS = {
     'DOC_WRITE_REQUIRES_OWNER_PRIVATE': '这份文档只能在家里（家里·私聊、主人私聊这类可信的对话）改。',
-    'GROUP_NOTES_ONLY_IN_ITS_GROUP': ('群笔记是那个群自己的，在那个群的回合里读，所以在那个群里用 doc=group_notes 写；家里没有「这个群」。'
+    'GROUP_NOTES_ONLY_IN_ITS_GROUP': ('群笔记是那个群自己的，在那个群的时候读，所以在那个群里用 doc=group_notes 写；家里没有「这个群」。'
                                       '此刻要记，先用 ideas 的 note 记下，回那个群再写。'
                                       '只能 append_section、replace_section 或 set_tags。'),
-    'NOTE_OVER_LIMIT': '这份笔记已经超出每回合上限很多了，先整理（改短、合并，或用 set_tags 把不常用的节收起来）再加新的。',
+    'NOTE_OVER_LIMIT': '这份笔记已经超出每次上限很多了，先整理（改短、合并，或用 set_tags 把不常用的节收起来）再加新的。',
     'DOC_SECTION_NOT_FOUND': '没有这一节。',
     'DOC_BODY_REQUIRED': '这个操作要在 content 里写正文。',
     'DOC_HEADING_REQUIRED': '新的一节要有标题。',
@@ -1337,22 +1337,22 @@ WORDS = {
     'POLICY_SET_REQUIRES_OWNER_PRIVATE': '参数只能在家里（家里·私聊、主人私聊这类可信的对话）改。',
     'PROMOTE_ONLY_IN_SETTLEMENT': '提升长期记忆只在夜间沉淀时做。',
     'PROMOTION_QUOTA': '今天提升长期记忆的配额用完了。',
-    'PROMOTION_SOURCES_INSUFFICIENT': '来源不够：要来自足够多的不同回合和日期。',
+    'PROMOTION_SOURCES_INSUFFICIENT': '来源不够：要来自足够多的不同时候和日期。',
     'ATTACH_TARGET_NOT_ALLOWED': '这里不能带图：私聊和你在的群能带（群和别人的私聊只发你自己做的图）。',
-    'ATTACH_ARTIFACT_NOT_IN_CONTEXT': '只能用 image_artifacts_from_program 里列出的 artifact_id。',
-    'ATTACHMENT_NOT_HER_OWN': '群里和别人的私聊里只能发你自己做的图；换一张你做的，或这回合不带图。',
-    'ATTACHMENT_ARTIFACT_UNAVAILABLE': '这张图还没做好或已经不在了；换 image_artifacts_from_program 里别的，或这回合不带图。',
-    'ATTACHMENT_SCOPE_DENIED': '这张图不是这个对话能用的；换一张，或这回合不带图。',
-    'ATTACHMENT_NOT_AN_IMAGE': '这不是一张能发的图片；换一张，或这回合不带图。',
-    'ATTACHMENT_OVER_LIMIT': '这张图超过 8 MiB，发不了；换一张，或这回合不带图。',
-    'ATTACHMENT_HASH_MISMATCH': '这张图的存档对不上（不是你的错），发不了；换一张，或这回合不带图。',
+    'ATTACH_ARTIFACT_NOT_IN_CONTEXT': '只能用你能发的图里列出的 artifact_id。',
+    'ATTACHMENT_NOT_HER_OWN': '群里和别人的私聊里只能发你自己做的图；换一张你做的，或这次不带图。',
+    'ATTACHMENT_ARTIFACT_UNAVAILABLE': '这张图还没做好或已经不在了；换你能发的图里别的，或这次不带图。',
+    'ATTACHMENT_SCOPE_DENIED': '这张图不是这个对话能用的；换一张，或这次不带图。',
+    'ATTACHMENT_NOT_AN_IMAGE': '这不是一张能发的图片；换一张，或这次不带图。',
+    'ATTACHMENT_OVER_LIMIT': '这张图超过 8 MiB，发不了；换一张，或这次不带图。',
+    'ATTACHMENT_HASH_MISMATCH': '这张图的存档对不上（不是你的错），发不了；换一张，或这次不带图。',
     'GROUP_ACTION_NOT_A_GROUP': '这里不是群。',
     'GROUP_ACTION_DISABLED': '这个群关掉了管理动作。',
     'GROUP_ACTION_NOT_AN_ADMIN': '你在这个群不是管理员。',
     'VISIT_PLACE_UNKNOWN': '这个地方去不了。',
     'VISIT_NOT_NOW': '现在去不了那里。',
     'VISIT_OFF': '出门现在没开。',
-    'VISIT_PICTURE_NOT_HERS': '只能带你自己做的图；到了群里那个回合再挑也行。',
+    'VISIT_PICTURE_NOT_HERS': '只能带你自己做的图；到了群里再挑也行。',
     'STICKER_SHELF_FULL': '表情包架子满了：先用 drop 放下一个不想要的，再收。',
     'STICKER_NAME_TAKEN': '架子上已经有这个名字了：换一个名字。',
     'STICKER_NAME_INVALID': '名字不合适。',
@@ -1373,22 +1373,22 @@ WORDS = {
     'WATCH_MODE_INVALID': 'how_often 是 once 或 burst。',
     'WATCH_PERSON_NOT_HERE': '这个对话里找不到这个人：照抄这个人的标签或 #编号。',
     'WATCH_PERSON_UNCLEAR': '这个名字对得上不止一个人：用标签里的 #编号。',
-    'WATCH_LIST_FULL': 'watch 名单满了：先 off 一个（id 照抄 watching_from_program）。',
-    'WATCH_NOT_FOUND': '名单上没有这个 id：照抄 watching_from_program 里的 id。',
+    'WATCH_LIST_FULL': 'watch 名单满了：先 off 一个（id 照抄你的 watch 名单里的）。',
+    'WATCH_NOT_FOUND': '名单上没有这个 id：照抄你的 watch 名单里的 id。',
     'STICKER_NO_FINGERPRINT': '这个表情包平台没给能认出它的标记，记不住；想留着就 keep。',
     'STICKER_CANDIDATE_GONE': '这个候选已经不在池子里了（挤掉了或收过了）。',
-    'STICKER_NOT_ON_SHELF': '架子上没有这个名字：照抄 stickers_from_program 里的名字。',
+    'STICKER_NOT_ON_SHELF': '架子上没有这个名字：照抄架子上的名字。',
     'STICKER_NOTHING_TO_CHANGE': 'rename 要写 new_name 或 when。',
     'ERRAND_PLACE_UNKNOWN': '这个地方去不了。',
     'ERRAND_LIMIT': '替人跑腿的次数用完了。',
     'ERRAND_ONLY_AT_HOME': '只有在家里（家里·私聊、主人私聊这类可信的对话）才能接差事。',
     'ERRAND_PICTURE_NOT_HERS': '差事只能带你自己做的图。',
-    'ERRAND_ONLY_WHEN_ASKED': '差事只在家里有人跟你说话、让你去办的那一回合接；自己想去，用 visit。',
+    'ERRAND_ONLY_WHEN_ASKED': '差事只在家里有人跟你说话、让你去办的那一次接；自己想去，用 visit。',
     'FEEDBACK_TASK_STALE': '这一步做不了。',
-    'WORKSPACE_NOT_AUTHORIZED': '这个对话不能交给行动脑做事；能直接答的就直接答。',
+    'WORKSPACE_NOT_AUTHORIZED': '这个对话里不能动手做事。',
     'SCENE_MEMBERSHIP_DENIED': '这一步做不了。',
     'STALE_REVISION': '没写进去。',
-    'UNDERSTANDING_UPDATE_NOT_AVAILABLE': '这回合不能更新对这个人的理解；重试也一样。',
+    'UNDERSTANDING_UPDATE_NOT_AVAILABLE': '这次不能更新对这个人的理解；重试也一样。',
     'IMAGE_ATTACHMENT_NOT_IN_SCENE': '这个 ref 对不上。',
     'IMAGE_NOT_PULLABLE': '这张图看不了。',
     'IMAGE_SOURCE_UNAVAILABLE': '这张图的来源已经没有了。',
@@ -1399,7 +1399,7 @@ WORDS = {
     'IMAGE_TOO_LARGE': '这张图太大，看不了。',
     'IMAGE_TYPE_UNSUPPORTED': '这不是能看的图片格式。',
     'IMAGE_PATH_HOME_ONLY': '按路径读图只在家里（家里·私聊、主人私聊这类可信的对话）能做；这里看消息里的图，ref 照抄图旁标的那个。',
-    'VISION_ROUTE_UNSUPPORTED': '你现在的模型看不了图；要看就交给行动脑，把 ref 一起交代。',
+    'VISION_ROUTE_UNSUPPORTED': '你现在的模型看不了图；要看就用 delegate 动手看，把 ref 一起交代。',
 }
 
 
@@ -1555,7 +1555,7 @@ def chat_lines(text):
     return count
 
 
-QUESTION_RECEIPT = '这是在问这里的人：问题 %s，等%s（%d 分钟）；有人回会叫你看一眼，回答进 questions_from_program。'
+QUESTION_RECEIPT = '这是在问这里的人：问题 %s，等%s（%d 分钟）；有人回会叫你看一眼，回答进你问过的问题里。'
 
 
 def reply_receipt(queued):
@@ -1565,9 +1565,9 @@ def reply_receipt(queued):
     listed = '；'.join('%d %s%s' % (row['number'], row['shown'], ' 〔%d〕' % row['seq'] if row.get('seq') else '')
                       for row in done)
     if len(done) == len(queued):
-        return '发出 %d 条，%s排上了：%s。送没送到看下一回合的历史。' % (len(queued), '都' if len(queued) > 1 else '', listed)
+        return '发出 %d 条，%s排上了：%s。送没送到看下一次的历史。' % (len(queued), '都' if len(queued) > 1 else '', listed)
     failed = next(row for row in queued if row not in done)
-    return ('发出 %d 条：%s。第 %d 条没发出去，它后面的都取消了；送没送到看下一回合的历史。'
+    return ('发出 %d 条：%s。第 %d 条没发出去，它后面的都取消了；送没送到看下一次的历史。'
             % (len(queued), listed or '一条都没排上', failed['number']))
 
 
@@ -1581,7 +1581,7 @@ def _given(args, field):
 # Why her understanding of someone was not saved (MemoryService.commit_understanding: NOT_COMMITTED), in words.
 UNDERSTANDING_NOT_SAVED = {
     'NO_NEW_SOURCE_EVENTS': '这次没有新的对话可以作依据，理解没存；有了新的对话再更新。',
-    'BASE_REVISION_STALE': '对这个人的理解刚被更新过，这次没存；下回合看了最新的再改。',
+    'BASE_REVISION_STALE': '对这个人的理解刚被更新过，这次没存；下次看了最新的再改。',
 }
 
 
@@ -2323,7 +2323,7 @@ class RoleTools:
                 elif face:
                     problem('第 %d 条：%s' % (index, face))
                 elif same in texts:
-                    problem('第 %d 条这回合已经发过一样的' % index)
+                    problem('第 %d 条这次已经发过一样的' % index)
                 elif people and people.numbers(scene, text):
                     numbered = True
                     problem('第 %d 条里%s，这里的人看不懂：写名字，或 @ 整个标签' % (index, '，'.join(
@@ -2400,7 +2400,7 @@ class RoleTools:
         if wait == 'question' and not any(row['kind'] == 'text' for row in planned):
             problem('wait=question 要有一个 text 写问题')
         if over:
-            problem('text 一回合到硬线 %d 行为止（你平时 %d 行以内；每一行都算，空行不算，一个代码块算一行）：%s'
+            problem('text 一次到硬线 %d 行为止（你平时 %d 行以内；每一行都算，空行不算，一个代码块算一行）：%s'
                     % (SPEAK_HARD_LINES, most, '；'.join(over)))
         if problems or self.problems:
             self.problems.extend(problems)
@@ -2432,7 +2432,7 @@ class RoleTools:
         out = {'note': reply_receipt(queued) if queued else '这次没发新的。'}
         if not local_here and any(part['kind'] == 'text' for part in planned):
             # Her budget reminder (ADR-084): the turn's lines so far, in numbers.
-            out['lines'] = '这回合已说 %d 行（你平时 %d 行以内，硬线 %d）' % (lines, most, SPEAK_HARD_LINES)
+            out['lines'] = '这次已说 %d 行（你平时 %d 行以内，硬线 %d）' % (lines, most, SPEAK_HARD_LINES)
         if quoted:
             out['quoted'] = QUOTED % People(self.store, ep['persona']).pointed(scene, quoted)
         taken_back = [RECALL_QUEUED % item['seq'] for item in planned if item.get('recall_seq')] + cancelled
@@ -2561,7 +2561,7 @@ class RoleTools:
         if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
             outbound_media.refuse_erased_named(self.store, artifact, scopes, produced_only=mine_only, here=here,
                                                scene_id=scene_id)
-            raise Refused('不在 image_artifacts_from_program 里', ['ATTACH_ARTIFACT_NOT_IN_CONTEXT'])
+            raise Refused('不在你能发的图里', ['ATTACH_ARTIFACT_NOT_IN_CONTEXT'])
         return outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact, scopes,
                                               produced_only=mine_only, here=here, scene_id=scene_id)
 
@@ -2574,8 +2574,8 @@ class RoleTools:
     # ── the action brain ────────────────────────────────────────────
     def _depth(self, ep):
         if int(ep.get('delegation_depth') or 0) >= DELEGATION_DEPTH_MAX:
-            return self._found('这件事已经连着交给行动脑、拿回结果 %d 轮了，中间没有人说过话。先停下来：把进展说给对方听，'
-                               '等对方开口再接着交。' % DELEGATION_DEPTH_MAX, 'DELEGATION_DEPTH')
+            return self._found('这件事已经连着动手、交回 %d 轮了，中间没有人说过话，先停在这里；'
+                               '对方开口以后再接着做。' % DELEGATION_DEPTH_MAX, 'DELEGATION_DEPTH')
 
     def _toward(self, ep, text):
         """`_toward_action`, or None with the problem kept while a handler collects (a raw root, an unknown name)."""
@@ -2607,7 +2607,7 @@ class RoleTools:
         from .tasks import queue_words
         from . import whose as whose_of
         moved = whose_of.moved(task, ep)
-        return {'task': task['_id'], 'state': '已交给行动脑',
+        return {'task': task['_id'], 'state': '已经动手',
                 **({'tier': task['tier_words']} if task.get('tier_words') else {}),
                 'for': (whose_of.words(self.store, ep.get('persona'), task['whose']) + '；'
                         + (whose_of.RESULT_OUTSIDE if moved else whose_of.RESULT_HERE)),
@@ -2645,8 +2645,8 @@ class RoleTools:
         if 'task' in self.flagged:
             return None                               # the strict schema has named it
         if not isinstance(task_id, str) or not task_id:
-            return self._found('task 要照抄 task_state_from_program 里的 _id。' + refs_usable(self._listed_tasks(ep)),
-                               'TASK_ID_NEEDED', 'task 要照抄 task_state_from_program 里的 _id。' + refs_usable(self._listed_tasks(ep), self.SHORT_LIST))
+            return self._found('task 要照抄你手上的事里的 _id。' + refs_usable(self._listed_tasks(ep)),
+                               'TASK_ID_NEEDED', 'task 要照抄你手上的事里的 _id。' + refs_usable(self._listed_tasks(ep), self.SHORT_LIST))
         task = task_records.get(self.store, task_id, scene=ep['scene_id'], requester=ep['person_id'],
                                 epoch=ep['policy_epoch'])
         if not task:
@@ -2662,9 +2662,9 @@ class RoleTools:
             close = [row['_id'] for row in task_records.by_prefix(
                 self.store, task_id[:12], scene=ep['scene_id'], requester=ep['person_id'],
                 epoch=ep['policy_epoch']).rows(limit=3, fields=['_id'])]
-            return self._found('「%s」不是这个对话里的任务。照 task_state_from_program 原样抄 _id。%s'
+            return self._found('「%s」不是这个对话里的任务。照你手上的事里的原样抄 _id。%s'
                                % (echoed(task_id), refs_usable([*close, *self._listed_tasks(ep)])), 'TASK_UNKNOWN',
-                               '「%s」不是这个对话里的任务。照 task_state_from_program 原样抄 _id。%s'
+                               '「%s」不是这个对话里的任务。照你手上的事里的原样抄 _id。%s'
                                % (echoed(task_id), refs_usable([*close, *self._listed_tasks(ep)], self.SHORT_LIST)))
         return task
 
@@ -3108,7 +3108,7 @@ class RoleTools:
             # Saved before this turn was interrupted: once per episode, person and layer, never a second revision.
             update = {'state': 'COMMITTED', 'accepted_revision': saved['_id']}
             self._record_write(ep, own, field, layer, person_id, update)
-            return {'state': 'COMMITTED', 'note': '这回合中断前已经保存过%s。' % words}, False
+            return {'state': 'COMMITTED', 'note': '这次中断前已经保存过%s。' % words}, False
         with database_effects_lock(self.store.name):
             require_current_feedback(self.store, ep)
             update = MemoryService(self.store).commit_understanding(self._fresh(ep), body, layer, person_id=person_id,
@@ -3120,7 +3120,7 @@ class RoleTools:
             result['short'] = 'short 超了 %d 字，下次短些。' % (len(short) - _understanding.SHORT_CHARS)
         if update.get('state') == 'NOT_COMMITTED':
             result['note'] = UNDERSTANDING_NOT_SAVED.get(str(update.get('reason')).split(':', 1)[0],
-                                                         '这次理解没存上（不是你的错）；重试也一样，下回合再更新。')
+                                                         '这次理解没存上（不是你的错）；重试也一样，下次再更新。')
         return result, False
 
     def _record_write(self, ep, own, field, layer, person_id, update):
@@ -3192,14 +3192,14 @@ class RoleTools:
         place = self._text(args, 'place', 40)
         found = places.find(self.store.config, place)
         if not found:
-            raise Refused('没有「%s」这个地方；place 照抄 places_from_program 或 group_focus 的 list 里的 place。' % echoed(place),
+            raise Refused('没有「%s」这个地方；place 照抄能去的地方或 group_focus 的 list 里的 place。' % echoed(place),
                           ['PLACE_UNKNOWN'])
         tools = args.get('value')
         if not isinstance(tools, list) or not all(isinstance(t, str) for t in tools):
             raise Refused('tools_off 的 value 是工具名的列表（比如 ["sticker", "delegate"]）；空列表就是全部恢复。', ['ARGS_TYPE'])
         unknown = [t for t in tools if t not in TOOLS or t in switches.KEEP]
         if unknown:
-            raise Refused('这些关不了：%s（不是工具，或是一回合离不了的 think、recall、end_turn）。'
+            raise Refused('这些关不了：%s（不是工具，或是一次离不了的 think、recall、end_turn）。'
                           % '、'.join(echoed(name) for name in unknown),
                           ['SWITCH_NOT_A_TOOL'])
         scene = scene_records.get(self.store, found[0]) or {'_id': found[0]}
@@ -3334,7 +3334,7 @@ class RoleTools:
         if fields.get('who'):
             found = people.resolve(scene, fields['who'])
             if len(found) != 1 or not found[0].get('person'):
-                self._found('who「%s」%s；照抄这回合里对方的标签（如 [名字 #4]），或者不写。'
+                self._found('who「%s」%s；照抄这里对方的标签（如 [名字 #4]），或者不写。'
                             % (echoed(fields['who']), '对得上不止一个人' if len(found) > 1 else '不是这个对话里的人'), 'FEEL_WHO_UNKNOWN')
                 return fields, ''
             return {**fields, 'who': found[0]['person']}, '记在了对%s的心情里' % people.label(found[0])
@@ -3392,7 +3392,7 @@ class RoleTools:
                     wanted = self._text(args, 'line', 80)
                     where = next((item for item in lines.peer_lines(self.store) if item['label'] == wanted), None)
                     if not where:
-                        raise Refused('没有这条线；照抄 lines_from_program 里的 place。'
+                        raise Refused('没有这条线；照抄你的几条线里的 place。'
                                       + refs_usable(item['label'] for item in lines.peer_lines(self.store)),
                                       ['PEER_LINE_UNKNOWN'])
                 plan = run(lambda: c.scheduler.create(ep, spec, plan_id='plan-' + sha(canonical([ep['_id'], call_id]))[:32],
@@ -3415,8 +3415,8 @@ class RoleTools:
                                       % (echoed(plan_id), PLAN_ENDED.get(kept.get('status'), '跑完')), ['PLAN_ENDED'])
                     else:
                         usable = [*planned, *(made - {None})]
-                        raise Refused('「%s」不在 plans_from_program 里，也不是这回合刚建的；照列表原样抄 plan_id，'
-                                      '或抄这回合 plan 工具返回的 plan_id。%s' % (echoed(plan_id), refs_usable(usable)), ['PLAN_UNKNOWN'])
+                        raise Refused('「%s」不在你的计划里，也不是这次刚建的；照列表原样抄 plan_id，'
+                                      '或抄这次 plan 工具返回的 plan_id。%s' % (echoed(plan_id), refs_usable(usable)), ['PLAN_UNKNOWN'])
                 from .schedule import RHYTHM_KINDS
                 if row.get('kind') in RHYTHM_KINDS:
                     # Her rhythms belong to the program (ADR-012 §4.3): she tunes them, never cancels or retimes them here.
@@ -3560,7 +3560,7 @@ class RoleTools:
             from . import questions
             row = questions.get(self.store, str(qid), persona=ep['persona'])
             if not row or not any(s.get('kind') == 'group' and s.get('scene_id') == ep['scene_id'] for s in row['sources']):
-                raise Refused('question 对不上你在这里问的问题：照抄 questions_from_program 里的 q-…', ['NOTE_QUESTION_UNKNOWN'])
+                raise Refused('question 对不上你在这里问的问题：照抄你问过的问题里的 q-…', ['NOTE_QUESTION_UNKNOWN'])
             args = {**args, 'answers': row['_id']}
         return self._note(ep, call_id, {k: v for k, v in args.items() if k != 'question'}, visibility.PUBLIC)
 
@@ -3597,12 +3597,12 @@ class RoleTools:
             raise Refused(words(exc), [code_of(exc)])
         except ValueError as exc:
             raise Refused(words(exc), [code_of(exc)])
-        when = {'now': '下一刻就停', 'quiet': '等没有在跑的回合、任务和排队消息（最多 30 分钟）'}.get(
+        when = {'now': '下一刻就停', 'quiet': '等没有在进行的对话、任务和排队消息（最多 30 分钟）'}.get(
             pending['when'], '到 %s 后再等安静' % pending['when'])
         replaced = pending.get('replaced')
         return {'queued': True, 'when': when, 'drill': pending['drill'],
                 **({'replaced': '顶掉了原来排着的那个：' + restarts.waiting_words(replaced, restarts._zone(desk.zone))} if replaced else {}),
-                'note': '交给监工了。排着的时候，你在家里的每一回合都在 restart_from_program 里看得到它；起来以后结果也在那里；'
+                'note': '交给监工了。排着的时候，你在家里的每一次都看得到它（重启的那一栏）；起来以后结果也在那里；'
                         '退回旧版本会马上叫你。'}, False
 
     def tool_peer_line(self, ep, call_id, args):
@@ -3611,7 +3611,7 @@ class RoleTools:
         wanted = self._text(args, 'line', 80)
         line = next((item for item in lines.peer_lines(self.store) if item['label'] == wanted), None)
         if not line:
-            raise Refused('没有这条线；照抄 lines_from_program 里的 place。'
+            raise Refused('没有这条线；照抄你的几条线里的 place。'
                           + refs_usable(item['label'] for item in lines.peer_lines(self.store)), ['PEER_LINE_UNKNOWN'])
         op = args.get('op')
         if op not in ('open', 'close'):
@@ -3632,7 +3632,7 @@ class RoleTools:
         noted = [call for call in (ep.get('tool_calls') or {}).values()
                  if ability(call.get('tool'), call) == 'ideas.note' and 'result' in call]
         if len(noted) >= IDEAS_PER_TURN:
-            self._found('这回合已经记了 %d 条想法（上限 %d 条），先到这里；别的下回合再记。' % (len(noted), IDEAS_PER_TURN),
+            self._found('这次已经记了 %d 条想法（上限 %d 条），先到这里；别的下次再记。' % (len(noted), IDEAS_PER_TURN),
                         'IDEAS_PER_TURN')
         self.checkpoint()
         row = note_idea(self.store, ep['persona'], idea, why, key=[ep['_id'], call_id],
@@ -3669,13 +3669,13 @@ class RoleTools:
         if place:
             found = places.find(self.store.config, place)
             if not found:
-                raise Refused('没有「%s」这个群；place 照抄 group_focus 的 list 或 places_from_program 里的 place。' % echoed(place),
+                raise Refused('没有「%s」这个群；place 照抄 group_focus 的 list 或能去的地方里的 place。' % echoed(place),
                               ['PLACE_UNKNOWN'])
             scene = scene_records.get(self.store, found[0])
         elif (here or {}).get('kind') == 'group':
             scene = here
         else:
-            raise Refused('在家里要写 place：照抄 group_focus 的 list 或 places_from_program 里的 place。', ['ARGS_MISSING'])
+            raise Refused('在家里要写 place：照抄 group_focus 的 list 或能去的地方里的 place。', ['ARGS_MISSING'])
         if not scene:
             raise Refused('这个群还没有记录（还没人在那儿说过话）；等有人说话以后再改。', ['GROUP_NOT_RECORDED'])
         if op in ('condense', 'keep'):
@@ -3739,14 +3739,14 @@ class RoleTools:
         wanted = args.get('to')
         wanted = [wanted] if isinstance(wanted, str) else wanted
         if not isinstance(wanted, list) or not wanted or not all(isinstance(w, str) and w.strip() for w in wanted):
-            raise Refused('to 写问谁（一到 %d 处）：note_places_from_program 里家里的 place、这里，或 行动脑。'
+            raise Refused('to 写问谁（一到 %d 处）：能送便条的地方里家里的 place，或这里。'
                           % questions.PLACES_MAX, ['ASK_TO_REQUIRED'])
         wanted = list(dict.fromkeys(' '.join(w.split()) for w in wanted))
         if len(wanted) > questions.PLACES_MAX:
             raise Refused('一个问题最多问 %d 处，写了 %d 处：挑最想问的。' % (questions.PLACES_MAX, len(wanted)), ['ASK_TOO_MANY'])
         sources = [self._ask_place(ep, w) for w in wanted]
         if any(source['kind'] == 'action' for source in sources) and 'delegate' not in (ep.get('turn_tools') or ()):
-            raise Refused('这一回合不能交给行动脑，问不了它；问别处，或者等能交事的回合。', ['ASK_NO_ACTION_BRAIN'])
+            raise Refused('这一次不能动手，问不了；问别处，或者等能动手的时候。', ['ASK_NO_ACTION_BRAIN'])
         # ADR-098: the action brain's copy is checked and expanded before anything is sent; hers stays contracted.
         from . import local_roots
         toward = self._toward_action(ep, text) if any(s['kind'] == 'action' for s in sources) else None
@@ -3832,7 +3832,7 @@ class RoleTools:
         if not items:
             note = ('没有带「%s」的、还没处理完的想法。' % search) if search else '想法本里没有还没处理完的想法。'
         else:
-            note = '逐条用 ideas 的 review 写下处理结果；采纳的用 delegate 交代行动脑去做。'
+            note = '逐条用 ideas 的 review 写下处理结果；采纳的用 delegate 动手去做。'
         return {'items': items, 'page': '第 %d 页，共 %d 页（%d 条%s）' % (page, pages, total,
                                                                         '带「%s」' % search if search else ''),
                 **({'more': '后面还有 %d 条：page=%d 接着看。' % (after, page + 1)} if after > 0 else {}),
@@ -3855,7 +3855,7 @@ class RoleTools:
                                  'epoch': place['policy_epoch']}
         task = task_records.get(self.store, task_id, ['result.text', 'title', 'goal', 'intent_revision'], **fence)
         if not task:
-            raise Refused('「%s」不是%s的任务；task 照抄交回来的结果里的 task，或 task_state_from_program 里的 id。%s'
+            raise Refused('「%s」不是%s的任务；task 照抄交回来的结果里的 task，或你手上的事里的 id。%s'
                           % (echoed(task_id), '你' if home else '这个对话里', refs_usable([ep.get('task_id'), *self._listed_tasks(ep)])),
                           ['TASK_UNKNOWN'])
         text = (task.get('result') or {}).get('text')
@@ -3880,7 +3880,7 @@ class RoleTools:
             raise Refused('decision 是 adopt、defer 或 drop%s。' % _given(args, 'decision'), ['ARGS_ENUM'])
         row = idea_records.get(self.store, idea_id, persona=ep['persona']) if idea_id is not None else None
         if idea_id is not None and (not row or row.get('state') not in ('open', 'deferred')):
-            raise Refused('「%s」不是想法本里还没处理完的一条；照 ideas_from_program 或 ideas 的 read 里的原样抄 _id。%s'
+            raise Refused('「%s」不是想法本里还没处理完的一条；照想法本或 ideas 的 read 里的原样抄 _id。%s'
                           % (echoed(idea_id), refs_usable(row['_id'] for row in idea_rows(self.store, ep['persona'], None))),
                           ['IDEA_UNKNOWN'])
         self.checkpoint()
@@ -3889,7 +3889,7 @@ class RoleTools:
         idea_records.save(self.store, {**row, 'state': state, 'decisions': [*(row.get('decisions') or []),
             {'decision': decision, 'why': why, 'episode_id': ep['_id'], 'at': now()}]},
             expected=row['revision'], stream=idea_id)
-        note = {'adopt': '采纳了：用 delegate 把要做的事交代给行动脑。', 'defer': '暂缓了，下次自我改进时还会看到它。',
+        note = {'adopt': '采纳了：用 delegate 动手去做。', 'defer': '暂缓了，下次自我改进时还会看到它。',
                 'drop': '放弃了，理由已留档。'}[decision]
         return {'idea': idea_id, 'state': state, 'note': note}, False
 
@@ -3937,7 +3937,7 @@ def ideas_block(store, persona, moment, limit=None, page=1, search=None):
         source = row.get('source') or {}
         where = idea_place(store, people, source)
         items.append({'_id': row['_id'], 'idea': row['idea'], 'why': row['why'],
-                      'from': '你自己' if source.get('by') == 'character' else '行动脑做事时',
+                      'from': '你自己' if source.get('by') == 'character' else '动手做事时',
                       **({'where': where} if where else {}),                          # ADR-018 §5.8
                       **({'at': row['created_at']} if row.get('created_at') else {}),     # for_model shows it
                       **({'deferred_before': row['decisions'][-1]['why']} if row.get('state') == 'deferred' and row.get('decisions') else {})})
@@ -3946,7 +3946,7 @@ def ideas_block(store, persona, moment, limit=None, page=1, search=None):
 
 IDEA_BY_NOTE = '%s（你在那边写的便条带来的%s）'
 IDEA_OWNER_LINE = '，便条里有主人本人的原话'
-IDEA_PLACE_UNKNOWN = '归属未定（是便条叫起来的那一回合记的，那张便条找不到了）'
+IDEA_PLACE_UNKNOWN = '归属未定（是便条叫起来的那一次记的，那张便条找不到了）'
 
 
 def idea_place(store, people, source):
@@ -4073,8 +4073,8 @@ def promote(store, ep, item, *, key, ready=None):
     need_roots = int(effective(model, 'memory.promotion.min_roots', policy) or 2)
     need_dates = int(effective(model, 'memory.promotion.min_dates', policy) or 2)
     if len(episodes) < need_roots or len(dates) < need_dates:
-        raise Denied('PROMOTION_SOURCES_INSUFFICIENT: 这些来源只来自 %d 个回合、%d 个日期，要至少 %d 个回合、%d 个日期；'
-                     '在 promotion_candidates 里再加别的回合、别的日子的 id，凑不够就先不提升'
+        raise Denied('PROMOTION_SOURCES_INSUFFICIENT: 这些来源只来自 %d 次、%d 个日期，要至少 %d 次、%d 个日期；'
+                     '在 promotion_candidates 里再加别的时候、别的日子的 id，凑不够就先不提升'
                      % (len(episodes), len(dates), need_roots, need_dates))
     if item.get('visibility') == 'public' and _from_home(store, ep['persona'], item['source_ids'], episodes):
         # A public memory shows in every conversation; one built on anything said at home stays at home (ADR-050).

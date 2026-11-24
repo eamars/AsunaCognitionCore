@@ -148,7 +148,7 @@ class ModeChanged(RuntimeError):
 
 
 # What a turn says when it runs again in the session that replaced one opened with the other source of her thoughts.
-MODE_CARRY_NOTE = '设置改了，这个对话换到新会话，这一回合在新会话里重新开始'
+MODE_CARRY_NOTE = '设置改了，这个对话换到新会话，这一次在新会话里重新开始'
 
 
 class NativeLane:

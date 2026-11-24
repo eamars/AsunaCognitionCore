@@ -39,7 +39,7 @@ CUT_MARK = re.compile(r'（截在这里，原文还有 \d+ 字）$')
 # When the readings do not fit, these go in order (the week before is a number beside each call); last time and
 # refused never.
 CUT_ORDER = ('parameters', 'lengths', 'turn_shape', 'action_brain', 'calls')
-CUT_WORDS = '放不下，没给：%s（要看就让行动脑按 sources 去数）'
+CUT_WORDS = '放不下，没给：%s（要看就动手按 sources 去数）'
 NOTE = ('这是你这一周用工具的原始读数，上一周的并排放着；sources 写着每一项从哪张表、用什么条件、哪个时间段数的，'
         '你可以自己再数一遍。程序只数，不评。看什么、问什么、提什么由你：一周两三条就够，可以加最多一条没有读数撑着的愿望，'
         '标明是愿望；这周没有要提的，可以一条都不提。要动程序的，用 ask 发到开发者的线，一条写清改什么、凭哪个读数、'
@@ -278,7 +278,7 @@ def _thoughts(store, since, until):
     if not taken and not none:
         return None
     missing = '、'.join('%s %d' % (THOUGHT_WHY.get(why, why), n) for why, n in none.most_common())
-    return ('这周 %d 个回合记下了你想法的摘要（别的模型写的）；%d 个回合没有%s。%s。'
+    return ('这周有 %d 次记下了你想法的摘要（别的模型写的）；%d 次没有%s。%s。'
             % (taken, sum(none.values()), '（%s）' % missing if missing else '', THOUGHTS_FROM))
 
 

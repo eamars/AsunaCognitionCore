@@ -787,7 +787,7 @@ def a_picture_part_refuses_artifact_not_offered_this_turn():
     ep = turn_ep(store, context={'image_artifacts_from_program': offered})
     outcome, said, why = pick(store, ep, elsewhere['artifact_id'])
     assert outcome == 'refused' and why == 'ATTACH_ARTIFACT_NOT_IN_CONTEXT', said
-    assert 'image_artifacts_from_program' in said, '退回的话没告诉她该从哪里抄 artifact_id'
+    assert '你能发的图' in said, '退回的话没告诉她该从哪里抄 artifact_id'
     return True, '清单外的 artifact 退回给她：%s' % said
 
 
@@ -1116,7 +1116,7 @@ def imported_image_registers_as_an_image_artifact_in_its_own_scene():
     assert art['registered'] is True and art['artifact_id'].startswith('blob-'), art
     assert art['sha256'] == hashlib.sha256(PNG).hexdigest(), '哈希不是宿主从字节重算的那份'
     assert art['media_type'] == 'image/png' and art['bytes'] == len(PNG), art
-    assert 'image_artifacts_from_program' in art['note'], art['note']
+    assert '你能发的图' in art['note'], art['note']
     row = store.db.artifacts.find_one({'_id': art['artifact_id']})
     assert row['scope_key'] == LOCAL_SCOPE and row['kind'] == 'image', row
     assert row['state'] == 'DONE' and row['storage'] == 'gridfs', row

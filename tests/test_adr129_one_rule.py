@@ -107,7 +107,7 @@ def test_a_local_turn_with_no_speak_and_no_words_ends_silent_and_a_consult_is_st
     after = Coordinator(home, lane).advance(consult['_id'])
     assert after['state'] == 'FAILED_PROTOCOL' and 'INVALID_TURN_OUTPUT' in after['failure']
     assert [row['problem'] for row in audits(home, consult, 'turn.rejected')][:1] == [
-        '你还没回答行动脑：用 task 的 answer 写下回答；这里写的正文不会发给任何人。']
+        '你还没回答那个问题：用 task 的 answer 写下回答；这里写的正文不会发给任何人。']
 
 
 def test_a_local_turn_cut_at_its_length_limit_is_not_her_silence(home):
@@ -133,7 +133,7 @@ def test_local_speak_has_no_line_rules_and_still_refuses_a_text_sent_twice(home)
     refused = [result for *_, result, ok in lane.tool_results if not ok]
     assert [row['text'] for row in outbound(home, ep)] == [seven, '看〔12〕那句']
     assert 'lines' not in done[-1]                               # no line count in a local conversation
-    assert len(refused) == 1 and '这回合已经发过一样的' in refused[0]
+    assert len(refused) == 1 and '这次已经发过一样的' in refused[0]
 
 
 def test_no_conversation_lists_stay_silent_and_nothing_runs_a_call_of_it(home):

@@ -30,8 +30,8 @@ INTENTS = {'errand': '家里有人托你办的事', 'start_topic': '起个话头
 VISIT_INTENTS = ('start_topic', 'share_picture', 'check_in', 'write_notes')      # what the visit tool may choose
 OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，还没人接', 'sending': '说了话，正在发出去',
             'not_sent': '想说的话没发出去', 'notes': '没说话，写了笔记', 'silent': '看了看，没说话',
-            'pending': '那边那一回合还没跑完，结果还没出来', 'failed': '没去成',
-            'seen': '便条在那边别的回合里读到了，没再单独去一趟；那一回合办没办不知道'}
+            'pending': '那边那一次还没跑完，结果还没出来', 'failed': '没去成',
+            'seen': '便条在那边别的时候读到了，没再单独去一趟；那一次办没办不知道'}
 SENDING = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
 # Someone called her (channels.group_context): an @, a reply to her, or her name.
 ADDRESSED = ('mentioned_account', 'reply_to_character', 'name_called')
@@ -41,7 +41,7 @@ VISITS_KEPT = 30
 NOTE_HEADINGS = 8
 # What each block is for (said once in her system prompt, block_guide.py).
 PLACES_NOTE = ('你在的群，只有概况，没有原话（新鲜的内容要去了才看得到）。想去哪个看看，就用 visit：'
-               '程序会在那个群里给你开一个回合，你在那儿再决定说不说、说什么。不去也完全正常。left_today 是今天还能出门几次。')
+               '程序会在那个群里给你开一次，你在那儿再决定说不说、说什么。不去也完全正常。left_today 是今天还能出门几次。')
 VISITS_NOTE = '你最近几次出门：去了哪儿、去做什么、结果怎样。'
 ERRANDS_NOTE = '你最近替家里的人办的事：去了哪儿、办成没有。那边的人怎么回的不在这里，要看等你去那边。'
 HOUR = timedelta(hours=1)
@@ -139,9 +139,9 @@ def errands_lately(store, moment):
 def errand_text(exactly, by=None):
     """by: who at home asked, when it was not the owner (the program names them; it is never assumed)."""
     who = by or '主人'
-    return ('这是%s在家里托你来这里办的一件事，不是这里有人叫你。原话在 visit_from_program.request。' % who
+    return ('这是%s在家里托你来这里办的一件事，不是这里有人叫你。原话在这次串门的 request 里。' % who
             + (('原样转达：照原话发，前面带一句「%s让我转告」。' % who) if exactly else '用适合这里的话把事办了。')
-            + '先看看最近的聊天；觉得这里不合适就不发。这一回合带着家里的权限（回想得到家里的事），'
+            + '先看看最近的聊天；觉得这里不合适就不发。这一次带着家里的权限（回想得到家里的事），'
             '但这里的人看得到你说的每一句：家里的事别带出来，除非托你的就是这件。')
 
 
@@ -380,7 +380,7 @@ def visit_text(intent, topic):
     if intent == 'condense':
         return CONDENSE_VISIT_TEXT
     return ('这是你自己从家里决定出门来这个群看看，不是有人叫你，也不是新的授权。你出门时的打算：%s%s。'
-            '先看看最近的聊天、这里的现场（visit_from_program）和你写的群笔记，再决定：说一句、发一张你自己做的图、'
+            '先看看最近的聊天、这里的现场和你写的群笔记，再决定：说一句、发一张你自己做的图、'
             '只把看到的写进群笔记，或者什么都不说。没有合适的话就别硬说。'
             % (INTENTS[intent], '；你想聊的话头：' + topic if topic else ''))
 

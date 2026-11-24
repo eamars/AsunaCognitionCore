@@ -23,7 +23,7 @@ from . import scene_links
 
 
 
-NOT_THIS_SCENE = 'UNDERSTANDING_SCOPE_PROMOTION_DENIED: 这份理解不属于这个对话（不是你的错）；重试也一样，下回合再更新'
+NOT_THIS_SCENE = 'UNDERSTANDING_SCOPE_PROMOTION_DENIED: 这份理解不属于这个对话（不是你的错）；重试也一样，下次再更新'
 
 
 class MemoryService:
@@ -46,7 +46,7 @@ class MemoryService:
         scope=episode['scope_key'];operation=episode['_id']+(':understanding' if layer=='here' else ':understanding:person')+('' if own else ':'+person_id)
         scene=scene_records.authorize(self.store, episode['scene_id'], episode['person_id'])
         if (scene['scope_key'],scene['policy_epoch'])!=(scope,episode['policy_epoch']):
-            raise Denied('UNDERSTANDING_SCOPE_OR_EPOCH_CHANGED: 这个对话的授权刚变过（不是你的错），这次理解存不了；重试也一样，下回合再更新')
+            raise Denied('UNDERSTANDING_SCOPE_OR_EPOCH_CHANGED: 这个对话的授权刚变过（不是你的错），这次理解存不了；重试也一样，下次再更新')
         if body.strip()=='不更新' and short is None:
             result={'state':'NO_CHANGE'}
         elif layer=='person':
@@ -66,7 +66,7 @@ class MemoryService:
             base_id=(base or {}).get('here') if base is not None else episode['manifest']['relationship_revision']
             found=head_records.revision(self.store,base_id,entity=key) if base_id else None
             # No record yet (everyone starts with none): her first understanding creates it.
-            if base_id and not found:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
+            if base_id and not found:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这次看到的那份理解已经找不到了（不是你的错）；重试也一样，下次再更新')
             content=self._content(found,body,short)
             if content is None:
                 result={'state':'NO_CHANGE'}
@@ -118,7 +118,7 @@ class MemoryService:
             raise Denied('UNDERSTANDING_PERSON_NOT_IN_CONTEXT: 这一次没给你看这个人的人那层（不是你的错）；重试也一样，下次再写')
         base_id=(base or {}).get('person') if base is not None else episode['manifest'].get('person_revision')
         found=head_records.revision(self.store,base_id,entity=key) if base_id else None
-        if base_id and not found:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
+        if base_id and not found:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这次看到的那份理解已经找不到了（不是你的错）；重试也一样，下次再更新')
         content=self._content(found,body,short)
         if content is None:
             return {'state':'NO_CHANGE'}
@@ -150,7 +150,7 @@ class MemoryService:
         for key in monologue:
             if not memory_records.get(self.store,key,episode=episode['_id'],scope=scope,
                     epoch=episode['policy_epoch'],status='active'):
-                raise Denied('UNDERSTANDING_SOURCE_NOT_CURRENT: 这回合的心里话没对上这个对话（不是你的错）；重试也一样，下回合再更新')
+                raise Denied('UNDERSTANDING_SOURCE_NOT_CURRENT: 这次的心里话没对上这个对话（不是你的错）；重试也一样，下次再更新')
         auto,skipped,stale=[],[],[]
         for key in episode.get('manifest',{}).get('selected',[]):
             if key in monologue:continue
@@ -169,7 +169,7 @@ class MemoryService:
             if memory_records.get(self.store,key,['_id'],scope=scope,status='active'):
                 auto.append(key)
         if not monologue and not auto:
-            raise Denied('UNDERSTANDING_NO_SOURCE: 这回合没有能挂上的来源（没有想法的记录，也没有这里的人说的话）；下回合再更新')
+            raise Denied('UNDERSTANDING_NO_SOURCE: 这次没有能挂上的来源（没有想法的记录，也没有这里的人说的话）；下次再更新')
         return monologue+auto,auto,skipped,stale
 
     def rollback(self,entity,scope,target_id,base_id,operation,*,operator=False):

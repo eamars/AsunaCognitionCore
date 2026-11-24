@@ -214,7 +214,7 @@ def _wall_shape(value):
     if moment.tzinfo is not None:
         return {'at': moment.astimezone(timezone.utc).isoformat(timespec='minutes'), 'at_utc': True}
     if not 2000 <= moment.year <= 2100:
-        raise ValueError('SCHEDULE_AT_OUT_OF_RANGE: 年份 %d 在 2000–2100 之外；对一下 clock_from_program 里今天的日期'
+        raise ValueError('SCHEDULE_AT_OUT_OF_RANGE: 年份 %d 在 2000–2100 之外；对一下时钟里今天的日期'
                          % moment.year)
     return {'at': moment.isoformat(timespec='minutes')}
 

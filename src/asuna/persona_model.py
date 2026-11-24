@@ -58,7 +58,7 @@ PACKAGE_WORDS = {'memory.tiers_told', 'heartbeat.idle_hint', 'self_review.exchan
 WORD_FIELDS = {'memory.over_line': ('over', 'now', 'cap'), 'memory.lapse_line': ('节名', 'over', 'days', 'score')}
 HEARTBEAT_EVERY_MIN = (15, 240)
 # The core's neutral words where a persona words its own (persona-model keys, not hers to set_policy).
-TIERS_TOLD = ('你的东西分三个地方：随身，每一回合都带着；手边，不进提示，聊到相关的事或用 recall 能找到；'
+TIERS_TOLD = ('你的东西分三个地方：随身，每一次都带着；手边，不进提示，聊到相关的事或用 recall 能找到；'
               '收着，默认不出现，recall 用字或标题才找得回来。'
               '被用到会让一条在随身多留一阵，改写出变化会把它带回随身，一阵子没用到就往下放；放手（let_go）是你自己的动作。'
               '群笔记的节可以置顶：笔记超长时置顶的节不折成标题，但它照样会因为一阵子没用到离开随身，也照样占随身的名额。'
@@ -67,9 +67,9 @@ TIERS_TOLD = ('你的东西分三个地方：随身，每一回合都带着；�
 # ADR-117 L3: a place's identity layer over its ceiling. The choice line her next home turn shows for it (the
 # sections listed under it), and the line that tells one section the program put down.
 OVER_LINE = ('这一处随身超了 {over} 个估算 token（现在 {now}／上限 {cap}）。下面每节写着它多少天没用到、放下能腾出多少：'
-             '要放哪节就 let_go 它；不挑，这一回合之后程序按最久没用到的先放，直到回到上限以内。')
+             '要放哪节就 let_go 它；不挑，这一次之后程序按最久没用到的先放，直到回到上限以内。')
 LAPSE_LINE = '{节名} 从这一处的随身放下了（超 {over} token；它 {days} 天没用到，30 天里程序找出它 {score} 次）。改写它就能回来。'
-EXCHANGES_NOTE = '这是你那天说过的原话、你那一回合写下的心里话，和之后那边发生了什么；程序没有给它打分，也没有替你下结论。'
+EXCHANGES_NOTE = '这是你那天说过的原话、你那一次写下的心里话，和之后那边发生了什么；程序没有给它打分，也没有替你下结论。'
 IDLE_HINT = '这一拍没有指定的事。'
 CORE_DEFAULTS = {
     # What each (place, class) pair carries of her identity every turn (common.md, persona, voice, self and core as

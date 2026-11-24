@@ -41,7 +41,7 @@ TABLES_VERSION = 1
 # Patience words -> minutes (None: until it is answered, for a report).
 PATIENCE = {'一会儿': 10, '一小时': 60, '半天': 720, '一天': 1440, '回了为止': None}
 DEFAULT_PATIENCE = '一小时'          # her home places answered within an hour (ADR-061, Measured)
-ACTION = '行动脑'
+ACTION = '动手做的事'
 HERE = ('这里', 'here')
 QUESTION_CHARS = 800
 TOOK_CHARS = 500
@@ -58,14 +58,14 @@ ID = re.compile(r'q-[0-9a-f]{8}')
 DEVELOPER_ROUTE = 'claude-code'     # the developer's line when no home route is marked `developer`
 
 STATE_WORDS = {'pending': '还没问出来', 'waiting': '等着', 'answered': '答了', 'lapsed': '没答，不等了',
-               'not_asked': '没问（那一回合你没说）', 'not_sent': '没问出去', 'working': '行动脑在做',
-               'not_done': '行动脑没做完'}
+               'not_asked': '没问（那一次你没说）', 'not_sent': '没问出去', 'working': '还在动手做',
+               'not_done': '动手没做完'}
 QUESTION_WORDS = {'open': '等着', 'answered': '有回答', 'unanswered': '都没答', 'ended': '程序收了'}
 NOTE_TEXT = ('你用 ask 要在这里问的问题（%s）：\n%s\n在这里问出来，或者决定不问；这里的回话程序会记到这个问题上。')
 BLOCK_NOTE = ('你问出去的问题，还没结束的：每处问在哪、到几点不等、答了没有；回答本身用 ask 的 read 读。'
               '每处都答了或过了耐心，程序就收掉，在每个对话里说一次收成了什么；要写你自己的结论，照常 close 写 took。')
 BRIEF = '这是一个问题：查清楚，在报告里回答。\n%s'
-ASKED = '问出去了：答了没有、到几点不等，看 questions_from_program；回答用 ask 的 read 读，问完用 close 结束。'
+ASKED = '问出去了：答了没有、到几点不等，看你问过的问题；回答用 ask 的 read 读，问完用 close 结束。'
 # How the program closed it, by what came of its places (state_of before closing).
 CLOSED_TOOK = {'answered': '程序收的：都有了结果，有回答', 'unanswered': '程序收的：没有回答',
                'open': '程序收的：问出去一周了还没回音'}
@@ -209,7 +209,7 @@ GROUP_PATIENCE = ('一会儿', '半天', '一天')
 LOOK_MINUTES = 10                   # people who speak unaddressed while it waits get her a look, this long at most
 GROUP_MORE = '更早的还有 %d 个没结'
 TOLD_MANY = '程序一次收了你问的 %d 个问题：%s'
-GROUP_ORIGINAL = '%s 里的原话（群里的人说的，不是你的话；只在这一回合读到，家里不存）'
+GROUP_ORIGINAL = '%s 里的原话（群里的人说的，不是你的话；只在这一次读到，家里不存）'
 GONE = '这条原话在群的记录里已经取不到了'
 GROUP_NOTE = ('你在这里问的问题：等到几点、谁回了（按标签和时间）；过了耐心程序就收掉，说一次收成了什么。'
               '回答怎么带回家由你，用 note 写 question。')

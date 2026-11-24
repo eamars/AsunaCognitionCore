@@ -21,7 +21,7 @@ LEAD = re.compile(r'^(?:\w+: )?([A-Z][A-Z0-9_]*[A-Z0-9]): ')
 DEV_TEXT = '她的%s回合在程序里出错没跑成（%s）：今天第一次，场景 %s，回合 %s。同一天同样的错再来只加计数（count）。'
 # Her line about a failed turn (ADR-127 N1, her wording, agent line 0393, 0396, 0403, 0404): the turn, the cause
 # as a readable word (CAUSES), then what of it went out and what was done, by name, never a text or an argument.
-TURN_HEAD = '你在这里 %s 那一回合没跑成：是程序出了错（%s），不是你做错了什么。'
+TURN_HEAD = '你在这里 %s 那一次没跑成：是程序出了错（%s），不是你做错了什么。'
 NOTHING_DONE = '那一拍你没说出口一个字、也没做成任何事——那件事到现在还是没做。'
 RETRIED = '程序为重请求过一次，第二次还是没跑成，没再自动重跑——那件事到现在还是没做。'
 THAT_BEAT = '那一拍你'
@@ -56,7 +56,7 @@ LATE_LINE = '这条计划 %s 到点，%s 才交到你手上：中间这一截程
 INTENT_CHARS = 40
 NO_CAUSE = '原因没记下来'          # a cause with no record, one word for it (her F4 rule, line 0281)
 KINDS = {'self_development': '自我改进', 'task_feedback': '收任务结果', 'external': '回话', 'scheduled': '计划到点',
-         'visit': '出门', 'note': '便条', 'settlement': '夜间沉淀', 'presence': '心跳', 'consult': '回答行动脑',
+         'visit': '出门', 'note': '便条', 'settlement': '夜间沉淀', 'presence': '心跳', 'consult': '回答做着的事的问题',
          'task_time': '定到点的事'}
 
 

@@ -213,7 +213,7 @@ def test_her_words_in_that_turn_steer_the_running_task_and_never_continue_a_fini
           'person_id': 'owner'}
     task = running(store, integration_profile='owner', development_grant=True)
     outcome = coordinator.message_action(ep, 'call-1', task, '收尾，交报告')
-    assert outcome['state'] == '行动脑下一步就会看到这句话' and sent == ['收尾，交报告']
+    assert outcome['state'] == '做着的事下一步就会看到这句话' and sent == ['收尾，交报告']
     store.put('tasks', {**task_records.get(store, 'task-long'), 'state': 'RETURNED'},
               expected=task_records.get(store, 'task-long')['revision'])
     try:

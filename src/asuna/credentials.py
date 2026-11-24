@@ -40,7 +40,7 @@ CACHE_SECONDS = 60
 # ADR-119 F1: a scrub uses the last list read only while it is this young; older (or none), nothing is handed on.
 SCRUB_LIST_STALE_SECONDS = 600
 # Her wording (agent line 0222/0224): the vault unreadable is never the words of an empty vault.
-LIST_UNREAD = '保险箱这次读不到——这里既不是「没有凭据」，也不代表有哪一份能用；下一回合会再读。'
+LIST_UNREAD = '保险箱这次读不到——这里既不是「没有凭据」，也不代表有哪一份能用；下一次会再读。'
 UNSCRUBBED_RESULT = '保险箱这次读不到，没法先遮住结果里的凭据，结果先没给你；这一步已经做过了，要结果得再做一次。'
 # Bounds on doing a step again (ADR-119 F1, her shape 0228): the same call refused twice is settled; refused results in
 # a row past STOP_AFTER mean the vault is down, and the whole task stops.
@@ -49,8 +49,8 @@ UNSCRUBBED_SETTLED = '保险箱还是读不到，这一步的结果拿不到了�
 UNSCRUBBED_STOP = '保险箱还是读不到，连着几步的结果都没给你。别再往下做了：已经拿到的结果照原样写进报告，再在报告里写一句「保险箱读不到，停在这一步」和做到了哪一步，交回去。'
 UNSCRUBBED_REPORT = '保险箱这次读不到，没法先遮住报告里的凭据，这份报告先没交出去；要结果得重跑一次。'
 UNSCRUBBED_TEXT = '保险箱这次读不到，没法先遮住这段话里的凭据，这次没交出去；过一会儿再调一次就行，不用改。'
-CREDENTIALS_NOTE = ('这些是存在保险箱里的凭据（只有名字和用途，值谁都看不到，你和行动脑都看不到）。要用的时候交代行动脑：'
-                    '让它 sandbox_run 时写 credentials（名字照抄），脚本从环境变量里读。交代里、话里都不写值。')
+CREDENTIALS_NOTE = ('这些是存在保险箱里的凭据（只有名字和用途，值谁都看不到，你自己也看不到）。要用的时候在交代里写：'
+                    'sandbox_run 时写 credentials（名字照抄），脚本从环境变量里读。交代里、话里都不写值。')
 
 _host = None
 _lock = threading.Lock()

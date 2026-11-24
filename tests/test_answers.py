@@ -49,5 +49,5 @@ def test_a_failure_that_is_not_the_models_is_not_repaired():
 
 def test_only_what_cannot_be_right_is_handed_back():
     assert answers.consult_problem(LaneResult('好', finish_reason='length')) == answers.CUT
-    assert answers.consult_problem(LaneResult('好')).startswith('你还没回答行动脑')
+    assert answers.consult_problem(LaneResult('好')).startswith('你还没回答那个问题')
     assert '整段重新写一遍' in answers.turn_note('x。')

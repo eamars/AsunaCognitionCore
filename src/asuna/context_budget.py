@@ -26,10 +26,10 @@ MEMBER_LINES = 80                   # group members a turn names (group_members.
 CARRIED_CHARS = 12000               # the summary a new session carries from one that no longer fit (ADR-028)
 
 # A group's notes over their limit (ADR-096): what folded, and when her pins alone are over it.
-FOLD_LINE = '这份笔记超过了每回合的上限，最久没被用到的 %d 节只列标题：%s%s。不整理也行：折着的节聊到那件事时会带出来。'
+FOLD_LINE = '这份笔记超过了每次的上限，最久没被用到的 %d 节只列标题：%s%s。不整理也行：折着的节聊到那件事时会带出来。'
 FOLD_NAMED = 3                      # the folded sections the fold line names by heading
 PINS_OVER = '置顶的节加起来就有 %d 字，超过了上限 %d 字：置顶的节照常都在，没置顶的都只列标题。'
-PIN_NOTE = ('置顶了：笔记超过每回合上限时，这一节不折成标题，它仍算在 %d 字里。置顶不让它留在随身：一阵子没用到，'
+PIN_NOTE = ('置顶了：笔记超过每次上限时，这一节不折成标题，它仍算在 %d 字里。置顶不让它留在随身：一阵子没用到，'
             '它照样会放到手边，也照样占随身的名额（每个群的笔记随身最多 %d 条）。')
 UNPIN_NOTE = '取消置顶了：笔记超长时，它和别的节一样按多久没用到折叠。'
 # How full a note is, in words (share of its limit).
@@ -134,7 +134,7 @@ def note_view(sections, limit, order=None):
         folded = [s for s in always if s['sid'] not in {k['sid'] for k in kept}]
         about['not_shown'] = [{'sid': s['sid'], 'heading': s.get('heading') or s['sid']}
                               for s in folded[-FOLDED_HEADINGS:]]
-        about['over_limit'] = ('这份笔记超过了每回合的上限：较早的 %d 节这里只列标题（还在，recall 能读）。'
+        about['over_limit'] = ('这份笔记超过了每次的上限：较早的 %d 节这里只列标题（还在，recall 能读）。'
                          '整理一下就能都放进来。' % len(folded))
     tucked = [s for s in sections if s.get('inject', 'always') != 'always']
     if tucked:
@@ -211,7 +211,7 @@ def trim_turn(context, limit=TURN_CHARS):
 
 SHORT_TEXT = 400                    # a text is never cut below this many characters
 CUT_NOTE = '……（太长，后面 %d 字没列出；原文还在记录里，要看就 recall）'
-TRIMMED_NOTE = '这回合的资料超过了上限，这些列表里较早的几条没列出、过长的文字截短了；要看原文就 recall。'
+TRIMMED_NOTE = '这次的资料超过了上限，这些列表里较早的几条没列出、过长的文字截短了；要看原文就 recall。'
 
 
 def ceiling():

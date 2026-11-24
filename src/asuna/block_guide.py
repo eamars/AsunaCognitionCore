@@ -73,8 +73,8 @@ def _tiered_notes():
 # How the delivery's own lines read (context-delivery.js writes them without their explanation).
 DELIVERY = (
     ('unchanged_from_program', '这些块和本会话前面给出的一样，没有变化，仍以前面那份为准。'),
-    ('repeated_from_program', '本会话里已经有的消息、记忆和你的心里话不再列：delivered_history、group_continuity_from_program '
-                              '的原话、memories 和 recent_thoughts_from_program 只给新的；一句话一回合只给一次；任务的原话在眼前时'
+    ('repeated_from_program', '本会话里已经有的消息、记忆和你的心里话不再列：已经送达的话、群里接续的原话、'
+                              '记忆和最近的心里话只给新的；一句话一次只给一次；任务的原话在眼前时'
                               '只给 original_input_id（那句的 _id）。'),
     ('restored_from_program', '对话刚压缩过，前面说没变、同前或不再重复的资料里，有的已经不在眼前了：这里列出的块在下面重新给出。'),
     ('same_as_before', '一个列表（一个块，或块里的一个列表）里，其余几条和本会话前面给出的一样，没再列出；后面写着它们的状态和编号，'
@@ -99,7 +99,7 @@ def strip(context):
 # How her words leave, said once for the conversation (turn.md's {words} and {ending}), the same in every
 # conversation: only speak speaks (ADR-129 D8, her words, agent line 0449).
 WORDS = '你用工具做事；只有 `speak` 发得出去。写在正文里的话不发出去、也不进消息库——页面上它会显示出来，但那不是你说出去的话。'
-ENDING = '结束：要说的话都用 `speak` 说；说完了、或者这回合不想说，就调用 `end_turn`，也可以什么都不调用——这一回合到此为止，不算漏了什么。'
+ENDING = '结束：要说的话都用 `speak` 说；说完了、或者这次不想说，就调用 `end_turn`，也可以什么都不调用——这一次到此为止，不算漏了什么。'
 
 
 def guide(config, faces=True, outside=False):
@@ -110,8 +110,8 @@ def guide(config, faces=True, outside=False):
     # ADR-099: where her thoughts come from the model's thinking, the steps do not ask for them.
     turn = prompt_path(config, 'turn_thinking.md' if thinking_mode(config) else 'turn.md').read_text(encoding='utf-8').strip()
     turn = turn.replace('{words}', WORDS).replace('{ending}', ENDING)
-    lines = ['# 每回合的资料', '带 _from_program 的块是程序事实；带 _at 的字段是你的钟面上的时刻，和 clock_from_program 同一个钟。'
-             '下面是各块的说明，块里不再重复；某块自己带的 note 是这一回合特有的话，以它为准。']
+    lines = ['# 每次的资料', '带 _from_program 的块是程序事实；带 _at 的字段是你的钟面上的时刻，和程序给你的时钟是同一个钟。'
+             '下面是各块的说明，块里不再重复；某块自己带的 note 是这一次特有的话，以它为准。']
     lines += ['- %s：%s' % pair for pair in DELIVERY]
     for key, texts in notes(faces, outside).items():
         lines.append('- %s：%s' % (key, '／'.join(texts)))

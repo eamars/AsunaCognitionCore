@@ -80,7 +80,7 @@ def test_a_note_to_a_group_that_cannot_be_woken_goes_next_time_unless_she_chose_
 
     sent = call(her, ep_id, 'note', {'to': G1, 'text': '周末大家想去哪儿玩？'})
     assert sent['arrives'] == notes.NEXT_TIME_INSTEAD % why
-    assert '72 小时' in sent['arrives'] and 'notes_sent_from_program' in sent['arrives']
+    assert '72 小时' in sent['arrives'] and '你送出的便条' in sent['arrives']
     row = notes.get(her.store, sent['note'])
     assert (row['to_scene'], row['mode'], row['trust']) == ('g1', notes.NEXT_TIME, notes.TRUSTED)
     assert her.service.controller.offers == [], 'a next_time note opens no turn there'

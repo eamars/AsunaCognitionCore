@@ -24,8 +24,8 @@ TIME_UP_VERSION = 1
 TIME_UP_WINDOW = 600          # seconds from the deadline in which her `more` keeps the stage going
 RECENT_SECONDS = 300          # the stretch her activity line looks back over
 
-TEXT = '你交给行动脑的一件事，这一段到了时间上限，还在做：要不要接着让它做，你来定。'
-NOT_NOW = '这件事这会儿没有在等你加时：只有它到了时间上限、程序来问你的那一回合能用 more。'
+TEXT = '你动手做的一件事，这一段到了时间上限，还在做：要不要接着让它做，你来定。'
+NOT_NOW = '这件事这会儿没有在等你加时：只有它到了时间上限、程序来问你的那一次能用 more。'
 RESTART_PENDING = '宿主在等这件事做完好重启：现在不能加时；要它先交报告，就用 task 的 message 叫它收尾。'
 GRANTED = '加了：同一趟接着做，再给它 %d 分钟，之前查到的它都还看得到；到点再来问你。'
 ALREADY_BACK = '这件事已经不在跑了（%s），不用加时；有结果会照常交给你。'
@@ -56,7 +56,7 @@ def behind(store, task_id):
     if not waiting:
         return '后面没有排着的'
     places = '、'.join(dict.fromkeys(place_words(store, row['scene_id']) for row in waiting))
-    return '后面还有 %d 件在排（来自%s），行动脑一次只做一件，这件做着它们就等着' % (len(waiting), places)
+    return '后面还有 %d 件在排（来自%s），一次只做一件，这件做着它们就等着' % (len(waiting), places)
 
 
 def facts(store, task, *, minutes, block, activity):

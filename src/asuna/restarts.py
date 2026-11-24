@@ -100,9 +100,9 @@ class Desk:
         items = []
         if getattr(self.controller, 'active_task', None):
             task = task_records.get(store, self.controller.active_task, fields=['title', 'goal']) or {}
-            items.append('行动脑正在跑「%s」：会停在暂停里，要有人说继续才接着做' % (task.get('title') or task.get('goal') or '一个任务')[:40])
+            items.append('正在动手做「%s」：会停在暂停里，要有人说继续才接着做' % (task.get('title') or task.get('goal') or '一个任务')[:40])
         elif getattr(self.controller, 'calls_in_flight', lambda: 0)():
-            items.append('行动脑还有 %d 个工具调用没回来（它的任务已经结束）：现在重启会打断，做没做成要再查'
+            items.append('动手还有 %d 个工具调用没回来（那件事已经结束）：现在重启会打断，做没做成要再查'
                          % self.controller.calls_in_flight())
         queued = [row.get('title') or row.get('goal') or '' for row in task_records.in_states(store, 'READY').rows(
             limit=5, fields=['title', 'goal'])]
@@ -221,7 +221,7 @@ class Desk:
 def waiting_words(pending, zone):
     """A pending request in her words: when it goes, why, and which of her conversations asked."""
     from .schedule_rules import line_stamp
-    when = {'now': '马上', 'quiet': '等没有在跑的回合、任务和排队消息时（最多 %d 分钟）' % QUIET_MINUTES}.get(
+    when = {'now': '马上', 'quiet': '等没有在进行的对话、任务和排队消息时（最多 %d 分钟）' % QUIET_MINUTES}.get(
         pending.get('when'), '%s 之后再等安静' % line_stamp(zone, pending.get('not_before')))
     return '%s要的%s，%s；为的是：%s' % (pending.get('where') or '你', '演练' if pending.get('drill') else '重启', when,
                                     str(pending.get('why') or '')[:120])
@@ -325,7 +325,7 @@ def call_after_fallback(store, controller, config, root=None, moment=None):
         return False
     chat = config['chat']
     text = ('这是监工的通知，不是有人跟你说话：刚才那次重启新版本没起来，现在跑的是上一个能跑的版本。'
-            '原因和每一次尝试都在 restart_from_program 里；要不要再试、改什么，你定。')
+            '原因和每一次尝试都在重启那一栏里；要不要再试、改什么，你定。')
     controller.offer_internal('presence', 'presence:restart-' + record['id'], chat['scene_id'], chat['person_id'], text)
     store.audit('restart', 'restart.called', {'id': record['id']}, 'operator')
     return True

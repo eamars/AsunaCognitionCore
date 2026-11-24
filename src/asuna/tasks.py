@@ -443,7 +443,7 @@ def queue_words(store, task_id):
     if waiting:
         parts.append('还有 %d 件在排（来自%s）' % (len(waiting), '、'.join(dict.fromkeys(place_words(store, row['scene_id'])
                                                                           for row in waiting))))
-    return '前面有 %d 件：%s。行动脑一次只做一件，轮到它才开始。' % (len(ahead), '；'.join(parts))
+    return '前面有 %d 件：%s。一次只做一件，轮到它才开始。' % (len(ahead), '；'.join(parts))
 
 WORKSPACE_TOOLS.append(HISTORY_TOOL)
 # P1-c：按需群整理与历史查询共用同一只读入口规则（场景来自任务绑定，参数不换范围）。
@@ -702,7 +702,7 @@ class TaskService:
                **({'report_pages':len(pages)} if len(pages)>1 else {}),
                'finished_at':current.get('finished_at'),'uncertainties':shown(result.get('uncertainties') or [])}
         return {'event_id':handover.result_event_id(task,True),
-                'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」早就有了结果，但之前没能交到你手上；这是补交的短版：'
+                'text':'你动手做的「'+(task.get('title') or task['goal'])+'」早就有了结果，但之前没能交到你手上；这是补交的短版：'
                        '只有托付那句、你的交代、它的报告原文和跑完的时间，没有工具记录。报告写的是跑完那时的情况，不一定是现在；工具记录才是执行事实，'
                        '要核实或接着做就用 task 的 message。',
                 'trusted_context_events':[value]}
@@ -755,7 +755,7 @@ class TaskService:
                 return None
             refs=[row['_id'] for row in artifact_records.of_task(self.store,task['_id'],current['intent_revision'],state='DONE').rows(fields=['_id'])]
             result={'task_id':task['_id'],'intent_revision':current['intent_revision'],'artifact_refs':refs,
-                    'text':'行动脑这次执行中断了：它的进程不在了，没有交回报告。工具记录是它中断前做到的。',
+                    'text':'这次动手中断了：做的进程不在了，没有交回报告。工具记录是中断前做到的。',
                     'facts':[],'uncertainties':['中断前已发起而没有回执的操作须先核实，不可盲目重做。']}
             closed=task_records.save(self.store, {**current,'state':'BLOCKED','failure_type':'ORPHANED','result':sized(self.store,current,result),
                 'finished_at':now(),'feedback_state':'READY','fencing_token':current['fencing_token']+1},
@@ -780,7 +780,7 @@ def capability_refusal(store, task, tool):
     """The one sentence for a tool this task was not given: who gets it, where this task came from, retrying won't help."""
     given = next((words for match, words in GIVEN_TO if match(str(tool))), '这件任务交的时候没给它')
     return ('CAPABILITY_DENIED: 这个任务没有 %s：它%s；这件是%s交的。不是参数的问题，重试也一样：'
-            '要用它就在报告里写明，让说话的那一半在给它的地方另交一件。' % (str(tool)[:60], given, place_words(store, task['scene_id'])))
+            '要用它就在报告里写明，回到对话时在给它的地方另交一件。' % (str(tool)[:60], given, place_words(store, task['scene_id'])))
 
 
 # How long a running task keeps its lease after its last step; the stored lease_expires_at is epoch seconds.
@@ -896,8 +896,8 @@ class ToolBroker:
                 with self.service.lock:self.service.valid(task)
             elif tool=='ask_character':
                 if not getattr(self, 'consult_character', None):
-                    raise RuntimeError('CHARACTER_CONSULT_UNAVAILABLE: 这会儿问不了你说话的那一半（角色脑没接上）；不是参数的问题，重试也一样：'
-                                       '按你的判断做，把要那一半定的事写进报告')
+                    raise RuntimeError('CHARACTER_CONSULT_UNAVAILABLE: 这会儿在对话里问不了（没接上）；不是参数的问题，重试也一样：'
+                                       '按你的判断做，把要在对话里定的事写进报告')
                 result=self.consult_character(task,key,args)
                 # A reply is advice, never a renewal of cancelled/revised authority.
                 with self.service.lock:self.service.valid(task)
@@ -919,7 +919,7 @@ class ToolBroker:
                         'thread':task.get('thread') or task['_id'],'from':'action','text':note.strip(),
                         'scope_key':task['scope_key'],'created_at':now()},stream=task['_id'])
                 self.service.collab(task,'progress',{'from':'action','text':note.strip()},'progress:'+key)
-                result={'noted':True,'note':'说话的那一半下一回合会看到；要不要转告别人由那一半决定。'}
+                result={'noted':True,'note':'回到对话时会看到；要不要告诉别人，到时候在对话里定。'}
             elif tool in (HISTORY_TOOL_NAME,DIGEST_TOOL_NAME):
                 # Read-only scoped history and the discussion digest: the scene comes from the task binding, never
                 # from arguments. They run in the data child (data_children.py), with a deadline, and the effects
@@ -1165,7 +1165,7 @@ class Executor:
         if task.get('integration_profile') == 'owner':
             text+='\n本任务继承本机 owner 工作域的集成能力。适配器代码在通道包里，只用 development_* 工具（project 填通道包）修改。integration_test 把候选里的适配器目录冻结成一份（argv 里写 /app）来试跑；integration_start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后也恢复已发布的版本。/data 可写，test 与启用数据分开。/integration/config.json 是端点与 adapter 配置。运行直接连配置里的端点，用的是真实配置：试跑也能真的对平台做动作，试跑只做读，发消息留给出站队列和已发布的适配器。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'
         if task.get('integration_profile') == 'agent_home':
-            text+='\n本任务继承 agent 线家里回合的窄集成授权（agent_home）：只有 integration_start 与 integration_status。'
+            text+='\n本任务继承 agent 线在家里的窄集成授权（agent_home）：只有 integration_start 与 integration_status。'
             text+='start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后恢复的也是当时已发布的版本；'
             text+='status 只读，回的是真实进程状态与日志。RUNNING 不等于平台连上或发送成功。'
             text+='没有 integration_test（试跑）、integration_stop（停止）和产物导入：那些要交回本机 owner 工作域的任务。'
@@ -1217,8 +1217,8 @@ class Executor:
                 'finish_reason':value.finish_reason,'artifact_refs':[a['_id'] for a in observations],
                 'diagnostic':value.diagnostic,
                 'facts':[{'text':content,'evidence_refs':[a['_id'] for a in observations]}],
-                'uncertainties':(['行动脑没有给出可用的报告（'+unusable+'）；保留已产生的工具事实，不宣称目标完成。'] if unusable
-                    else [] if value.finish_reason=='stop' else ['原生回合未正常结束；保留已产生的工具事实，不宣称目标完成。'])}
+                'uncertainties':(['动手没有交回可用的报告（'+unusable+'）；保留已产生的工具事实，不宣称目标完成。'] if unusable
+                    else [] if value.finish_reason=='stop' else ['这一次没有正常结束；保留已产生的工具事实，不宣称目标完成。'])}
         returned=value.finish_reason=='stop' and not unusable
         # Its size is read before the lock: the run's records are written (valid() holds its intent revision).
         result=sized(self.service.store,task,result)

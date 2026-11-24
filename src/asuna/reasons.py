@@ -50,11 +50,11 @@ def _action(tool, args):
     op = args.get('op')
     can = ability(tool, args)                  # a tool's option ('task.stop'), an old name read as its option
     if tool == 'delegate':
-        return '交给行动脑去做「%s」' % _short(args.get('title'))
+        return '动手去做「%s」' % _short(args.get('title'))
     if can == 'task.message':
-        return '跟行动脑补了一句'
+        return '给做着的事补了一句'
     if can == 'task.stop':
-        return '叫停了行动脑手上那件事'
+        return '叫停了做着的那件事'
     if tool == 'plan' and (op in ('create', 'update', 'cancel') or (not op and not args.get('plan_id') and args.get('intent'))):
         return {'create': '定了个计划', 'update': '改了计划', 'cancel': '撤了计划'}[op or 'create'] + (
             '：%s' % _short(args['intent']) if args.get('intent') else '')

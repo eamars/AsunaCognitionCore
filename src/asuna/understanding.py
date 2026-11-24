@@ -275,8 +275,8 @@ def resolve(store, ep, scene, value, persona, home=False, for_read=False):
         if len(found) == 1:
             return found[0].get('author') or found[0]['person']
         labels = [people.copyable_author(scene, i) for i in here if i != people.self_id]     # what resolve takes back
-        raise Unknown(('「%s」指的不止一个人' % echoed(text) if len(found) > 1 else '这一回合里没有「%s」' % echoed(text) if text else '要写 person')
-                      + '：照抄标签，这一回合能写的是 %s。' % ('、'.join(labels) or '（没有）'))
+        raise Unknown(('「%s」指的不止一个人' % echoed(text) if len(found) > 1 else '这一次里没有「%s」' % echoed(text) if text else '要写 person')
+                      + '：照抄标签，这一次能写的是 %s。' % ('、'.join(labels) or '（没有）'))
     if not text or text in (people.speaker(scene, ep['person_id']),) or people.person(text) == people.person(ep['person_id']):
         return ep['person_id']
     if home and for_read:

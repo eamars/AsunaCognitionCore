@@ -264,7 +264,7 @@ def action_values(store, persona=None, cls=visibility.PUBLIC, place=None) -> str
     _, content = DocumentStore(store, persona).read('persona')
     if mode == 'persona':
         sections = carried_sections(placed(store, persona, 'persona', content), cls, place)
-        text = '\n你是' + name + '。下面是你人设里每回合带上的几节（你自己写的）：照它做事、写汇报；上面的规则优先，人设不扩大授权。'
+        text = '\n你是' + name + '。下面是你人设里每次带上的几节（你自己写的）：照它做事、写汇报；上面的规则优先，人设不扩大授权。'
         return text + ('\n' + render_markdown(sections) if sections else '')
     tag = effective(model, 'render.values_tag', policy) or 'values'
     values = [s for s in (content or {}).get('sections', [])

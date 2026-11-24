@@ -37,11 +37,11 @@ RESULT_OUTSIDE = '结果回家里，这边的上下文不跟过去；要给那�
 HANDED = '是你在%s交出去的'
 STANDING = {'left': '（%s已经离开这个群了）', 'blocked': '（%s在这里被屏蔽了）', 'closed': '（这条线你关着）'}
 BRIEF_ONLY = '新开一份上下文：它只看得到这次的 brief。'
-FOR_UNKNOWN_PLACE = ('「%s」不是外面的一处：for 照抄 note_places_from_program 里群或私聊的 place，'
-                     '或者不写（就是这一回合叫你的那位）。')
-FOR_UNKNOWN_PERSON = '「%s」不是这一回合里的人：for 照抄 people_from_program 里的标签，或者不写（就是叫起这一回合的那位）。'
-FOR_UNKNOWN_HERE = ('这一回合不写 for：for 只在家里（写外面那一处的 place）和公开群里有人叫你的回合（写这回合里另一个人的标签）用；'
-                    '不写就按这一回合的来路算——谁的话叫起这一回合算谁的，程序自己叫起的（心跳、计划到点）是你自己的事。')
+FOR_UNKNOWN_PLACE = ('「%s」不是外面的一处：for 照抄能送便条的地方里群或私聊的 place，'
+                     '或者不写（就是这一次叫你的那位）。')
+FOR_UNKNOWN_PERSON = '「%s」不是这一次里的人：for 照抄这里的人的标签，或者不写（就是叫起这一次的那位）。'
+FOR_UNKNOWN_HERE = ('这一次不写 for：for 只在家里（写外面那一处的 place）和公开群里有人叫你的时候（写这里另一个人的标签）用；'
+                    '不写就按这一次的来路算——谁的话叫起这一次算谁的，程序自己叫起的（心跳、计划到点）是你自己的事。')
 
 
 def record(by, scene_id, person_id=None, *, chosen=False, **extra):

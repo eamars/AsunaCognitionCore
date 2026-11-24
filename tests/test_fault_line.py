@@ -48,7 +48,7 @@ def line(fault):
 
 def test_nothing_went_out_nothing_done(turn):
     said = line({'cause': 'MALFORMED_RESPONSE'})
-    assert said == ('你在这里 11-11 21:40 那一回合没跑成：是程序出了错（模型回来的工具参数不成形），不是你做错了什么。'
+    assert said == ('你在这里 11-11 21:40 那一次没跑成：是程序出了错（模型回来的工具参数不成形），不是你做错了什么。'
                     '那一拍你没说出口一个字、也没做成任何事——那件事到现在还是没做。'
                     '这条已经记进开发者收件箱；开发者收件箱里还有 3 条没被读过。')
 

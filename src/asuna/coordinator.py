@@ -46,7 +46,7 @@ class ProtocolFailure(RuntimeError):
 class SessionCarried(RuntimeError):
     """Her conversation continues in a new session: it no longer fit the model's window (ADR-028), or it was opened
     with the other source of her thoughts (ADR-099). `note` is what the turn says when it runs again there."""
-    def __init__(self, message, successor, note='旧会话太长，模型装不下了，这一回合换到新会话重新开始'):
+    def __init__(self, message, successor, note='旧会话太长，模型装不下了，这一次换到新会话重新开始'):
         super().__init__(message)
         self.successor,self.note=successor,note
 
@@ -58,16 +58,16 @@ TRIGGERS = {'task_feedback': 'task_result', 'consult': 'question', 'task_time': 
             'presence': 'internal', 'settlement': 'internal', 'scheduled': 'schedule', 'visit': 'visit', 'note': 'note'}
 # The one line of the turn instruction kept at the end of every notice, next to where she writes (ADR-056, 2026-10-14):
 # said only in her system prompt, a missing first think was refused 1.75 times as often.
-THINK_FIRST = '这一回合第一步先调用 think 写心里话。'
+THINK_FIRST = '这一次第一步先调用 think 写心里话。'
 # ADR-112 §12.2: in the turn the program asks her about one task, her task tool acts on that task alone.
-TIME_UP_OTHER = '这一回合只定程序来问你的那一件（%s）；别的事等下一回合。'
-TIME_UP_BACK = '这件事已经交回来了：要接着做，在它的结果交到你手上的那一回合用 task 的 message。'
+TIME_UP_OTHER = '这一次只定程序来问你的那一件（%s）；别的事等下一次。'
+TIME_UP_BACK = '这件事已经交回来了：要接着做，在它的结果交到你手上的那一次用 task 的 message。'
 # ADR-064 phase 2: where only reply speaks, words written in the body come back once in the same turn.
 # Said, not pushed (ADR-064, 2026-10-26): most body text written where only speak speaks is her own closing, and the
 # old ending (「在这里说话用 speak。」) made her say it; she is told it stayed, and that saying it is speak.
-UNSENT_NOTE = '这段没发出去：「%s」。如果这段是写给自己的，就让它留着，这一回合到此结束，不用再调用工具把它发出去；要对这里的人说，用 speak。'
+UNSENT_NOTE = '这段没发出去：「%s」。如果这段是写给自己的，就让它留着，这一次到此结束，不用再调用工具把它发出去；要对这里的人说，用 speak。'
 UNSENT_CHARS = 40
-REPLY_THINK_NOTE = '这一回合还没写心里话：先调用 think，再用 speak 说话；不说就不再调用工具。'
+REPLY_THINK_NOTE = '这一次还没写心里话：先调用 think，再用 speak 说话；不说就不再调用工具。'
 
 
 def prepared_record(manifest, person_id, policy_epoch):
@@ -254,15 +254,15 @@ class Coordinator:
             # The stored failure (often a traceback with paths) is read only at home; elsewhere she is told plainly
             # that the turn did not finish, in words she could repeat without giving away the machine (ADR-050).
             if (ep.get('manifest') or {}).get('session_class')==visibility.OWNER_PRIVATE:
-                extra+='\n宿主上次中断了这一回合（不是新的用户指令；继续原来的事）：'+ep['resume_diagnostic'][:1200]
+                extra+='\n宿主上次中断了这一次（不是新的用户指令；继续原来的事）：'+ep['resume_diagnostic'][:1200]
             else:
-                extra+='\n这一回合上次没做完（不是新的消息；接着把原来的事做完）。'
+                extra+='\n这一次上次没做完（不是新的消息；接着把原来的事做完）。'
             done=[call['tool'] for call in sorted((ep.get('tool_calls') or {}).values(),key=lambda c:c['seq']) if 'result' in call]
             if done:
-                extra+='\n这一回合中断前已经生效的工具调用（不用再做一遍）：'+'、'.join(done)
+                extra+='\n这一次中断前已经生效的工具调用（不用再做一遍）：'+'、'.join(done)
             tasks=task_records.many(self.store,ep.get('task_ids') or []).rows(fields=['title','goal'])
             if tasks:
-                extra+='\n这一回合中断前已经交给行动脑的事（不要再交一遍）：'+'、'.join(
+                extra+='\n这一次中断前已经动手的事（不要再交一遍）：'+'、'.join(
                     '「%s」（%s）'%(row.get('title') or row.get('goal'),row['_id']) for row in tasks)
         return (extra.strip('\n') + ('\n' + THINK_FIRST if asks else '')).lstrip('\n')
 
@@ -384,7 +384,7 @@ class Coordinator:
                     self._absorb(ep,seen)
                     said=(ep.get('reply') or {}).get('parts')
                     return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
-                        **({} if said else {'silent_reason':'这回合没有 speak'}))
+                        **({} if said else {'silent_reason':'这次没有 speak'}))
                 self.store.audit(ep['_id'],'turn.rejected',{'operation':operation,'attempt':attempt,'problem':issue,
                     'request_refs':value.request_refs},ep['scope_key'])
                 continue
@@ -608,7 +608,7 @@ class Coordinator:
                 ep=self._update(ep,state='TURN',
                                 resume_diagnostic=ep.get('failure','宿主中断'))
             elif ep['state']=='TURN' and not ep.get('resume_diagnostic'):
-                ep=self._update(ep,resume_diagnostic='宿主重启时这一回合还没结束')
+                ep=self._update(ep,resume_diagnostic='宿主重启时这一次还没结束')
             try:
                 if ep['state']=='ATTENDING':
                     ep=self._attend(ep)
@@ -785,7 +785,7 @@ class Coordinator:
             self.collab(task,'message',{'from':'character','text':message},entry_id=message_id)
             if self.on_action_message:
                 self.on_action_message(task,{'id':message_id,'text':message})
-        return {'task':task['_id'],'state':'行动脑下一步就会看到这句话',
+        return {'task':task['_id'],'state':'做着的事下一步就会看到这句话',
                 'action_brain':'它正在做这件事，接着原来的上下文：之前查到的它都还看得到。'}
 
     def message_action(self, ep, call_id, task, message):
@@ -805,7 +805,7 @@ class Coordinator:
         if (task.get('integration_profile')!=integration   # 比值，不是 truthy：owner 回合不能给窄授权任务补话，反过来也不行
                 or bool(task.get('development_grant')) and not for_whose(self.store,whose_of.of(self.store,ep))):
             # Work under the owner's grants takes words only from a turn with the same grants (ADR-011 §6.2).
-            raise role_tools.Refused('这一回合的授权和原来那件事不一样，不能给它补话或接着做；要做就用 delegate 交一件新的。', ['TASK_OTHER_GRANT'])
+            raise role_tools.Refused('这一次的授权和原来那件事不一样，不能给它补话或接着做；要做就用 delegate 交一件新的。', ['TASK_OTHER_GRANT'])
         if task['state'] in ('READY','RUNNING'):
             return self._steer(ep,call_id,task,message)
         if task['state']=='STALE':
@@ -853,7 +853,7 @@ class Coordinator:
         context=(('新开一份上下文：这件事上一趟已经闲了约 %d 分钟（超过 %d 分钟就不接着用），之前查到的工具输出它看不到了；'
                   '它手上只有原来的交代、上一趟的报告和你这句话。要它用的东西，就在这句话里写全，或者说清楚让它重新取。')
                  % (fresh['after_minutes'],fresh['limit'])) if fresh else '接着上一趟的上下文做：之前查到的它都还看得到。'
-        return {'task':task_id,'continues':task['_id'],'state':'已交给行动脑',
+        return {'task':task_id,'continues':task['_id'],'state':'已经动手',
                 **({'tier':said} if said else {}),
                 'action_brain':context,'queue':queue_words(self.store,task_id),
                 'note':'结果回来会再叫你。'}

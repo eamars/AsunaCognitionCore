@@ -586,7 +586,7 @@ def resolve_image_file(ref, form, *, task_dir=None):
     """
     if form == 'task':
         if not task_dir:
-            raise Denied('IMAGE_TASK_DIR_UNAVAILABLE: %s 里的 /task/ 是行动任务自己的工作区，这一回合没有任务目录；'
+            raise Denied('IMAGE_TASK_DIR_UNAVAILABLE: %s 里的 /task/ 是行动任务自己的工作区，这一次没有任务目录；'
                          '重试也一样：换成绝对路径，或把这件事交给行动任务' % ref)
         relative = ref[len(TASK_PATH):].strip('/\\')
         candidate = Path(task_dir) / relative if relative else Path(task_dir)
@@ -709,7 +709,7 @@ def path_image(blobs, task, config, ref, max_bytes=None, session_class=visibilit
     """
     if session_class != visibility.OWNER_PRIVATE:
         raise Denied('IMAGE_PATH_HOME_ONLY: %s 是一个文件路径，按路径读图只在家里（本机、主人私聊这类可信的对话）允许；'
-                     '这里能看的是消息里的图：ref 照抄图旁标的那个（att-…）。盘上的图要回家里那一回合看，'
+                     '这里能看的是消息里的图：ref 照抄图旁标的那个（att-…）。盘上的图要回家里那一次看，'
                      '或交给家里交出去的行动任务' % ref)
     data, media_type, via, source = pull_bytes({'ref': ref, 'pull_via': 'local_file', 'file': ref}, config,
                                                max_bytes=max_bytes, session_class=session_class, task_dir=task_dir)
@@ -756,7 +756,7 @@ def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offere
 
 
 NOT_READABLE = ('IMAGE_ARTIFACT_NOT_READABLE: %s 不是能看的图：没有这张，或它不在这个对话里、不是你画的、'
-                '也不是这一回合可发的；自己画的图照抄 generate_image 回执里的 artifact.artifact_id')
+                '也不是这一次可发的；自己画的图照抄 generate_image 回执里的 artifact.artifact_id')
 
 
 LOCAL_NOT_IN_SCENE = 'IMAGE_ATTACHMENT_NOT_IN_SCENE: 这张图的原消息已经不在这个对话可读的范围里；' + GIVE_UP
@@ -882,21 +882,21 @@ def media_note(message, config):
             'count': block.get('count'), 'truncated': bool(block.get('truncated')),
             'can_pull': capability['supported'],
             'unsupported_because': capability['unsupported_because'] or None,
-            'meaning': (('这些是对方在本机聊天里直接发给你的图，就在对话里，你看得见。要交给行动脑处理，'
-                         '把图的 ref 一起交代给它，它也用 read_image 读。')
+            'meaning': (('这些是对方在本机聊天里直接发给你的图，就在对话里，你看得见。要动手处理，'
+                         '把图的 ref 一起交代，动手时也用 read_image 读。')
                         if block.get('origin') == 'local_upload' and not (message or {}).get('event', {}).get('channel')
                         else ('图片只有元数据和占位符，尚未进入上下文；想看就用 read_image(ref) 自己看，'
-                              '交给行动脑做事时把 ref 一起交代。没看就是没看过，占位符不代表看过；其他媒体仍只有占位符。')
+                              '动手做事时把 ref 一起交代。没看就是没看过，占位符不代表看过；其他媒体仍只有占位符。')
                         if capability['supported']
-                        else ('图片只有元数据和占位符，尚未进入上下文；有需要时可委托行动脑按需读取。'
+                        else ('图片只有元数据和占位符，尚未进入上下文；有需要时动手读取。'
                               '不拉就不进上下文。占位符本身不代表看过图片；其他媒体仍只有占位符。'))}
     return {k: v for k, v in note.items() if v is not None}
 
 
 READ_IMAGE_TOOL = {
     'name': READ_IMAGE_TOOL_NAME,
-    'description': ('看一张图：ref 照抄图旁标的 ref，或附件清单（attachments、media_from_program）里的，7 天内都认；'
-                    '也可以是一张存好的图的 artifact_id（blob-…），比如你自己画的、这回合能发的，画完或发之前用它看一遍。'
+    'description': ('看一张图：ref 照抄图旁标的 ref，或附件清单里的，7 天内都认；'
+                    '也可以是一张存好的图的 artifact_id（blob-…），比如你自己画的、这次能发的，画完或发之前用它看一遍。'
                     '没调用就是没看过。家里还能看你别的对话里 7 天内的图，也能读盘上的图（ref 写绝对路径，'
                     '或行动任务工作区里的 /task/… 路径）。视频的 ref 也认：给你按时间截的一张格子图（没有声音），'
                     '视频超过 %d MB 不下载。看不了会照实说原因。' % VIDEO_MAX_MB),
@@ -966,6 +966,6 @@ def inline_summary(result):
     out = {k: v for k, v in result.items() if k not in ('image', 'visual')}
     out['inline_image'] = {'media_type': image.get('media_type'), 'base64_chars': len(data),
                            'host_state': result.get('visual'),
-                           'note': ('base64 只交给调用方的 DSH 插件；是否真的成为这一回合的视觉输入，'
+                           'note': ('base64 只交给调用方的 DSH 插件；是否真的成为这一次的视觉输入，'
                                     '看模型侧回执里的 visual 字段（attached / unavailable:原因）。')}
     return out

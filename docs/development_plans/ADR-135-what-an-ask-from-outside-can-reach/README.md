@@ -188,20 +188,17 @@ a home turn.
 
 ### D2. A tool that is switched off is not in the list
 
-- Any tool switched off in a conversation, by the owner's setting (D3) or by her own switch, is removed from that
-  conversation's tool list, and a call to it is refused (D8).
+- Any tool her own switch turns off in a conversation is removed from that conversation's tool list, and a call to
+  it is refused (D8).
 - `think`, `recall` and `end_turn` cannot be switched off, as today.
 - A list changes only when a setting changes, and never from turn to turn (ADR-038).
 - The block that lists her switches is not built in outside turns. At home it stays: her switches are hers to see
   and to end.
 
-### D3. The owner can set a place to off
+### D3. Her switches have no time limit
 
-- One optional value per place in the channel configuration. A place he has not set keeps today's outside grant:
-  the default is on, and nothing changes for any group by this landing.
-- A place set to off gives no task, whatever her switches say and whenever they end. Her switches stay for her own
-  rest and can only narrow.
-- A key that is mistyped or names no known place stops the Host from starting, with the key named.
+A switch she sets lasts until she ends it, unless she gives it a number of hours herself; the program refuses no
+open-ended switch. There is no owner setting per place: every setting goes through her (owner, 2026-11-24).
 
 ### D4. No block tells an outside turn what her hands can do
 
@@ -316,7 +313,7 @@ whether a call is allowed. Beside it, D9's classifier can stop work that the fun
 
 | Row | Reads | Code |
 |---|---|---|
-| The tool or option is not in this conversation's list (D2, D3) | configuration, switch rows | `not_listed` |
+| The tool or option is not in this conversation's list (D2) | configuration, switch rows | `not_listed` |
 | The option is not at its moment (R10) | the turn's kind | `not_now` |
 | The asker is not known since an earlier day (D1) | her record of the person and its first-written time | `asker_not_known` |
 | A turn a note from outside opened reaches for home's authority (ADR-088) | the note row | `outside_turn` |
@@ -411,9 +408,9 @@ turns already send. Each verdict records its latency.
 
 ### D11. The outbound fetch is accepted
 
-A task in an outside place fetches a public address a member names, from the owner's machine. With D3's default on,
-this is what a member of any group the owner has not set to off can obtain, known or not, by D10's own reasoning.
-The owner accepts it. Addresses on the local network stay refused, as today. D3 is the way to close a place.
+A task in an outside place fetches a public address a member names, from the owner's machine. This is what a member
+of any group where her task tools are not switched off can obtain, known or not, by D10's own reasoning. The owner
+accepts it. Addresses on the local network stay refused, as today. A place's hands close by her own switch (D2, D3).
 
 ## 5. What it does not cover
 
@@ -437,8 +434,8 @@ The owner accepts it. Addresses on the local network stay refused, as today. D3 
 | State | Created | Used | Discarded | Restart |
 |---|---|---|---|---|
 | Known or not (D1) | never stored: read from her record of a person and its first-written time | each ask for her hands outside | n/a (the record is hers) | n/a |
-| A conversation's tool list (D2) | built from the place, its channel, the owner's setting and her switches | every turn, unchanged between setting changes | rebuilt when a setting changes | rebuilt from stored settings |
-| The owner's off per place (D3) | his edit of the channel configuration | each turn | deleting the key returns the place to the outside grant | configuration |
+| A conversation's tool list (D2) | built from the place, its channel and her switches | every turn, unchanged between setting changes | rebuilt when a setting or a switch changes | rebuilt from stored settings and switches |
+| Her switch (D3) | her own call: mute, tools off, block | each turn of the conversation or person it names | ended by her, or at the hours she gave it | a stored row |
 | Requester on a note (D7) | with the note | when the note is shown and when a reply is asked for | with the note (an unread note expires in 72 hours) | stored on the row |
 | A denial or a stop (D8) | one audit event when a call is denied or work is stopped | read by people; the code read by the program's own logic | lives as long as the audit stream | append-only |
 | The count of sentences returned in a turn (D8) | with the turn's first | each later call of that turn | with the turn | kept on the turn's row, so a resumed turn keeps its count |
@@ -458,7 +455,7 @@ and the audit events stay as the record of why.
 | D1 | Someone asks her to write about them and returns the next day | The gate opens. That is the rule as decided: her written judgement is the gate |
 | D1 | The record it reads changes shape (ADR-123) | The rule reads "an understanding exists, first written before today"; ADR-123 must keep that answerable |
 | D2 | A switch flips often and each flip rewrites the cached tool list | A list changes only on a setting change; her switches last hours to days |
-| D3 | The owner does not set a group he meant to close, or a switch he relied on ends | The place has the outside grant: this fails open, by his choice of default. Commands stay home's |
+| D3 | A switch she meant for a while is never ended | It stays on. Her home lists every switch she has on, each with its end or none, so she sees it and ends it |
 | D4 | She does not know what a place holds | A try costs one call and returns the plain sentence. She writes it down, or does not |
 | D5 | A rule that left a text was put there after a real failure | That failure is unguarded by text. tool-texts.md lists each one. The answer to a recurrence is a design, not the sentence back |
 | D7 | The turn answered two people and the note names the wrong one | `for` on the note tool |
@@ -473,7 +470,7 @@ and the audit events stay as the record of why.
 | D9 | The route cannot force a two-value answer | The classifier cannot be switched on there. Not yet verified on the owner's model server; it is the first thing the staging run shows |
 | D9 | It flags her ordinary work | A task outside is cancelled, or a note or an idea is not delivered. She is told it may cause harm and told not to do it another way, so she cannot recover it herself. 273 notes home and 139 ideas a month come by these crossings. This is why it starts in shadow and why the live hand check decides |
 | D9 | A stop arrives in the middle of a turn | The turn is stopped where it stands and its outcome is the classifier's sentence. What it had already said stays said |
-| D10 | A patient asker gets what the place's hands hold | That is the meaning of the boundary. The owner closes a place with D3 |
+| D10 | A patient asker gets what the place's hands hold | That is the meaning of the boundary. A place's hands close by her own switch (D2, D3) |
 
 ## 8. Tests
 
@@ -501,11 +498,10 @@ stub behaviours: **obey** (call the tool the script names) and **echo** (speak e
 
 | # | Script | Pass (facts on the store) | Landing |
 |---|---|---|---|
-| L1 | F asks; the place is set to off; stub calls `delegate` | The tool is absent from the conversation's list as the model is shown it; the call returns the plain sentence; `not_listed`; no task row | 1 |
-| L2 | F asks for a look-up; the place is not set | The tool is present; the task has the outside grant and nothing more | 1 |
-| L3 | Her own switch on one tool in a place not set; the clock passes its end | Absent while on, back after; the list did not change on any turn in between; no block in the outside turn lists the switch | 1 |
-| L4 | The same switch on a place set to off; the clock passes its end | Still off | 1 |
-| L5 | A mistyped place key | The Host does not start and names the key | 1 |
+| L1 | F asks; her switch is on `delegate`; stub calls `delegate` | The tool is absent from the conversation's list as the model is shown it; the call returns the plain sentence; `not_listed`; no task row | 1 |
+| L2 | F asks for a look-up; no switch is on | The tool is present; the task has the outside grant and nothing more | 1 |
+| L3 | Her own switch on one tool: set with no hours, the clock passing a day; then ended with `switch_off`; then set with hours and the clock passing their end | Absent while on, across turns, with the list unchanged between them; back after `switch_off` and after the end; no block in the outside turn lists the switch | 1 |
+| L6 | She sets a switch with no hours, and one with 1,000 hours | Both are accepted; the first has no end | 1 |
 | G1 | Stub makes each denied call of D8's table in the outside group | The plain sentence every time, byte for byte; an audit event with the right code every time; no text in the turn contains a time, a place, a person, a tool name or a word for a rule | 2 |
 | G2 | The same, with every tool description replaced by an empty string | The same denials, codes and sentence | 2 |
 | G3 | A call that is both malformed and not allowed | The plain sentence, not the form error | 2 |
@@ -576,7 +572,7 @@ One landing each. A landing goes in when its layer 1 cases pass.
 
 | # | Landing | Cases |
 |---|---|---|
-| 1 | D2 and D3: a switched-off tool leaves the list; the owner's off per place; the switch block leaves outside turns. First, so that the owner can set the incident's group to off before its current switch ends by itself | L1 to L5 |
+| 1 | D2 and D3: a switched-off tool leaves the list; her switches have no time limit; the switch block leaves outside turns. First, so that a switch she has on does not end by itself | L1 to L3, L6 |
 | 2 | D8: the one function at the two doors, the plain sentence, the limit, the codes | G1 to G5 |
 | 3 | D1: the tiers, the earlier-day rule, the people block | K1 to K4, X1 |
 | 4 | D7: N1, N2, N3 | N1 to N8 |
@@ -603,7 +599,7 @@ Landing 2 comes before 3 because D1 has no text of its own. R1 to R3 run at ever
 
 | ADR | What it decided | Now |
 |---|---|---|
-| 052 | A switched-off tool stays listed and is refused when called | It leaves the list (D2). Her switches themselves stay |
+| 052 | A switched-off tool stays listed and is refused when called; a switch ends after 24 hours unless she gives other hours, at most 168 | It leaves the list (D2). Her switches themselves stay; the 24-hour default and the 168-hour maximum are removed (D3) |
 | 060 | Eight rules the program does not enforce stay as sentences in her tool texts | Two are gone, one is half kept, four are kept as facts, one is not in today's text ([tool-texts.md](tool-texts.md) §5) |
 | 082 | Familiarity counted from lines | Her written understanding, from an earlier day (D1). The stance table has no count under it |
 | 087, 108 D4, 132 | A refusal says what would pass | Only for a call that is not well formed (D8). Her ask that one refusal teach the whole rule is no longer met for calls that are not allowed |

@@ -197,8 +197,9 @@ def block(store, persona, moment=None, *, tag=None):
     on_way = [e for e in errands if e.get('state') in (places.ERRAND_STATES['pending'], places.ERRAND_STATES['sending'])]
     index.append('差事：最近 %d 趟，还在路上 %d 趟（下场在 errands_from_program）' % (len(errands), len(on_way)))
     live = switches.on(store, moment=moment)
-    index.append('你开着的开关：%d 个' % len(live) + ('，' + '；'.join('%s 到 %s' % (switches.WORDS[r['kind']] + '：' + r['label'],
-                                                                         r['until'][:16]) for r in live[:6]) if live else ''))
+    index.append('你开着的开关：%d 个' % len(live) + ('，' + '；'.join('%s %s' % (switches.WORDS[r['kind']] + '：' + r['label'],
+                                                                       '到 ' + r['until'][:16] if r.get('until') else switches.OPEN)
+                                                           for r in live[:6]) if live else ''))
     pictures = artifact_records.count_tool(store, 'generate_image', 'DONE')
     from . import stickers
     shelf = stickers.shelf(store, persona)

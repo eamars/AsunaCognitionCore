@@ -1,8 +1,7 @@
 """Her switches (ADR-052): mute a group, turn tools off in a conversation, block a person.
 
-Each switch ends by itself: after 24 hours unless she gives another number of hours (at most a week), so a switch she
-forgot never turns into her being inconsistent with someone who did nothing. The program keeps them and lists them at
-home only: every one that is on, and the ones that ended lately.
+A switch lasts until she ends it, or for the number of hours she gives it (ADR-135 D3): one with no end has no
+`until`. The program keeps them and lists them at home only: every one that is on, and the ones that ended lately.
 She sets them with tools she has: mute with `group_focus`, block with `watch` op `block` (the person speaking to her),
 tools off and an early end with `set_policy`.
 
@@ -19,15 +18,14 @@ from . import clock
 from .evidence import sha
 from .records.view import ANY, View, fenced, is_text, pinned
 from .state import Denied, now
-from .store.words import And, Or, Range
+from .store.words import And, Exists, Or, Range
 from .config import echoed
 
-DEFAULT_HOURS = 24
-MAX_HOURS = 168
 ENDED_SHOWN = timedelta(hours=12)                # an ended switch is listed at home this long, then gone
 KEEP = ('think', 'recall', 'end_turn')          # a turn needs these: never switched off (end_turn: ADR-131)
 WORDS = {'mute': '静音', 'tools_off': '关了工具', 'block': '屏蔽'}
-NOTE = ('你自己开着的开关（静音、关工具、屏蔽），until_at 到点自己结束；要提前结束，在家里用 set_policy：'
+OPEN = '一直开着，到你结束它'                     # how a switch with no end reads
+NOTE = ('你自己开着的开关（静音、关工具、屏蔽）：写着 until_at 的到点自己结束，别的一直开着；要结束，在家里用 set_policy：'
         'key=switch_off，value 写开关的 id。ended 是最近结束的。')
 
 
@@ -53,11 +51,14 @@ def get(store, switch_id, *, persona=ANY, state=ANY):
 
 
 def on(store, *, kind=ANY, scene_id=ANY, person_id=ANY, moment=None):
-    """The switches on now (not cleared, not past their end), the soonest to end first."""
-    where = pinned(fenced({'state': 'on', 'until': Range(gt=_moment(moment).isoformat())},
-                          {'scene_id': (scene_id, is_text), 'person_id': (person_id, is_text)}),
+    """The switches on now (not cleared, not past their end; one with no end is on until she clears it), those with
+    an end first, the soonest first."""
+    where = pinned(fenced({'state': 'on'}, {'scene_id': (scene_id, is_text), 'person_id': (person_id, is_text)}),
                    {'kind': (kind, is_text)})
-    return View(store, COLLECTION, where, (('until', 1),)).rows()
+    if where is not None:
+        where = And(where, Or({'until': Range(gt=_moment(moment).isoformat())}, {'until': Exists(False)}))
+    rows = View(store, COLLECTION, where).rows()
+    return sorted(rows, key=lambda row: (row.get('until') is None, row.get('until') or '', row['_id']))
 
 
 def changed(store, persona, since, moment):
@@ -75,16 +76,21 @@ def save(store, row, **kwargs):
 
 
 def hours_of(value):
-    """The hours a switch lasts: DEFAULT_HOURS when not given, else a whole number 1..MAX_HOURS."""
+    """The hours a switch lasts: None (until she ends it) when not given, else a whole number of at least 1."""
     if value is None:
-        return DEFAULT_HOURS
+        return None
     try:
         hours = int(value)
     except (TypeError, ValueError):
-        raise Denied('SWITCH_HOURS_INVALID: hours 给的是「%s」' % echoed(value)) from None
-    if not 1 <= hours <= MAX_HOURS or str(value).strip() not in (str(hours), str(float(hours))):
-        raise Denied('SWITCH_HOURS_INVALID: hours 给的是「%s」' % echoed(value))
+        raise Denied('SWITCH_HOURS_INVALID: hours 给的是「%s」，要写一个整数，或者不写' % echoed(value)) from None
+    if hours < 1 or str(value).strip() not in (str(hours), str(float(hours))):
+        raise Denied('SWITCH_HOURS_INVALID: hours 给的是「%s」，要写一个整数，或者不写' % echoed(value))
     return hours
+
+
+def ends(row):
+    """How a switch ends, for what she reads: its time, or that it has none."""
+    return {'until_at': row['until']} if row.get('until') else {'lasts': OPEN}
 
 
 def set_switch(store, ep, kind, *, label, scene_id=None, person_id=None, tools=None, hours=None, why=None,
@@ -95,10 +101,11 @@ def set_switch(store, ep, kind, *, label, scene_id=None, person_id=None, tools=N
     target = scene_id if kind != 'block' else person_id
     _id = 'switch-' + sha('|'.join([ep['persona'], kind, target]).encode())[:16]
     current = get(store, _id)
+    hours = hours_of(hours)
     doc = {'_id': _id, 'persona': ep['persona'], 'kind': kind, 'label': label,
            **({'scene_id': scene_id} if scene_id else {}), **({'person_id': person_id} if person_id else {}),
            **({'tools': sorted(set(tools))} if tools is not None else {}),
-           'until': (moment + timedelta(hours=hours_of(hours))).isoformat(), 'state': 'on', 'set_at': now(),
+           **({'until': (moment + timedelta(hours=hours)).isoformat()} if hours else {}), 'state': 'on', 'set_at': now(),
            'set_in': ep['_id'], **({'why': why} if why else {})}
     if ready:
         ready()
@@ -137,7 +144,7 @@ def blocked(store, person_id, moment=None):
 
 def _item(row):
     what = WORDS[row['kind']] + '：' + row['label'] + ('（%s）' % '、'.join(row['tools']) if row.get('tools') else '')
-    return {'id': row['_id'], 'what': what, 'until_at': row['until'], **({'why': row['why']} if row.get('why') else {})}
+    return {'id': row['_id'], 'what': what, **ends(row), **({'why': row['why']} if row.get('why') else {})}
 
 
 def home_block(store, persona, moment=None):

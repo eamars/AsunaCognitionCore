@@ -125,9 +125,6 @@ Host-owned resource grants, never inferred from a message or model role.
 - def `workspace_grant`
 - def `workspace_folder` — The folder a task of this person works in here, made now.
 - def `conversation_workspace` — Whether anyone may hand work to the action brain in this conversation (it then lists the tools that do it; each turn still checks its own speaker with workspace_grant).
-- def `place_key` — A conversation's key in its channel's `tasks` setting: `group:<id>` or `dm:<id>`, from its route's target.
-- def `tasks_off` — Whether the owner set this conversation's place to off in its channel's `tasks` setting (ADR-135 D3): then it gives no task, whatever her switches say.
-- def `check_tasks_setting` — A channel's `tasks` setting names only conversations it has a route to, each `on` or `off`; anything else stops the start with the key named.
 - def `for_whose` — Whether work for this `whose` gets the development tools (ADR-011 §6.1, ADR-111 §2.4): with self-development enabled and the sandbox available (her candidates are tested there, ADR-010 D5), only where `whose` earns it: the owner's own words
 
 ## `whose`

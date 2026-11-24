@@ -70,46 +70,6 @@ def conversation_workspace(config, scene_id):
     return False
 
 
-TASKS_SETTING = 'tasks'
-TASKS_VALUES = ('on', 'off')
-
-
-def place_key(route):
-    """A conversation's key in its channel's `tasks` setting: `group:<id>` or `dm:<id>`, from its route's target."""
-    target = route.get('target') or {}
-    return '%s:%s' % (target.get('type'), target.get('id'))
-
-
-def tasks_off(config, scene_id):
-    """Whether the owner set this conversation's place to off in its channel's `tasks` setting (ADR-135 D3): then it
-    gives no task, whatever her switches say. A place not set is on."""
-    for channel in (config.get('channels') or {}).values():
-        setting = channel.get(TASKS_SETTING) or {}
-        if not setting:
-            continue
-        for route in (channel.get('routes') or {}).values():
-            if route.get('scene_id') == scene_id:
-                return setting.get(place_key(route)) == 'off'
-    return False
-
-
-def check_tasks_setting(channel_id, channel):
-    """A channel's `tasks` setting names only conversations it has a route to, each `on` or `off`; anything else
-    stops the start with the key named."""
-    setting = channel.get(TASKS_SETTING)
-    if setting is None:
-        return
-    if not isinstance(setting, dict):
-        raise ValueError('INVALID_CHANNEL_TASKS: channels.%s.%s is an object {"group:<id>": "off"}' % (channel_id, TASKS_SETTING))
-    known = {place_key(route) for route in (channel.get('routes') or {}).values()}
-    for key, value in setting.items():
-        if key not in known:
-            raise ValueError('CHANNEL_TASKS_PLACE_UNKNOWN: channels.%s.%s names "%s", which is no conversation of this '
-                             'channel (group:<id> or dm:<id>)' % (channel_id, TASKS_SETTING, key))
-        if value not in TASKS_VALUES:
-            raise ValueError('INVALID_CHANNEL_TASKS: channels.%s.%s."%s" is on or off' % (channel_id, TASKS_SETTING, key))
-
-
 def for_whose(store, whose):
     """Whether work for this `whose` gets the development tools (ADR-011 §6.1, ADR-111 §2.4): with self-development
     enabled and the sandbox available (her candidates are tested there, ADR-010 D5), only where `whose` earns it: the

@@ -1,8 +1,7 @@
-"""ADR-135 landing 1 (D2, D3), on the fixture world in memory: a tool switched off in a conversation, by the owner's
-`tasks` setting for its place or by her own switch, is not in that conversation's list while it is off, and the list
-does not change between a switch's start and its end; the place set to off stays off when her switch ends; the block
-listing her switches is built at home only; a `tasks` setting naming no conversation stops the start with the key
-named. g1 is an outside group (A and B), dm-a the owner A's chat (home)."""
+"""ADR-135 landing 1 (D2, D3), on the fixture world in memory: a tool her switch turns off in a conversation is not in
+that conversation's list while the switch is on, and the list does not change between turns meanwhile; a switch lasts
+until she ends it unless she gives it hours, and the program refuses no open-ended switch; the block listing her
+switches is built at home only. g1 is an outside group (A and B), dm-a the owner A's chat (home)."""
 from datetime import timedelta
 from itertools import count
 
@@ -11,11 +10,10 @@ import pytest
 from asuna import clock, role_tools, switches, visibility
 from asuna.records import tasks as task_records
 from asuna.role_tools import Refused, RoleTools
-from test_channel_admission import desk  # noqa: F401  (a fixture: a store holding an open-capable channel)
 
 PERSONA = 'P1'
-TASK_TOOLS = {'delegate', 'task'}
 SERIAL = count(1)
+HOME = {'_id': 'ep-home', 'persona': PERSONA, 'scope_key': 'scene:dm-a'}
 
 
 @pytest.fixture
@@ -51,76 +49,66 @@ def shown(her):
                                           'manifest': {'session_class': visibility.PUBLIC}})
 
 
-def her_switch(her, tools, at, hours=2):
-    return switches.set_switch(her.store, {'_id': 'ep-home', 'persona': PERSONA, 'scope_key': 'scene:dm-a'},
-                               'tools_off', label='一群', scene_id='g1', tools=tools, hours=hours, moment=at)
+def her_switch(her, tools, at, hours=None):
+    return switches.set_switch(her.store, HOME, 'tools_off', label='一群', scene_id='g1', tools=tools, hours=hours,
+                               moment=at)
 
 
 def at(monkeypatch, moment):
     monkeypatch.setattr(clock, 'now', lambda: moment)
 
 
-def test_L1_a_place_set_to_off_does_not_list_the_task_tools_and_a_call_makes_no_task(her):
-    her.store.config['channels']['qq']['tasks'] = {'group:G1': 'off'}
-    assert not TASK_TOOLS & set(shown(her))
+def test_L1_her_switch_takes_delegate_out_of_the_list_and_a_call_makes_no_task(her):
+    before = shown(her)
+    her_switch(her, ['delegate'], clock.now())
+    assert 'delegate' in before and 'delegate' not in shown(her)
     ep = group_turn(her)
-    assert not any(name.split('.')[0] in TASK_TOOLS for name in ep['turn_tools'])
+    assert 'delegate' not in ep['turn_tools']
     with pytest.raises(Refused):
         her.tools.call(ep['_id'], ep['_id'] + ':0', 'delegate', {'title': '查一下', 'brief': '查一下天气'})
     assert task_records.of_episode(her.store, ep['_id']).rows() == []
 
 
-def test_L2_a_place_not_set_keeps_the_task_tools(her):
-    assert TASK_TOOLS <= set(shown(her))
-    her.store.config['channels']['qq']['tasks'] = {'group:G1': 'on'}
-    assert TASK_TOOLS <= set(shown(her)) and 'delegate' in group_turn(her)['turn_tools']
+def test_L2_with_no_switch_on_the_task_tools_are_listed(her):
+    assert {'delegate', 'task'} <= set(shown(her)) and 'delegate' in group_turn(her)['turn_tools']
 
 
-def test_L3_her_switch_takes_the_tool_out_of_the_list_until_it_ends_and_the_list_holds_still_meanwhile(her, monkeypatch):
+def test_L3_an_open_switch_holds_until_she_ends_it_and_one_with_hours_ends_at_its_time(her, monkeypatch):
     start = clock.now()
     at(monkeypatch, start)
     before = shown(her)
-    her_switch(her, ['delegate'], start)
+    row = her_switch(her, ['delegate'], start)
+    assert 'until' not in row and switches.ends(row) == {'lasts': switches.OPEN}
     during = []
-    for minutes in (0, 1, 60, 119):
-        at(monkeypatch, start + timedelta(minutes=minutes))
+    for hours in (0, 1, 24, 24 * 30):
+        at(monkeypatch, start + timedelta(hours=hours))
         during.append(shown(her))
         assert 'delegate' not in group_turn(her)['turn_tools']
     assert all(lists == during[0] for lists in during), 'the list does not change between turns while the switch is on'
-    assert 'delegate' not in during[0] and during[0] == [name for name in before if name != 'delegate']
-    at(monkeypatch, start + timedelta(hours=2, seconds=1))
+    assert during[0] == [name for name in before if name != 'delegate']
+    switches.clear(her.store, HOME, row['_id'])                      # set_policy's switch_off
+    assert shown(her) == before
+    timed = her_switch(her, ['delegate'], clock.now(), hours=2)
+    assert 'delegate' not in shown(her) and switches.ends(timed) == {'until_at': timed['until']}
+    at(monkeypatch, clock.now() + timedelta(hours=2, seconds=1))
     assert shown(her) == before
 
 
-def test_L3_the_block_of_her_switches_is_built_at_home_only(her, monkeypatch):
+def test_L3_the_block_of_her_switches_is_built_at_home_only_and_says_an_open_one_has_no_end(her, monkeypatch):
     from test_her_clock import prepared
     her_switch(her, ['delegate'], clock.now())
     assert 'switches_from_program' not in prepared(her.store, monkeypatch, 'g1')
-    assert 'switches_from_program' in prepared(her.store, monkeypatch, 'dm-a')
+    block = prepared(her.store, monkeypatch, 'dm-a')['switches_from_program']
+    assert [item.get('lasts') for item in block['items']] == [switches.OPEN] and 'until_at' not in block['items'][0]
 
 
-def test_L4_her_switch_ending_on_a_place_set_to_off_leaves_it_off(her, monkeypatch):
-    her.store.config['channels']['qq']['tasks'] = {'group:G1': 'off'}
+def test_L6_the_program_refuses_no_open_ended_switch_and_no_long_one(her):
     start = clock.now()
-    her_switch(her, ['delegate', 'task'], start)
-    at(monkeypatch, start + timedelta(hours=2, seconds=1))
-    assert not switches.on(her.store, scene_id='g1') and not TASK_TOOLS & set(shown(her))
-
-
-def test_L5_a_tasks_key_naming_no_conversation_stops_the_start_with_the_key_named(desk):
-    from asuna import host
-    from test_channel_admission import admit, event
-    store = desk('automatic')
-    admit(store, event('carolyn', 'tribe'))                 # admitted places are places as much as listed ones
-    admit(store, event('carolyn'))
-    channel = store.config['channels']['acme']
-    channel['tasks'] = {'group:crew': 'off', 'group:tribe': 'off', 'dm:carolyn': 'on'}
-    host.prepare_channels(store, dry_run=True)
-    for setting, words in (({'group:trbe': 'off'}, 'CHANNEL_TASKS_PLACE_UNKNOWN: channels.acme.tasks names "group:trbe"'),
-                           ({'tribe': 'off'}, 'CHANNEL_TASKS_PLACE_UNKNOWN: channels.acme.tasks names "tribe"'),
-                           ({'group:tribe': 'of'}, 'INVALID_CHANNEL_TASKS: channels.acme.tasks."group:tribe"'),
-                           (['group:tribe'], 'INVALID_CHANNEL_TASKS: channels.acme.tasks is an object')):
-        channel['tasks'] = setting
-        with pytest.raises(ValueError) as raised:
-            host.prepare_channels(store, dry_run=True)
-        assert str(raised.value).startswith(words), setting
+    open_ended = her_switch(her, ['delegate'], start)
+    long = switches.set_switch(her.store, HOME, 'mute', label='一群', scene_id='g1', hours=1000, moment=start)
+    assert 'until' not in open_ended and clock.moment(long['until']) == start + timedelta(hours=1000)
+    assert switches.hours_of(None) is None and switches.hours_of('1000') == 1000
+    assert {row['_id'] for row in switches.on(her.store, scene_id='g1')} == {open_ended['_id'], long['_id']}
+    her.tools.problems, her.tools.collecting, her.tools.checked = [], False, False      # a handler's call state
+    blocked = her.tools._block(group_turn(her), None)               # watch's block, with no hours given
+    assert blocked['lasts'] == switches.OPEN and 'until' not in switches.blocked(her.store, 'B')

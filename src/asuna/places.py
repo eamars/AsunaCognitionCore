@@ -325,7 +325,7 @@ def places_block(store, persona, model, policy, plan, moment, date):
         row = {'place': place_id(scene_id), 'group': people.scene_title(scene),
                'focus': ('静音：只有叫到你才会醒，你不先开口、不去' if muted else
                          '常驻' if focus.active(store, scene, persona) else '歇着：只有叫到你才会醒'),
-               **({'muted_until_at': muted['until']} if muted else {}),
+               **({'muted_until_at': muted['until']} if muted and muted.get('until') else {}),
                **({'muted_you': muted_you} if muted_you else {}),
                'now': _tier(ACTIVITY, here['lines']) + ('' if here['last_line_at'] else '，还没见过有人说话'),
                **({'last_line_at': _stamp(here['last_line_at'])} if here['last_line_at'] else {}),

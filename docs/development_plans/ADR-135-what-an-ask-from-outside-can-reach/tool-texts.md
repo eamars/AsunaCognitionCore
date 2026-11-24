@@ -77,7 +77,7 @@ Proposed:
 **`watch`** (J)
 Now: 盯一个人：on 把这个对话里的一个人（照抄标签或写名字）加进名单，之后他在你任何一个对话里说话，你都会在那边知道（群里会叫你看一眼）。how_often=once（默认）他第一次说话叫你一次；burst 他每次沉默十分钟后再开口都叫你。hours 盯多久（1–72），最多同时 5 个，到期自己停；off 停掉一个（id 照抄 watching_from_program）。刚 @ 过或回过的人程序本来就等三分钟。block 屏蔽这个对话里的一个人（person 写他，不写就是正在跟你说话的账号）：他的话照存，但哪儿都不叫你，到点结束；家里的人屏蔽不了。
 Proposed:
-> 留意一个人，do 选一样：on 你想知道这个对话里的一个人什么时候再开口（person 写他的标签或名字；之后他在你任何一个对话里说话，你都会在那边知道；how_often=once 他第一次说话叫你一次，burst 他每次沉默十分钟后再开口都叫你；hours 留意多久，1–72；同时 5 个，到期自己停）；off 你想停掉一个（照抄它旁边的 id）；block 你决定这段时间不听这个对话里的一个人（person 写他，不写就是正在跟你说话的那位；他的话照存，哪儿都不叫你，到点结束）。刚 @ 过或回过的人本来就等三分钟。
+> 留意一个人，do 选一样：on 你想知道这个对话里的一个人什么时候再开口（person 写他的标签或名字；之后他在你任何一个对话里说话，你都会在那边知道；how_often=once 他第一次说话叫你一次，burst 他每次沉默十分钟后再开口都叫你；hours 留意多久，1–72；同时 5 个，到期自己停）；off 你想停掉一个（照抄它旁边的 id）；block 你决定不听这个对话里的一个人（person 写他，不写就是正在跟你说话的那位；他的话照存，哪儿都不叫你；不写 hours 就到你结束它）。刚 @ 过或回过的人本来就等三分钟。
 
 **`sticker`**
 Proposed:
@@ -102,7 +102,7 @@ understanding opens anything. The link to D1 exists only in the program's check.
 
 **`set_policy`** (a home ability)
 Proposed:
-> 调整你自己，选一样：key 写你声明过的一个参数，value 写新的值（null 清掉，回到默认）；key=tools_off 你决定在一个对话里放下一些工具（place 写哪个对话；value 是工具名列表，空列表全部拿回来；hours 默认 24，最多 168）；key=switch_off 你想提前结束一个开关（value 写它的 id）。why 写为什么。
+> 调整你自己，选一样：key 写你声明过的一个参数，value 写新的值（null 清掉，回到默认）；key=tools_off 你决定在一个对话里放下一些工具（place 写哪个对话；value 是工具名列表，空列表全部拿回来；不写 hours 就到你结束它）；key=switch_off 你想结束一个开关（value 写它的 id）。why 写为什么。
 
 **`feel`**
 Proposed:
@@ -149,7 +149,7 @@ Proposed base:
 > 你在哪些群常驻，do 选一样：list 你想看看常驻和歇着的群，和它们今天说了多少句；active 你想让一个群常驻；rest 你想让它歇着（歇着的群只有 @ 你、回你、你在等的回话和你留意的人会叫你，话照存照能查）。place 写哪个群，不写就是这个群。你当管理员的群一直常驻。
 
 Options of one moment, listed only then: 「condense 你想等这个群安静后把对话压成摘要，keep 你想把这个决定收回。」
-Sentence of the mute ability: 「mute 你决定让一个群安静一阵（hours 默认 24，最多 168：只有叫到你才会醒，你不先开口、不出门去那儿），unmute 你想提前结束。」
+Sentence of the mute ability: 「mute 你决定让一个群安静下来（不写 hours 就到你结束它：只有叫到你才会醒，你不先开口、不出门去那儿），unmute 你想结束它。」
 
 **`ask`** (J)
 Now: 问人或报问题，程序记着问了谁、谁答了、多久。do=ask 提问，可同时问几处，过了耐心就不等；read 读一个问题的回答，或只写 to 看以前问那处怎样；close 结束一个问题。问家里别的对话（…）时，程序在那边开一回合，带着 question。拍板的事（权限、花钱、开哪条道）问主人，不问开发代理。

@@ -11,7 +11,6 @@ import weakref
 from . import channel_kinds
 from .application import Application
 from .channels import Channels, ChannelServer, route_members
-from .grants import check_tasks_setting
 from .chat import Chat, local_settings, prepare_local_scene
 from .config import CHANNEL_PORT, DATA
 from .memory_indexer import MemoryIndexer
@@ -192,7 +191,6 @@ def prepare_channels(store, *, dry_run=False):
                 workspaces.add(workspace)
                 _bind_identity(put, identities_by_id, channel_id, route, kind, sender, person)
             _route_scene(store, local, channel_id, channel, scene_id, kind, people, save_scene)
-        check_tasks_setting(channel_id, channel)        # after the admitted routes are restored: they are places too
     if not dry_run:
         # 派生投影：联动边写进 scenes，只为可观察；读路径每次现算自配置。
         scene_links.sync_scene_docs(store, store.config, sorted(scene_ids | {local['scene_id']}))

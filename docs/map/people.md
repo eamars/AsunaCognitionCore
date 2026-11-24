@@ -298,10 +298,11 @@ Her active and resting groups (ADR-039): she stays present in a few groups and l
 Her switches (ADR-052): mute a group, turn tools off in a conversation, block a person.
 
 - def `get` — The switch with this id (of this persona, in this state), or None.
-- def `on` — The switches on now (not cleared, not past their end), the soonest to end first.
+- def `on` — The switches on now (not cleared, not past their end; one with no end is on until she clears it), those with an end first, the soonest first.
 - def `changed` — A persona's switches that ended after `since` (ISO text) and by `moment`: run out, or cleared by her.
 - def `save` — The revisioned write of a switch (`Store.put`: `expected`, `stream`).
-- def `hours_of` — The hours a switch lasts: DEFAULT_HOURS when not given, else a whole number 1..MAX_HOURS.
+- def `hours_of` — The hours a switch lasts: None (until she ends it) when not given, else a whole number of at least 1.
+- def `ends` — How a switch ends, for what she reads: its time, or that it has none.
 - def `set_switch` — One switch per kind and target; setting it again replaces it (a new end, new tools).
 - def `clear` — End a switch early; `ready` as in `set_switch`.
 - def `muted`

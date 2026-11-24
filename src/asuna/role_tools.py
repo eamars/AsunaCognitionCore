@@ -319,10 +319,10 @@ TOOLS = {
                          '。how_often=once（默认）他第一次说话叫你一次；burst 他每次沉默十分钟后再开口都叫你。'
                          'hours 盯多久（1–72），最多同时 5 个，到期自己停；off 停掉一个（id 照抄 watching_from_program）'
                          '。刚 @ 过或回过的人程序本来就等三分钟。block 屏蔽这个对话里的一个人（person 写他，不写就是正在跟你说话的账号）：'
-                         '他的话照存，但哪儿都不叫你，到点结束；家里的人屏蔽不了。'),
+                         '他的话照存，但哪儿都不叫你；家里的人屏蔽不了。'),
         'parameters': {'op': _s('做什么', required=True, enum=['on', 'off', 'block']),
                        'person': _s('on、block 用：这个对话里的人（标签、#编号或名字）'),
-                       'hours': {'type': 'integer', 'description': 'on 用：盯多少小时，1–72；block 用：屏蔽多少小时，默认 24，最多 168'},
+                       'hours': {'type': 'integer', 'description': 'on 用：盯多少小时，1–72；block 用：屏蔽多少小时，不写就到你结束它'},
                        'mode': _s('on 用：once 或 burst，默认 once', enum=['once', 'burst']),
                        'why': _s('on 可写：为什么盯他，一句话（家里写的只在家里看得到）'),
                        'id': _s('off 用：watching_from_program 里的 id')},
@@ -377,7 +377,7 @@ TOOLS = {
     },
     'set_policy': {
         'description': ('调整你自己声明过的一个参数（persona-model 里的 policy key）。也管开关：key=tools_off 把 place 那个对话的一些工具关掉（value 是工具名列表，'
-                         '空列表全部恢复；hours 默认 24，最多 168）；key=switch_off 提前结束一个开关（value 写它的 id）'
+                         '空列表全部恢复；不写 hours 就到你结束它）；key=switch_off 结束一个开关（value 写它的 id）'
                          '。value 写 null 清掉，回到默认。这一项只在家里的对话能改：主人的私聊、家里那个群，和可信的线（开发助手、你自己的另一处）。'),
         'parameters': {'key': _s('参数名，或 tools_off、switch_off', required=True),
                        'value': {'type': 'json', 'description': '新的值', 'required': True},
@@ -476,7 +476,7 @@ TOOLS = {
         'description': ('你在哪些群常驻，do 选一样：list 列出常驻和歇着的群和它们今天说了多少句；active 让一个群常驻，'
                          'rest 让它歇着（歇着的群只有 @ 你、回你、你在等的回话和 watch 的人会叫你，话照存照能查）；'
                          'condense 等这个群安静后把对话压成摘要（出门看群那回合、或家里的心跳和反思里用），keep 收回；'
-                         'mute 在家里把一个群静音（hours 默认 24，最多 168：只有叫到你才会醒，你不先开口、不去串门）'
+                         'mute 在家里把一个群静音（不写 hours 就到你结束它：只有叫到你才会醒，你不先开口、不去串门）'
                          '，unmute 提前结束。place 照抄 list 或 places_from_program 里的，'
                          '在群里不写就是这个群。你当管理员的群一直常驻。'),
         'parameters': {'op': _s('做什么', required=True, enum=['list', 'active', 'rest', 'condense', 'keep', 'mute', 'unmute']),
@@ -991,21 +991,16 @@ LOCAL_CHAT = ('visit', 'promote_memory', 'credential')
 
 def toolbox(store, ep):
     """The tools her conversation lists, the same in each of its turns until a setting changes (what the model is
-    shown): its abilities without the tools switched off here."""
+    shown): its abilities without the tools her switches turn off here."""
     off = switched_off(store, ep)
     return [name for name in dict.fromkeys(name.split('.')[0] for name in abilities(store, ep)) if name not in off]
 
 
 def switched_off(store, ep):
-    """The tools switched off in this conversation now: the task tools where the owner set the place off, and the
-    tools of her own switches here. They leave its list (ADR-135 D2); the list changes when a switch is set or ends
-    or the setting changes, never from turn to turn."""
+    """The tools her own switches turn off in this conversation now. They leave its list (ADR-135 D2); the list
+    changes when a switch is set or ends, never from turn to turn."""
     from . import switches
-    from .grants import tasks_off
-    off = set(switches.tools_off(store, ep['scene_id']))
-    if tasks_off(store.config, ep['scene_id']):
-        off.update(name.split('.')[0] for name in WITH_ACTION)
-    return off - set(switches.KEEP)
+    return set(switches.tools_off(store, ep['scene_id'])) - set(switches.KEEP)
 
 
 def abilities(store, ep):
@@ -2121,7 +2116,7 @@ class RoleTools:
         from . import watches
         op = args.get('op')
         if op == 'block':
-            return self._block(ep, args.get('hours') if args.get('hours') is not None else 24, args.get('person')), False
+            return self._block(ep, args.get('hours'), args.get('person')), False
         if op == 'on':
             if (scene_records.get(self.store, ep['scene_id'], fields=['kind']) or {}).get('kind') not in ('group', 'dm'):
                 raise Refused('这里不是群或私聊，盯不了人：到看得到他的群或私聊里再用 on。', ['WATCH_NOT_A_CHAT'])
@@ -3013,8 +3008,7 @@ class RoleTools:
         if on:
             row = switches.set_switch(self.store, ep, 'mute', label=label, scene_id=scene['_id'], hours=hours,
                                       ready=self.checkpoint)
-            result = {'done': '%s静音了：只有叫到你才会醒，你不先开口、不去；到点自己结束' % label,
-                      'until_at': row['until'], 'id': row['_id']}
+            result = {'done': '%s静音了：只有叫到你才会醒，你不先开口、不去' % label, **switches.ends(row), 'id': row['_id']}
         else:
             row = switches.muted(self.store, scene['_id'])
             if not row:
@@ -3057,7 +3051,7 @@ class RoleTools:
         if people.person(target) == people.owner:
             raise Refused('家里的人屏蔽不了：主人在哪个对话里都不屏蔽。', ['BLOCK_HOME'])
         row = switches.set_switch(self.store, ep, 'block', label=label, person_id=target, hours=hours, ready=self.checkpoint)
-        return {'done': '屏蔽了%s：他的话照存，但哪儿都不叫你' % label, 'until_at': row['until'], 'id': row['_id']}
+        return {'done': '屏蔽了%s：他的话照存，但哪儿都不叫你' % label, **switches.ends(row), 'id': row['_id']}
 
     def _switch_policy(self, ep, key, args, reason):
         """ADR-052: tools off in one conversation, or an early end to any switch."""
@@ -3089,7 +3083,7 @@ class RoleTools:
             return {'done': '%s的工具都恢复了' % label}
         row = switches.set_switch(self.store, ep, 'tools_off', label=label, scene_id=found[0], tools=tools,
                                   hours=args.get('hours'), why=cut(reason, 200), ready=self.checkpoint)
-        return {'done': '%s里关了：%s' % (label, '、'.join(row['tools'])), 'until_at': row['until'], 'id': row['_id']}
+        return {'done': '%s里关了：%s' % (label, '、'.join(row['tools'])), **switches.ends(row), 'id': row['_id']}
 
     def tool_set_policy(self, ep, call_id, args):
         from .policy import PolicyStore

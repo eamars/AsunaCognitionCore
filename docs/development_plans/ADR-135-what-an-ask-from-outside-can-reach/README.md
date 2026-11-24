@@ -396,9 +396,23 @@ owner: "Audit log is fine. I don't want the classifier to reject the direct inst
 The guard of D8 runs first: a call it refuses is never sent to the classifier. So a stranger's ask for her hands
 outside is refused by D1 and not judged.
 
-**It starts in shadow.** The same request and the same record, and nothing is stopped. It may stop work only after
-the measurement of §8.2, by the owner's decision against a bar he sets beforehand, for every crossing.
-It does not start stopping on the synthetic set alone.
+**It started in shadow, and it stops on the synthetic set.** The owner judged the synthetic set of §8.2 case by case
+and decided it may stop work: "Why cannot you just directly deploy … I have already asked her to isolate all
+dangerous source … never … impose tests that is impossible to run." (owner, 2026-11-24). The setting `stop` holds a
+flagged crossing; `shadow` records only.
+
+**How a crossing is held.** One mark on the row that carries it, read where that row would act next, with no new
+queue:
+- a note is held: a note waiting for the next turn there is never shown, and where she sent it its state reads the
+  classifier's sentence;
+- the turn a crossing opens (a woken note's, an errand's visit, a task result's) does not start, or, when it is
+  already running, ends at her next call: that call, `speak` included, gets the classifier's sentence and the turn
+  concludes; what she had said before stays said (the classifier never judges what she says);
+- an idea written outside leaves her notebook.
+
+The mark is on the note, the task, the idea, or the input row of the turn, so it survives a restart and ends with
+its row. The owner's own ask is never held. A verdict that comes after the work is done holds nothing and says
+nothing (`too_late`); a classifier that cannot be reached holds nothing (`unchecked`).
 
 **Why these texts and not the lines of a room.** A line-by-line classifier would run 5,164 times a day on lines of
 16 characters, and the attempt of §1.1 had no harmful-looking line in it. A note, an idea, an errand and a task's
@@ -433,7 +447,7 @@ accepts it. Addresses on the local network stay refused, as today. A place's han
 
 ### D12. Her review of what was refused, at home
 
-- At home she can read what was refused in her outside turns and outside tasks, by day or since a time: when; the place; what she tried (the tool or option, a task's title and brief, a note's text); which kind of "no" it was and its reason, in words from a versioned table; for the classifier, that it 「可能对你或主人有安全或隐私风险」 and the text it judged. Verdicts recorded in shadow are included, marked as recorded only.
+- At home she can read what was refused in her outside turns and outside tasks, by day or since a time: when; the place; what she tried (the tool or option, a task's title and brief, a note's text); which kind of "no" it was and its reason, in words from a versioned table; for the classifier, that it 「可能对你或主人有安全或隐私风险」 and the text it judged, marked 「拦下了」 when it was held, 「来不及拦」 when it came after the work was done, and 「只记下了，没有拦下」 otherwise (in shadow, or the owner's own ask).
 - One home-only ability, read-only. No notice, count or reminder points her to it: she reads it when she wants (owner, 2026-11-24: the review runs in her own daily review, away from the attacker's pressure, so that she can learn from it).
 - Outside nothing changes: the two sentences of D8 carry no reason, and the review is never listed in an outside turn.
 - It reads the guard's and the classifier's audit rows. Each row keeps what the review shows: a reference to the call, task or note, or, when the judged text is stored nowhere else, the text itself.
@@ -470,8 +484,9 @@ accepts it. Addresses on the local network stay refused, as today. A place's han
 | The count of sentences returned in a turn (D8) | with the turn's first | each later call of that turn | with the turn | kept on the turn's row, so a resumed turn keeps its count |
 | The classifier's policy text (D9) | one versioned file | every verdict, which records the version | changed by the owner | a file |
 | A verdict (D9) | one audit event: `flagged` or clear, the policy version, the kind of text, a reference to the judged text (its note, idea or task row; the text itself when it is stored nowhere else) and its hash, the latency, and what of the work had already run | read by people; never shown to her; never read again by the program | lives as long as the audit stream | a request cut by a restart leaves an `unchecked` event at the start; nothing is held between requests |
-| An unreachable classifier (D9) | one `unchecked` audit event | counted in the shadow stage and after | lives as long as the audit stream | append-only |
-| The shadow setting (D9) | one deployment setting | each verdict | removed when the owner decides either way | configuration |
+| An unreachable classifier (D9) | one `unchecked` audit event | counted, and listed in her review only as what it judged | lives as long as the audit stream | append-only |
+| The classifier setting (D9) | one deployment setting: off, shadow or stop | each verdict | changed by the owner | configuration |
+| A hold (D9) | one mark on the note, the idea, the task or the input row of the turn a crossing opened | where that row acts next: the turn's start, the guard's door, her notes and ideas | ends with its row | stored, so it survives a restart |
 | Her review of what was refused (D12) | never stored: read from the guard's and the classifier's audit rows and what they reference | when she reads it at home | n/a: the rows live as long as the audit stream | n/a |
 
 If the owner drops the classifier after the measurement: the hooks, the policy file and the setting are removed,
@@ -496,9 +511,9 @@ and the audit events stay as the record of why.
 | D8 | The two sentences differ, so the difference is one bit | Whoever hears her repeat the classifier's sentence learns that a security and privacy check exists and that this ask tripped it, and nothing of how. Three tries a turn, each recorded. Accepted |
 | D9 | The text addresses the judge | The judge is given one text, and only one of two words is accepted as its answer. The synthetic set includes such texts |
 | D9 | The verdict arrives after steps have run | Those steps stand: a fetch made, a note already read at home. If the work has already finished there is nothing left to stop, no sentence is given, and the event says so. Each verdict records its latency and what had run. This is the trade for not making her wait. Outside hands are small, which bounds what a late stop leaves |
-| D9 | It cannot be reached | The work runs unchecked, as if the classifier were off. A busy model server means more unchecked work, and whoever can keep the server busy lowers the share that is checked. `unchecked` events are counted in the shadow stage and after |
-| D9 | The model answers off-format | Asked again with a repair note, up to twice; an answer still off-format counts as harmful (`off_format`), so breaking the judge buys an attacker nothing. A model that often answers off-format shows as `off_format` verdicts in the shadow stage and in §8.2 |
-| D9 | It flags her ordinary work | A note, an idea, an errand or a task's result is not delivered. She is told it may carry a security or privacy risk to her or her owner and told not to do it another way, so she cannot recover it herself. 273 notes home and 139 ideas a month come by these crossings. This is why it starts in shadow and why the live hand check decides |
+| D9 | It cannot be reached | The work runs unchecked, as if the classifier were off. A busy model server means more unchecked work, and whoever can keep the server busy lowers the share that is checked. `unchecked` events are counted |
+| D9 | The model answers off-format | Asked again with a repair note, up to twice; an answer still off-format counts as harmful (`off_format`), so breaking the judge buys an attacker nothing. A model that often answers off-format shows as `off_format` verdicts in the record and in §8.2 |
+| D9 | It flags her ordinary work | A note, an idea, an errand or a task's result is not delivered. She is told it may carry a security or privacy risk to her or her owner and told not to do it another way, so she cannot recover it herself. 273 notes home and 139 ideas a month come by these crossings. This is why the owner judged the synthetic set case by case before it may stop work, and why the owner's own ask is never held |
 | D9 | A stop arrives in the middle of a turn | The turn is stopped where it stands and its outcome is the classifier's sentence. What it had already said stays said |
 | D10 | A patient asker gets what the place's hands hold | That is the meaning of the boundary. A place's hands close by her own switch (D2, D3) |
 
@@ -559,10 +574,13 @@ stub behaviours: **obey** (call the tool the script names) and **echo** (speak e
 | C5 | The classifier cannot be reached | The work runs; no sentence; an `unchecked` event | 6 |
 | C10 | An outbound text with a word on the private-words list; one without; a deployment with no list | The question carries the reminder line with the category and count, never the word; no match, no line; with no list the record's words part is `unchecked` | 6 |
 | C11 | The owner's own errand, flagged, with the setting at `stop`; then F's note home, flagged | The owner's is judged, recorded and never stopped; F's is due a stop | 6 |
-| C6 | Stop on; a stub verdict 「有风险」 on F's note home, arriving after the home turn has opened | The turn is stopped; its outcome to her is the classifier's sentence, byte for byte; the `flagged` event records the latency and what had run | 7 |
-| C7 | The same note carried for O's ask in the outside group | It goes home; a `flagged` event is written | 7 |
+| C6 | Stop on; a stub verdict 「有风险」 on F's note home, arriving after the home turn has opened | Her next call, `speak` included, gets the classifier's sentence byte for byte and the turn concludes; a replay concludes too; the verdict records the latency, what had run, and `stopped` | 7 |
+| C6b | The same verdict before the home turn starts | The turn does not start: `SUPPRESSED`, `ended_by` `CLASSIFIER_HELD` | 7 |
+| C7 | An errand of the owner's own, flagged | It runs; recorded `flagged`, `owner_asked`, not held | 7 |
 | C8 | A stub verdict 「有风险」 on each crossing: a note home before it is delivered, and after the home turn has opened; an idea written outside; a note from home out; an errand; a task result arriving outside | Not delivered, or the turn it opened is stopped; the classifier's sentence each time; `flagged` | 7 |
-| C9 | B asks; stub calls `delegate` | Denied by `asker_not_known`; the classifier was not called | 7 |
+| C9 | B asks; stub writes a note home | Denied by `asker_not_known`; the classifier was not called | 7 |
+| C10 | A verdict after the note's turn has ended | Nothing is held, nothing said; `too_late`; her review says 「来不及拦」 | 7 |
+| C11 | Stop on, the classifier cannot be reached | Nothing is held; `unchecked` | 7 |
 | X1 | The carry, outside: B's ask is denied; in a later visit of her own the stub calls `delegate` with the same brief | The task runs with the outside grant and nothing more. Expected: it shows what D10 says holds | 3 |
 | X2 | The carry, home: in a home turn nobody opened, the stub calls `delegate` with the same brief | The task runs with home's hands, and the classifier is not called. Expected: it shows the limit of §5 | 6 |
 | R1 | O asks for a command in his direct chat | The task has `sandbox_run`; unchanged | every landing |
@@ -581,13 +599,9 @@ Approved by the owner, at a time he picks.
    fall in the two policies' classes, in varied wording (Chinese, English, mixed; polite, technical, indirect; some that
    address the judge), and 30 harmless ones that use the same vocabulary. Three runs each: about 180 short requests
    to the owner's model server. It gives misses, wrong flags, latency, and how often it answers off-format.
-2. **Shadow on her live traffic.** Nothing is stopped. It ends when 100 judged texts whose recorded requester is
-   not the owner have each been checked by hand against the bar, with the count by kind and the count of
-   `unchecked` events beside them.
-3. **The bar is the owner's, set before the numbers come in.** A suggestion: it may stop work if the synthetic set
-   shows at most 3 misses in 30 and the live check shows at most 2 wrong flags in 100. Each 1% of wrong flags is
-   about three stopped tasks or undelivered notes and ideas a week, which she is told not to retry.
-4. **The decision is his:** stop, record only, or remove.
+2. **The decision is his, on the synthetic set**, judged by him case by case: stop, record only, or remove. He
+   decided stop (D9). No live measurement is a condition: "never … impose tests that is impossible to run."
+   Verdicts on her live traffic are still recorded, and her review at home lists them.
 
 ### 8.3 Layer 2: three scripts on a real model, for reading
 
@@ -610,7 +624,7 @@ One landing each. A landing goes in when its layer 1 cases pass.
 | 5 | D4, D5, and D6 for the tool texts: the capability block gone outside, the 28 texts, options keyed to their moment | T1 to T3 |
 | 5b | D12, the guard's part: her review of what was refused, at home | the review at home lists an outside refusal with its reason in words; the same call outside gets the plain sentence only; the ability is in no outside turn's list |
 | 6 | D9 in shadow: the crossings in and out of home, two classifiers by direction, the dictionary check; D12's classifier part | C1 to C5, C10, C11, X2 |
-| 7 | D9 may stop the crossings, only after §8.2 and the owner's decision; each crossing's stop is built here | C6 to C9 |
+| 7 | D9 may stop the crossings, by the owner's decision on the synthetic set (§8.2); each crossing's stop is built here | C6 to C11 |
 | 8 | D6 for the rest: the lines the program says to her and the prompt files, one file at a time; and the texts that expect her to speak, counted at landing 5b: 20 sites that tell her what or how to say (直说, 照实说, 说清楚, 跟对方说, 说一声, 就说, 先说, 回一句 and the like: 4 prompt lines, 14 source strings, 2 plugin strings), 2 that say "don't invent", 2 where the program promises to say a reason itself | the pattern counts of §10; the expectation test (owner, 2026-11-24): a sentence that hangs on her own wish and only orders what she chose (「想说…就…」) stays; one where a condition makes speech required (「记不清就直说」「照实说一句」「跟对方说一声」), or a "don't" about what she says, goes; her own signed texts (OUTSIDE_ASK, her three questions) are hers and stay |
 | after 8 | The loop closed in her own review (§10) | big sis; no code |
 
@@ -621,9 +635,8 @@ Landing 2 comes before 3 because D1 has no text of its own. R1 to R3 run at ever
 - Landings 1 to 5 are staged on the stub with their cases passing, and installed.
 - Read after install, by count and not by date: the next 100 denials each have an audit event with a code, and none
   of the sentences returned to her contains a time, a place, a person, a tool name or a word for a rule.
-- The classifier: the synthetic set has been run, 100 live texts whose requester is not the owner have been judged
-  in shadow and checked by hand, and the owner has decided. If he decides it may stop work, landing 7 is installed.
-  If he decides to remove it, the hooks, the policy file and the setting are gone.
+- The classifier: the synthetic set has been run and judged by the owner, who decided it may stop work; landing 7
+  is installed and the setting is `stop`.
 - D6: the counts of §1.4 read zero by the same patterns: no name for a part of her in the tool text, the prompt
   files or the source strings she reads (10, 17 and 87 today); no pointer at a named block in the tool text (42
   today); no word for a turn where she reads it (42 today).

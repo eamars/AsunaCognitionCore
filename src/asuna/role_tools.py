@@ -227,6 +227,7 @@ CALLS_FEW = '先想清楚哪一步不做'
 CALL_LAST = '这次第 %d 次工具调用，到了硬线（%d）：这次不做。下一次是最后一次，照做，做完这次就结束；%s'
 CAP_SPEAKS = '用它 speak 把要说的说完。'
 CALLS_ENDED = '这次的工具调用过了硬线（%d），这一次到这里结束。'
+STOPPED_CODE = 'flagged'        # a call in a turn the classifier stopped (ADR-135 D9)
 CALLS_OVER = 'CALLS_OVER'          # the code of a call past the hard line: it ran nothing
 # ADR-131: the one call that only ends her turn (her model writes its decision to stop as a call). Her words (D9, 0501).
 END_TURN = 'end_turn'
@@ -1651,13 +1652,22 @@ class RoleTools:
         if done:
             if done['tool'] != name or done['args_sha256'] != sha(canonical(args)):
                 raise Refused('这个调用编号已经用在另一次调用上了（不是你的错）；重新调用一次就行。', ['CALL_ID_REUSED'])
-            if done.get('code') == CALLS_OVER:
+            if done.get('code') in (CALLS_OVER, STOPPED_CODE):
                 return self._local(ep, {'ended': done['refused']}), True
             if done.get('refused'):
                 if done['refused'] == guard.NOT_DONE:
                     raise guard.Guarded(done.get('code') or guard.LIMITED, 'replayed')
                 raise Refused(done['refused'], [done.get('code') or 'CALL_REPLAYED'])
             return self._local(ep, done['result']), bool(done.get('conclude'))
+        from . import classifier
+        if classifier.held(self.store, ep):
+            # ADR-135 D9: the crossing that opened this turn was held. The turn ends here: this call, speak included,
+            # gets the classifier's sentence; what was said before stays said.
+            from . import guard
+            self.store.audit(ep['_id'], 'classifier.refused', {'tool': name, 'call': call_id}, ep['scope_key'])
+            self._record(ep_id, call_id, name, args, refused=guard.HARMFUL, code=STOPPED_CODE, conclude=True,
+                         called_as=called_as, olds=olds)
+            return self._local(ep, {'ended': guard.HARMFUL}), True
         self._guard(ep, call_id, name, args, called_as, olds)
         try:
             if name not in TOOLS:

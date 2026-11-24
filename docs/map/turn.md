@@ -456,5 +456,7 @@ A safety classifier on what crosses between outside and home (ADR-135 D9): only 
 - def `result_text` — What a result says, without its stored keys and ids: the judge reads only that.
 - def `after_result` — A task's result, as it arrives in an outside conversation (tasks.py); `ep`: the turn that handed it over.
 - def `should_stop` — Whether a harmful verdict stops the work: in `stop` mode only, and never for the owner's own ask.
-- def `stop` — Stop the crossing a flagged verdict is about, where it stands (not delivered, or the turn it opened stopped, with the classifier's sentence).
+- def `turn_of` — The id of the turn a crossing opens (it may not exist yet), or None when it opens none.
+- def `stop` — Hold the crossing a flagged verdict is about, where it stands: STOPPED when something was held in time, TOO_LATE when the work had already been done (nothing is stopped then, and nothing is said).
+- def `held` — The mark when this turn was opened by a crossing the classifier held (its input row, the note that opened it, or the task whose result it carries), else None.
 - def `settle` — At the worker's start: each request asked in the last SETTLE_DAYS with no verdict and no unchecked row becomes `unchecked` (why `restart`).

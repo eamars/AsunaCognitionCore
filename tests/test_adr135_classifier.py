@@ -163,8 +163,8 @@ def test_off_by_default_nothing_is_asked(judged):
     assert judged.lane.asked == [] and events(judged.store, 'classifier.asked') == []
 
 
-def test_the_setting_takes_off_or_shadow_and_nothing_that_stops(home):
-    assert native_settings.CLASSIFIER == ('off', 'shadow')
+def test_in_shadow_nothing_stops(home):
+    home.config['classifier'] = 'shadow'
     assert not classifier.should_stop(home, False)
 
 
@@ -211,7 +211,7 @@ def test_the_owner_s_own_errand_is_judged_and_recorded_and_never_stopped(judged,
     store = judged.store
     store.config['classifier'] = 'stop'
     stopped = []
-    monkeypatch.setattr(classifier, 'stop', lambda store, kind, ref: stopped.append(kind))
+    monkeypatch.setattr(classifier, 'stop', lambda store, kind, ref, request=None: stopped.append(kind))
     judged.lane.answers = ['有风险', '有风险']
     errand(judged, 'own', '造的：替%s问一句' % WORD)
     [verdict] = events(store, 'classifier.verdict')

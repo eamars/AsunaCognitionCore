@@ -13,8 +13,11 @@ still off-format after the repairs counts as flagged (`off_format`), and only a 
 as not switched on (`unchecked`).
 
 It runs alongside her work, never before it: the work is already done or under way when the verdict comes. The
-deployment setting `classifier` is `off` (the default: nothing is asked) or `shadow` (asked and recorded, nothing
-stopped). `stop` is the stop path's (`stop`), which nothing calls until the owner decides after the measurement.
+deployment setting `classifier` is `off` (the default: nothing is asked), `shadow` (asked and recorded, nothing
+stopped) or `stop`: a flagged crossing is held where it stands (`stop`), unless the owner asked for it. A held
+crossing is not delivered, its turn does not start, or, when its turn is already running, her hands there get the
+classifier's sentence (`held`, read at the turn's start and at the guard's door); her speech is never stopped. A
+verdict that comes after the work is done stops nothing (`too_late`).
 
 Records, each on the stream of the turn or task the text belongs to: `classifier.asked` when a request starts,
 `classifier.verdict` when it is answered, `classifier.unchecked` when it could not be; at the worker's start an asked
@@ -31,7 +34,7 @@ from . import answers, clock
 from .config import excerpt, prompt_path
 
 POLICIES = {'inbound': 'classify_inbound.md', 'outbound': 'classify_outbound.md'}
-MODES = ('off', 'shadow')               # `stop` is accepted only once the owner decides (ADR-135 landing 7)
+MODES = ('off', 'shadow', 'stop')
 WORDS = {'有风险': 'flagged', '无风险': 'clear'}
 NEED = '只有一个词：「有风险」或「无风险」'
 TEXT_CHARS = 4000                       # the longest text judged; a longer one is judged by its head
@@ -190,10 +193,12 @@ def judge(store, lane, ep, kind, text, asked, stream, reminder=None):
     except Exception as exc:                        # a server that cannot be reached: as if it were not switched on
         return _unchecked(store, stream, ep, common, type(exc).__name__)
     latency = round(time.monotonic() - started, 3)
-    row = {**common, 'verdict': verdict, 'code': code, 'latency_s': latency, 'ran': ran(store, kind, asked['ref'])}
+    done = ran(store, kind, asked['ref'])
+    outcome = stop(store, kind, asked['ref'], asked['request']) \
+        if verdict == 'flagged' and should_stop(store, asked['owner_asked']) else None
+    row = {**common, 'verdict': verdict, 'code': code, 'latency_s': latency, 'ran': done,
+           **({outcome: True} if outcome else {})}
     store.audit(stream, 'classifier.verdict', row, ep['scope_key'])
-    if verdict == 'flagged' and should_stop(store, asked['owner_asked']):
-        stop(store, kind, asked['ref'])
     return row
 
 
@@ -238,8 +243,13 @@ def after_call(tools, ep, name, args, result):
     elif name == 'ideas.note' and outside and result.get('noted'):
         found = ('idea', args.get('idea') or '', {'idea': result['noted']})
     elif name == 'errand' and not outside:
+        from . import audit
+        offered = audit.events(store, 'errand.offered', stream=ep['_id'], by='seq').rows(newest_first=True, limit=1)
+        visit = (offered[0].get('payload') or {}) if offered else {}
         found = ('errand', args.get('request') or '', {'text': excerpt(str(args.get('request') or ''), TEXT_CHARS),
-                                                       'place': str(args.get('place') or '')[:80]})
+                                                       'place': str(args.get('place') or '')[:80],
+                                                       **({'event_id': visit['event_id'], 'scene_id': visit['scene_id']}
+                                                          if visit.get('event_id') else {})})
     if not found:
         return None
     kind, text, ref = found
@@ -271,15 +281,97 @@ def should_stop(store, owner_asked):
 
 
 HANDS = {}            # set at the worker's start: lane (the classify lane)
+STOPPED, TOO_LATE = 'stopped', 'too_late'
+HOLD = 'classifier_held'      # the mark: on a note, a task, or the input row of the turn a crossing opened
 
 
-def stop(store, kind, ref):
-    """Stop the crossing a flagged verdict is about, where it stands (not delivered, or the turn it opened stopped,
-    with the classifier's sentence). Nothing calls it before `stop` is accepted (landing 7), which brings each
-    crossing's stop with its cases; until then it only records that a stop was due."""
-    store.audit(ref.get('task') or ref.get('note') or ref.get('idea') or 'classifier', 'classifier.stop_due',
-                {'kind': kind, 'ref': ref}, 'operator')
-    return False
+def turn_of(store, kind, ref):
+    """The id of the turn a crossing opens (it may not exist yet), or None when it opens none."""
+    from . import handover, notes
+    from .ingress import episode_id
+    if ref.get('note'):
+        row = notes.get(store, ref['note']) or {}
+        if not row.get('event_id'):
+            return None                    # next_time: read in the next turn there, opens none
+        return episode_id({'scene_id': row['to_scene'], 'event_id': row['event_id'],
+                           'episode_kind': 'note' if row.get('kind') == 'home' else 'visit'})
+    if kind == 'errand' and ref.get('event_id'):
+        return episode_id({'scene_id': ref['scene_id'], 'event_id': ref['event_id'], 'episode_kind': 'visit'})
+    if kind == 'result' and ref.get('task'):
+        from .records import tasks as task_records
+        task = task_records.get(store, ref['task']) or {}
+        if task:
+            return episode_id({'scene_id': task['scene_id'], 'event_id': handover.result_event_id(task),
+                               'episode_kind': 'task_feedback'})
+    return None
+
+
+def _finished(store, ep_id):
+    from .coordinator import RESUMABLE
+    from .records import episodes as episode_records
+    ep = episode_records.get(store, ep_id, fields=['state']) if ep_id else None
+    return bool(ep) and ep.get('state') not in RESUMABLE
+
+
+def _mark(store, collection_get, collection_save, row_id, mark, stream):
+    row = collection_get(store, row_id)
+    if row and not row.get(HOLD):
+        collection_save(store, {**row, HOLD: mark}, expected=row.get('revision'), stream=stream)
+    return row
+
+
+def stop(store, kind, ref, request=None):
+    """Hold the crossing a flagged verdict is about, where it stands: STOPPED when something was held in time, TOO_LATE
+    when the work had already been done (nothing is stopped then, and nothing is said)."""
+    from . import notes
+    from .records import ideas as idea_records
+    from .records import messages as message_records
+    from .records import tasks as task_records
+    mark = {'at': clock.now().isoformat(), 'request': request, 'kind': kind}
+    if kind == 'idea':
+        row = idea_records.get(store, ref.get('idea')) or {}
+        if row.get('state') not in ('open', 'deferred'):
+            return TOO_LATE                 # already taken up in her self-review
+        idea_records.save(store, {**row, 'state': 'held', HOLD: mark}, expected=row['revision'], stream=row['_id'])
+        return STOPPED
+    turn = turn_of(store, kind, ref)
+    if kind in ('note_home', 'note_out'):
+        row = notes.get(store, ref['note']) or {}
+        if not row or (turn is None and row.get('seen_in')) or (turn and _finished(store, turn)):
+            return TOO_LATE                 # read already, or the turn it opened has ended
+        _mark(store, notes.get, notes.save, row['_id'], mark, 'notes:' + row['persona'])
+    elif kind == 'result':
+        if _finished(store, turn):
+            return TOO_LATE
+        _mark(store, task_records.get, task_records.save, ref['task'], mark, ref['task'])
+    elif kind == 'errand':
+        if not turn or _finished(store, turn):
+            return TOO_LATE
+    if turn:
+        _mark(store, message_records.get, message_records.save, 'in-' + turn, mark, turn)
+    return STOPPED
+
+
+def held(store, ep):
+    """The mark when this turn was opened by a crossing the classifier held (its input row, the note that opened it,
+    or the task whose result it carries), else None. Read where the turn starts and at the guard's door."""
+    from . import notes
+    from .records import messages as message_records
+    if not ep or not ep.get('_id'):
+        return None
+    row = message_records.get(store, 'in-' + ep['_id'], fields=[HOLD]) or {}
+    if row.get(HOLD):
+        return row[HOLD]
+    kind = ep.get('episode_kind')
+    if kind in ('note', 'visit'):
+        first = notes.opening(store, ep)
+        if (first or {}).get(HOLD):
+            return first[HOLD]
+    if kind == 'task_feedback' and ep.get('task_id'):
+        from .records import tasks as task_records
+        task = task_records.get(store, ep['task_id'], fields=[HOLD]) or {}
+        return task.get(HOLD)
+    return None
 
 
 # ── a request cut by a restart ──

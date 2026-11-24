@@ -498,6 +498,8 @@ def result(store, row):
 
 # ── what a turn sees ────────────────────────────────────────────────
 def state(store, row, moment):
+    if row.get('classifier_held'):
+        return 'held'                       # ADR-135 D9: held by the classifier, never delivered
     if first_reply(store, row['_id']):
         return 'replied'
     seen = row.get('seen_in') or []
@@ -601,7 +603,8 @@ def received_block(store, persona, scene_id, cls, kind, episode, moment, skip=No
     reads a summary (ADR-018 §5.5)."""
     from .people import People
     since = (moment - timedelta(hours=KEEP_HOURS)).isoformat()
-    rows = received(store, scene_id, since, besides=(skip or {}).get('_id')).rows(newest_first=True, limit=SHOWN)
+    rows = [row for row in received(store, scene_id, since, besides=(skip or {}).get('_id')).rows(
+        newest_first=True, limit=SHOWN) if not row.get('classifier_held')]       # ADR-135 D9: held, never shown
     if not rows:
         return None
     people = People(store, persona)
@@ -646,6 +649,9 @@ def sent_block(store, persona, scene_id, moment):
 
 def _sent_state(store, row, moment):
     words = state(store, row, moment)
+    if words == 'held':
+        from .guard import HARMFUL
+        return HARMFUL                      # where she meets a held note she sent: its state is the sentence
     return STATE_WORDS[words] + (waited(row, moment) if words == 'waiting' else '')
 
 

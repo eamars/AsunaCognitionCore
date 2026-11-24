@@ -596,6 +596,11 @@ class Coordinator:
                 raise ValueError('EPISODE_NOT_FOUND')
             if ep['state'] in ('SUPPRESSED', 'COMMITTED'):
                 return ep
+            from . import classifier
+            if ep['state'] in ('PREPARED','ATTENDING') and classifier.held(self.store, ep):
+                # ADR-135 D9: the crossing that opened this turn was held; the turn does not start.
+                from . import unfinished
+                return unfinished.without_turn(self.store, ep_id, 'CLASSIFIER_HELD') or ep
             try:
                 require_current_feedback(self.store, ep)
             except FeedbackStale as exc:

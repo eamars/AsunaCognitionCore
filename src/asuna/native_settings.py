@@ -9,8 +9,8 @@ from .config import CHANNEL_PORT, DATA, local_workspace, validate_database, vali
 # settings keep a reference named like an environment variable (ADR-010 D6).
 SECRET_KEY = re.compile(r'mongo_uri|api_?key|token|password|secret', re.I)
 THOUGHTS = ('tool', 'thinking')
-# ADR-135 D9: the safety classifier, off or recording only; stopping work waits for the owner's decision (landing 7).
-CLASSIFIER = ('off', 'shadow')
+# ADR-135 D9: the safety classifier: off, recording only, or holding a flagged crossing.
+CLASSIFIER = ('off', 'shadow', 'stop')
 
 
 def credential_ref(path):
@@ -104,7 +104,7 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
     if value.get('thoughts', 'tool') not in THOUGHTS:
         raise ValueError('INVALID_THOUGHTS: tool or thinking')
     if value.get('classifier', 'off') not in CLASSIFIER:
-        raise ValueError('INVALID_CLASSIFIER: off or shadow')
+        raise ValueError('INVALID_CLASSIFIER: off, shadow or stop')
     value.setdefault('workflow_timeout_seconds', 1800)
     if type(value['workflow_timeout_seconds']) not in (int, float) or not 1 <= value['workflow_timeout_seconds'] <= 86400:
         raise ValueError('INVALID_TIMEOUT: workflow_timeout_seconds')

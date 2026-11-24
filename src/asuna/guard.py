@@ -330,7 +330,9 @@ REVIEW_VERSION = 1
 REVIEW_MOST = 20
 REVIEW_KIND = '这一步没有做'
 HARM_KIND = '可能对你或主人有安全或隐私风险'     # a classifier's flag (ADR-135 D9), off_format included
-RECORDED_ONLY = '只记下了，没有拦下'         # a verdict recorded in shadow
+RECORDED_ONLY = '只记下了，没有拦下'         # a verdict recorded in shadow, or the owner's own ask
+HELD_WORDS = '拦下了'                       # a flagged crossing held in time
+LATE_WORDS = '来不及拦'                     # a flagged crossing whose work was done before the verdict
 FROM_HOME = '从家里'                        # an outbound item: it went from home to `where`
 EXPIRED = '这件已经过期，你不用接着做了。'     # shown with an expired ask, never stored or searched
 REVIEW_WORDS = {
@@ -444,7 +446,8 @@ def _judged(store, people, row):
     return {'at': row.get('occurred_at'),
             'where': people.scene_title(scene_records.get(store, scene_id)) if scene_id else '',
             **({'from': FROM_HOME} if outbound else {}),
-            'tried': tried, 'kind': HARM_KIND, **({'recorded': RECORDED_ONLY} if said.get('mode') == 'shadow' else {})}
+            'tried': tried, 'kind': HARM_KIND,
+            'recorded': HELD_WORDS if said.get('stopped') else LATE_WORDS if said.get('too_late') else RECORDED_ONLY}
 
 
 def _asked_by(store, people, scene_id, person):

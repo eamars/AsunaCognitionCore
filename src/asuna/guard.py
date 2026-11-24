@@ -229,6 +229,31 @@ def asked_at(store, ep):
     return (row or {}).get('received_at') or (row or {}).get('occurred_at') or clock.now().isoformat()
 
 
+def _home_reach_away(store, ep, name, args):
+    """Outside, her tasks, plans and group notes of other conversations are not hers to reach (ADR-135 landing 9)."""
+    if not outside(store, ep):
+        return False
+    from .records import plans as plan_records
+    from .records import tasks as task_records
+    if name == 'task' and args.get('op') == 'stop' and isinstance(args.get('task'), str):
+        task = task_records.get(store, args['task'], fields=['scene_id'])
+        return bool(task) and task.get('scene_id') != ep.get('scene_id') and not _from_here(store, ep, task)
+    if name == 'plan' and args.get('op') == 'cancel' and isinstance(args.get('plan_id'), str):
+        plan = plan_records.get(store, args['plan_id'], fields=['scene_id'])
+        return bool(plan) and plan.get('scene_id') != ep.get('scene_id') and not _from_here(store, ep, plan)
+    return name == 'write_document' and args.get('group') not in (None, '')
+
+
+def _from_here(store, ep, row):
+    """A home turn a note from outside opened acts for where the note came from: that place's rows are its own."""
+    first = opened_from_outside(store, ep)
+    if not first:
+        return False
+    from .records import episodes as episode_records
+    origin = episode_records.get(store, first.get('from_episode'), fields=['scene_id']) if first.get('from_episode') else None
+    return bool(origin) and origin.get('scene_id') == row.get('scene_id')
+
+
 def _for_owner(store, ep, name, args):
     """In an outside turn a task's or a note's `for` never names the owner: his ask there is only his own account's."""
     if name not in ('delegate', 'note') or args.get('for') in (None, '') or not outside(store, ep):
@@ -272,6 +297,7 @@ RULES = (
     ('BLOCK_NO_SPEAKER', 'not_now', _block_no_speaker),
     ('IMAGE_PATH_HOME_ONLY', 'not_listed', _image_path),
     ('TASK_NOT_YOURS', 'not_granted', _others_task),
+    ('HOME_REACH_ONLY', 'not_listed', _home_reach_away),
     ('FOR_OWNER', 'for_owner', _for_owner),
     ('ASKER_NOT_KNOWN', 'asker_not_known', _asker_not_known),
     ('REFUSALS_HOME_ONLY', 'not_listed', _review_away),
@@ -405,7 +431,8 @@ def review(store, persona, since, before):
         said = row['payload']
         task = task_records.get(store, said['task']) if said.get('outside') is True and said.get('task') else None
         if task:
-            scene_id, tried = task.get('scene_id'), {'tool': said.get('tool'), 'task': task.get('title') or '',
+            scene_id, tried = task.get('scene_id'), {'tool': said.get('tool'), 'task_id': task['_id'],
+                                                     'task': task.get('title') or '',
                                                      'brief': excerpt(task.get('brief') or task.get('goal') or '', TRIED_CHARS)}
             person = (task.get('whose') or {}).get('person_id') or task.get('requester_id')
             asked_in = scene_id
@@ -438,7 +465,8 @@ def _judged(store, people, row):
     if ref.get('task'):
         task = task_records.get(store, ref['task']) or {}
         scene_id = task.get('scene_id') or scene_id
-        tried = {'task': task.get('title') or '', 'brief': excerpt(task.get('brief') or task.get('goal') or '', TRIED_CHARS)}
+        tried = {'task_id': ref['task'], 'task': task.get('title') or '',
+                 'brief': excerpt(task.get('brief') or task.get('goal') or '', TRIED_CHARS)}
         if said.get('kind') == 'result':
             tried['result'] = excerpt(classifier.result_text(task.get('result')), TRIED_CHARS)
     elif ref.get('note'):

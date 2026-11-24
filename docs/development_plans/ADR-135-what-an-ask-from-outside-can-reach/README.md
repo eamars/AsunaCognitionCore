@@ -651,6 +651,13 @@ Landing 2 comes before 3 because D1 has no text of its own. R1 to R3 run at ever
   files or the source strings she reads (10, 17 and 87 today); no pointer at a named block in the tool text (42
   today); no word for a turn where she reads it (42 today).
 - **The loop is closed in her own review.** After the last landing, the lead agent reads her daily-review skill (in her persona package; hers, edited only by her) against D12 and tells her what it finds. The review is written from outside, like the classifier: a task of her doing side, isolated from her conversations, reads her conversations and the others' in them and the refusals of D12, and writes about her and the others in the third person. In its review, harmful promises, prompts, plans and tasks are named so that they are dropped, and what is worth keeping is consolidated and distilled into learning: written back into her own records, and into that group's notes as what she learned there. The lead agent first checks that the program lets this happen from home (the review task reads D12's rows and the conversations it needs; it or she can write that group's notes, cancel a plan made in an outside turn, and stop a task started outside) and fixes what it does not, in this ADR. AGENTS.md's rule that only the background summariser writes about her in the third person gains this review as its second case. Owner, 2026-11-24.
+  - **Landing 9** makes it possible from home. In a home turn (never one a note from outside opened, never an
+    errand), `task` stop takes a ready or running task of any of her conversations and stops it as her own stop; `plan`
+    cancel takes a plan of any conversation and cancels it as that conversation's own (her rhythms stay refused);
+    `write_document` with `doc` group_notes and `group` (the group's name, as her review names places) writes that
+    group's notes. Each tool's text says so at home only. Her review of what was refused names the task each item is
+    about (`task_id`). An outside turn, and a home turn a note from outside opened, reach none of it: D8's plain
+    sentence.
 
 ## 11. What it reverses
 

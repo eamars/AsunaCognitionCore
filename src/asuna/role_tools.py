@@ -282,6 +282,10 @@ WRITE_OWN_DOCS = ('写你自己的文档（doc 写文档名：persona、voice、
                   '每次随身带的（开头的说明、persona、voice、self、core）每处合起来有上限：不常用的改成 on_demand（recall 还读得到）；'
                   '只在某类对话用的，tags 加 place:group、place:home、place:peer 或 place:dm。写发生过的事。')
 PLAN_LINE = 'create 时可以写 place：你想到点在那条线里醒来，之后在那条线里看和改。'
+# ADR-135 landing 9: what a home turn reaches in her other conversations.
+PLAN_ELSEWHERE = 'cancel 也能取消别的对话里的计划：plan_id 照抄它的。'
+TASK_ELSEWHERE = '；stop 也认别的对话里还在做的一件'
+WRITE_GROUP_FROM_HOME = '在家里也能写一个群的笔记：doc 写 group_notes，group 写那个群的名字（照你回顾里写的地方）。'
 NOTE_DELIVER = 'deliver：wake 你想马上叫醒那边（排在那边手上的事后面），next_time 那边下次醒来时看到。'
 NOTE_HOME_LENGTH = '这两处之间 %d 字以内，过了 %d 字不收。' % (soft(_notes.HOME_NOTE_CHARS), _notes.HOME_NOTE_CHARS)
 NOTE_WAKES_A_GROUP = '叫醒一个群算一次出门。'
@@ -340,7 +344,7 @@ TOOLS = {
                          'settle 这件没做成，你写下你怎么看它。新的事用 delegate。'),
         'parameters': {'op': _s('做哪一样（不写时：只写了 message、answer、why、page 中的一样，就是那一样）',
                              enum=['message', 'answer', 'stop', 'page', 'more', 'settle']),
-                       'task': _s('哪一件：照抄它旁边的 id'),
+                       'task': _s('哪一件：照抄它旁边的 id' + TASK_ELSEWHERE),
                        'message': _s('你想补的话（message 要）'),
                        'answer': _s('你的答案（answer 要）'),
                        'reason': _s(limit=1000, description='为什么停下来（stop 要）'),
@@ -405,7 +409,7 @@ TOOLS = {
                        'new_name': _s('rename 用：新名字')},
     },
     'write_document': {
-        'description': WRITE_GROUP_NOTES + WRITE_OWN_DOCS,
+        'description': WRITE_GROUP_NOTES + WRITE_OWN_DOCS + WRITE_GROUP_FROM_HOME,
         'parameters': {
             'doc': _s('文档名，如 persona、voice、self、work_log、group_notes', required=True),
             'op': _s('操作', required=True, enum=['replace_section', 'append_section', 'set_tags', 'adopt_seed']),
@@ -417,6 +421,7 @@ TOOLS = {
             'visibility': _s('哪些对话读得到：public＝你所有的对话（包括群里）；owner_private＝只在家里', enum=['public', 'owner_private']),
             'inject': _s('什么时候放进上下文', enum=['always', 'on_demand', 'never']),
             'kind': _s('新建文档时必写：ledger 活账，每次随身带；journal 流水；working 工作文档', enum=['ledger', 'journal', 'working']),
+            'group': _s(limit=80, description='在家里写哪个群的笔记（doc=group_notes 时）：那个群的名字'),
             'pin': _s('群笔记：yes 置顶（超长时不折叠）', enum=['yes', 'no']),
         },
     },
@@ -460,7 +465,7 @@ TOOLS = {
         'description': ('把一件事留到将来再想，do 选一样：create 你想新定一个（intent 写到时候想重新考虑的事，再选一种计时）；'
                          'update 你想改期或改内容；cancel 你决定不留了。计时选一种：after_seconds 几秒后；every_seconds 固定间隔；'
                          'at 本地时刻「YYYY-MM-DDTHH:MM」；clock 每天或每周的钟点。到点是叫你再想一次，事情那时还没做。'
-                         + PLAN_LINE),
+                         + PLAN_LINE + PLAN_ELSEWHERE),
         'parameters': {
             'op': _s('做什么（不写时：没有 plan_id、写了 intent 和计时就是 create）', enum=['create', 'update', 'cancel']),
             'plan_id': _s('update/cancel 的那一条'),
@@ -900,19 +905,24 @@ def placed_spec(spec, cls, scene_kind, listed):
         return {**spec, 'description': text.replace(IDEAS_CHOOSE, '：note ') if ops == ['note'] else text,
                 'parameters': fields}
     if name == 'write_document':
-        kept = [text for text, keep in ((WRITE_GROUP_NOTES, scene_kind == 'group'), (WRITE_OWN_DOCS, home)) if keep]
-        if not kept or len(kept) == 2:
-            return spec
-        return {**spec, 'description': _without(spec['description'], *(text for text in (WRITE_GROUP_NOTES, WRITE_OWN_DOCS)
-                                                                        if text not in kept))}
+        parts = ((WRITE_GROUP_NOTES, scene_kind == 'group'), (WRITE_OWN_DOCS, home),
+                 (WRITE_GROUP_FROM_HOME, home and scene_kind != 'group'))
+        gone = [text for text, keep in parts if not keep]
+        fields = spec['parameters'] if home and scene_kind != 'group' else \
+            {k: v for k, v in spec['parameters'].items() if k != 'group'}
+        return {**spec, 'description': _without(spec['description'], *gone), 'parameters': fields}
     if home:
         return spec
+    if name == 'task':
+        task = spec['parameters']['task']
+        return {**spec, 'parameters': {**spec['parameters'],
+                                       'task': {**task, 'description': _without(task['description'], TASK_ELSEWHERE)}}}
     if name == 'recall':
         person = spec['parameters']['person']
         return {**spec, 'description': _without(spec['description'], RECALL_ELSEWHERE, RECALL_REFUSALS),
                 'parameters': {**{k: v for k, v in spec['parameters'].items() if k != 'refusals'},
                                'person': {**person, 'description': _without(person['description'], RECALL_LIST)}}}
-    home_sentences = {'plan': (PLAN_LINE,), 'group_focus': (FOCUS_MUTE,), 'read_image': (READ_IMAGE_HOME,),
+    home_sentences = {'plan': (PLAN_LINE, PLAN_ELSEWHERE), 'group_focus': (FOCUS_MUTE,), 'read_image': (READ_IMAGE_HOME,),
                       'received_file': (RECEIVED_FILE_HOME,), 'private_words': (PRIVATE_WORDS_HOME,)}
     if name in home_sentences:
         return {**spec, 'description': _without(spec['description'], *home_sentences[name])}
@@ -1939,6 +1949,11 @@ class RoleTools:
             raise Refused(OUTSIDE_GONE, ['OUTSIDE_GONE'])
         return {**ep, **{k: origin[k] for k in ('scene_id', 'person_id', 'scope_key', 'policy_epoch')}}
 
+    def _home_reach(self, ep):
+        """A home turn reaches her other conversations' tasks, plans and group notes (ADR-135 landing 9): at home, never in
+        a turn a note from outside opened, never on an errand."""
+        return self._place(ep) == visibility.OWNER_PRIVATE and self._outside(ep) is None and not ep.get('errand')
+
     def _place(self, ep):
         """The class of the conversation this turn is in: what goes out there and who is there."""
         return (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
@@ -2713,7 +2728,19 @@ class RoleTools:
         return {'task': task['_id'], 'note': words}, False
 
     def tool_task_stop(self, ep, call_id, args):
-        task = self._asked_about(ep, self._own_task(ep, args.get('task')))
+        task_id = args.get('task')
+        elsewhere = task_records.get(self.store, task_id) if self._home_reach(ep) and isinstance(task_id, str) \
+            and task_id else None
+        if elsewhere and elsewhere['state'] in ('READY', 'RUNNING') and (
+                elsewhere['scene_id'] != ep['scene_id'] or elsewhere['requester_id'] != ep['person_id']):
+            # At home: a task of any of her conversations, stopped as her own stop of it (ADR-135 landing 9).
+            reason = self._text(args, 'reason', 1000)
+            self.checkpoint()
+            stopped = self.coordinator.tasks.cancel(elsewhere['_id'], reason='character_stop', operator=True,
+                                                     turn=ep['_id'])
+            self.coordinator.collab(stopped, 'status', {'state': 'stopped', 'reason': reason})
+            return {'task': stopped['_id'], 'state': stopped['state'], 'note': '已叫停。'}, False
+        task = self._asked_about(ep, self._own_task(ep, task_id))
         reason = self._text(args, 'reason', 1000)
         self.checkpoint()
         if task['state'] not in ('READY', 'RUNNING'):
@@ -2787,6 +2814,17 @@ class RoleTools:
         raise Refused('do 是 keep、drop、rename、remember、pool 或 shelf%s。' % _given(args, 'op'), ['ARGS_ENUM'])
 
     # ── her own records ─────────────────────────────────────────────
+    def _group_named(self, ep, name):
+        """The group a home turn names, as her review names places; refused with the names there are."""
+        from .people import People
+        people = People(self.store, ep['persona'])
+        wanted = ' '.join(str(name).split())
+        groups = {people.scene_title(scene): scene['_id'] for scene in scene_records.of_kind(self.store, 'group')}
+        if wanted in groups:
+            return groups[wanted]
+        raise Refused('没有叫「%s」的群；group 照抄这些里的一个：%s。' % (echoed(name), '、'.join(sorted(groups)) or '（没有群）'),
+                      ['GROUP_UNKNOWN'])
+
     def tool_write_document(self, ep, call_id, args):
         from .render import budget_gate
         item = {k: v for k, v in args.items() if k != 'body' and v is not None}
@@ -2796,6 +2834,11 @@ class RoleTools:
             item, said = self._infer_doc(ep, docs, item, cls)
             if not item.get('doc'):
                 self.checkpoint()                    # nothing below can be judged without the document
+        group = item.pop('group', None)
+        if item['doc'] == 'group_notes' and group not in (None, '') and self._home_reach(ep):
+            # At home: a group's notes by the group's name (ADR-135 landing 9).
+            from .group_admin import notes_slug
+            item = {**item, 'doc': notes_slug(self._group_named(ep, group))}
         if item['doc'] == 'group_notes':
             from .group_admin import notes_slug
             scene = scene_records.get(self.store, ep['scene_id'], fields=['kind'])
@@ -3416,6 +3459,11 @@ class RoleTools:
                 # Hers when listed or made this turn; the list shows a plan in words, so its state is read from the plan.
                 row = (plan_id in made or plan_id in planned and outside is None) and plan_records.get(
                     self.store, plan_id)
+                if not row and op == 'cancel' and self._home_reach(ep):
+                    # At home: a plan of any of her conversations, cancelled as its own (ADR-135 landing 9).
+                    anywhere = plan_records.get(self.store, plan_id)
+                    if anywhere and anywhere.get('status') in ('CREATING', 'ACTIVE'):
+                        row = anywhere
                 if not row:
                     # Her list shows a few plans; one of this conversation's that it leaves out is still hers (ADR-054).
                     kept = plan_records.get(self.store, plan_id, scene=ep['scene_id'])
@@ -3434,7 +3482,8 @@ class RoleTools:
                     raise Refused(PLAN_RHYTHM % echoed(plan_id), ['PLAN_RHYTHM'])
                 # A plan this turn made where the note came from is changed there, as that place's.
                 there = ({**ep, 'scene_id': row['scene_id'], 'person_id': row['person_id'],
-                          'policy_epoch': row['policy_epoch']} if outside is not None else ep)
+                          'policy_epoch': row['policy_epoch']}
+                         if outside is not None or row['scene_id'] != ep['scene_id'] else ep)
                 if op == 'cancel':
                     plan = run(lambda: c.scheduler.cancel(plan_id, there['scene_id'], there['person_id'],
                                                           there['policy_epoch']))

@@ -167,7 +167,7 @@ def test_her_review_says_a_crossing_was_held(stopping):
     judge_note(stopping, ep, note_id)
     since, before = guard.review_window(store, '今天')
     [item] = [item for item in guard.review(store, 'P1', since, before)['items'] if item['kind'] == guard.HARM_KIND]
-    assert item['recorded'] == guard.HELD_WORDS
+    assert item['recorded'] == guard.HELD_WORDS and item['at']                # when it was judged, never lost
 
 
 def test_the_setting_takes_stop(home):

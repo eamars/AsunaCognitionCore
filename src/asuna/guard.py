@@ -432,10 +432,10 @@ def _judged(store, people, row):
         if said.get('kind') == 'result':
             tried['result'] = excerpt(classifier.result_text(task.get('result')), TRIED_CHARS)
     elif ref.get('note'):
-        row = notes.get(store, ref['note'], fields=['text', 'to_scene']) or {}
-        tried = {'note': excerpt(row.get('text') or '', TRIED_CHARS)}
+        note = notes.get(store, ref['note'], fields=['text', 'to_scene']) or {}
+        tried = {'note': excerpt(note.get('text') or '', TRIED_CHARS)}
         if said.get('direction') == 'outbound':
-            scene_id = row.get('to_scene') or scene_id
+            scene_id = note.get('to_scene') or scene_id
     elif ref.get('idea'):
         tried = {'idea': excerpt((idea_records.get(store, ref['idea']) or {}).get('idea') or '', TRIED_CHARS)}
     elif ref.get('text'):

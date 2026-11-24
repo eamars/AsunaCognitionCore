@@ -17,7 +17,7 @@ from .persona_model import effective
 from .evidence import canonical, sha
 from .state import Store, Denied
 from .people import People
-from .familiarity import words as familiarity_words
+from .familiarity import level as _familiarity_level, words as familiarity_words
 from . import attend, caught_up, notices, own_mute
 from .records import scenes as scene_records
 from .records import messages as message_records
@@ -769,11 +769,14 @@ class ContextBuilder:
         task_states,undelivered=f.task_states,f.undelivered
         held_back,coverage_block=found['held_back'],found['coverage']
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
-                 # How well she knows them (familiarity.py) and what she has written about them, in words.
+                 # How well she knows them (familiarity.py) and what she has written about them, in words; nothing for
+                 # someone she has not written about (ADR-135 D1), the owner aside.
                  'relationship':{**familiarity_words(self.store,event['person_id'],persona),
-                                 'person':_understanding.person_view(self.store,event['person_id'],scope,person_head,moment),
-                                 'here':((relation[1]['content'] or {}).get('body') if relation else None)
-                                        or _understanding.NO_HERE},
+                                 **({'person':_understanding.person_view(self.store,event['person_id'],scope,person_head,moment),
+                                     'here':((relation[1]['content'] or {}).get('body') if relation else None)
+                                            or _understanding.NO_HERE}
+                                    if person_head or relation or _familiarity_level(self.store,event['person_id'])=='owner'
+                                    else {})},
                  'self_state_from_program':self_state,
                  'memories':facts,'delivered_history':list(reversed(history)),'undelivered_outbound_not_public':list(reversed(undelivered)),
                  'task_state_from_program':task_states,

@@ -53,7 +53,7 @@ Ignored and local: `.runtime/`, `.venv/`, `node_modules/`, `reports/`, `config/l
   Everything under `.runtime/` is local and disposable except what a profile needs; never commit it.
 - **Archived group history** sits in `messages` under its own scene ids (`archive:<scene id>`) with
   `direction: 'archived'`; only explicit history reads it. A live reader selects by the live scene id and a direction
-  of `inbound` or `outbound`, never these rows (familiarity, for one, counts inbound lines).
+  of `inbound` or `outbound`, never these rows.
 
 ## How a change reaches the running Host
 

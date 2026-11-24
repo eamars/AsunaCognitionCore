@@ -168,8 +168,9 @@ Bind and store the verified platform peer snapshot; people.py turns it into what
 
 How well she knows a person, in words (AGENTS.md: interpreted state from a versioned table).
 
-- def `level` — One of LEVELS for this author, from the owner's account, her understanding and real exchanges.
-- def `words` — {'familiarity': the level in words, 'stance': the persona's stance at that level, when it has one}.
+- def `level` — 'owner', 'known', or None for this author: the owner's account, then her own written understanding.
+- def `known_before` — Whether she first wrote her understanding of this person on an earlier day than `moment`, on her clock: the earliest revision of any of her records of them against the day of the request, two stored times (ADR-135 D1).
+- def `words` — {'familiarity': the level in words, 'stance': the persona's stance at that level, when it has one}; nothing for someone with no level.
 
 ## `group_admin`
 

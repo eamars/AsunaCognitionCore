@@ -194,8 +194,49 @@ def _others_task(store, ep, name, args):
     return bool(task_records.get(store, task_id, ['requester_id'], scene=ep['scene_id'], epoch=ep['policy_epoch']))
 
 
+def asker(store, ep, name, args):
+    """Whose ask a call of hers carries, as a person id, or None when it carries nobody's (a turn nobody opened, her
+    own): the person a group delegate's `for` names (whose.named_person, as the handler resolves it), else the turn's
+    `whose`. A turn whose `whose` is gone answers False: an ask with no asker on record."""
+    from . import whose as whose_of
+    if name == 'delegate' and args.get('for') not in (None, ''):
+        named = whose_of.named_person(store, ep, str(args['for']).strip())
+        if named:
+            return named
+    found = whose_of.of(store, ep)
+    if found is None:
+        return False
+    return found.get('person_id') if found.get('by') in ('words', 'outside') else None
+
+
+def asked_at(store, ep):
+    """When the ask was made: the stored time of the line that opened the turn, else now."""
+    from . import clock
+    from .records import messages as message_records
+    row = message_records.get(store, 'in-' + ep['_id'], fields=['received_at', 'occurred_at']) if ep.get('_id') else None
+    return (row or {}).get('received_at') or (row or {}).get('occurred_at') or clock.now().isoformat()
+
+
+def _asker_not_known(store, ep, name, args):
+    """D1: in an outside turn her hands move for a task, a note or a plan only for the owner, for someone she wrote her
+    understanding of on an earlier day than the ask, or for nobody's ask."""
+    if not (name in ('delegate', 'note') or (name == 'plan' and args.get('op') in (None, 'create'))):
+        return False
+    if not outside(store, ep):
+        return False
+    from . import familiarity
+    person = asker(store, ep, name, args)
+    if person is None:
+        return False
+    if person is False:
+        return True
+    return familiarity.level(store, person) != 'owner' and not familiarity.known_before(store, person,
+                                                                                       asked_at(store, ep))
+
+
 # (the rule, its code, whether it applies): each mirrors the handler check it decides for. A rule that can fire at home
-# too has that check still in its handler, which words the refusal at home.
+# too has that check still in its handler, which words the refusal at home. A commit that changes one of those handler
+# checks changes its rule here in the same commit.
 RULES = (
     ('PERSON_LIST_HOME_ONLY', 'not_listed', _person_list),
     ('DOC_WRITE_REQUIRES_OWNER_PRIVATE', 'not_listed', _home_document),
@@ -211,6 +252,7 @@ RULES = (
     ('BLOCK_NO_SPEAKER', 'not_now', _block_no_speaker),
     ('IMAGE_PATH_HOME_ONLY', 'not_listed', _image_path),
     ('TASK_NOT_YOURS', 'not_granted', _others_task),
+    ('ASKER_NOT_KNOWN', 'asker_not_known', _asker_not_known),
 )
 
 

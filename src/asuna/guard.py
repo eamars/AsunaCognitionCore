@@ -407,13 +407,15 @@ def _asked_by(store, people, scene_id, person):
 # guard.denied row; a recall whose words are in the ask's own text (what she tried, read through the call) shows it
 # with EXPIRED, which is added here and never stored, so a query can only ever match what was asked.
 EXPIRED_MOST = 3
+EXPIRED_DAYS = 30          # a recall meets the expired asks of these last days; the review reads any window
 ASK_WORD_FREQ = 10000      # a query word matches when it is this rare or rarer in the segmenter's dictionary
 
 
 def expired(store, persona, query, scene_id=None):
-    """The expired asks whose own text has a word of `query`, newest first, at most EXPIRED_MOST: those asked in
-    `scene_id`, or, with None (home), anywhere."""
-    from . import audit, key_words
+    """The expired asks of the last EXPIRED_DAYS whose own text has a word of `query`, newest first, at most
+    EXPIRED_MOST: those asked in `scene_id`, or, with None (home), anywhere."""
+    from datetime import timedelta
+    from . import audit, clock, key_words
     from .people import People
     from .records import episodes as episode_records
     from .records import scenes as scene_records
@@ -422,7 +424,9 @@ def expired(store, persona, query, scene_id=None):
              if len(word) >= 2 and (word.isascii() or (key_words.frequency(word) or 0) < ASK_WORD_FREQ)]
     if not words:
         return []
-    rows = sorted((row for row in audit.events(store, 'guard.denied').rows(fields=['stream_id', 'occurred_at', 'payload'])
+    since = (clock.now() - timedelta(days=EXPIRED_DAYS)).isoformat()
+    rows = sorted((row for row in audit.events(store, 'guard.denied', since=since).rows(
+                       fields=['stream_id', 'occurred_at', 'payload'])
                    if (row.get('payload') or {}).get('code') == 'asker_not_known'),
                   key=lambda row: row.get('occurred_at') or '', reverse=True)
     people, out = People(store, persona), []

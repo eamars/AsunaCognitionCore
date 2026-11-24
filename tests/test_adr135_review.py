@@ -136,6 +136,16 @@ def test_at_home_the_recall_meets_it_too_with_where_it_was_asked(recalling):
     assert recalled(recalling, '天气', scene='dm-a', person='A', cls=visibility.OWNER_PRIVATE)['coverage']
 
 
+def test_a_recall_meets_only_the_expired_asks_of_the_last_days(recalling, monkeypatch):
+    from datetime import timedelta
+    from asuna import clock
+    stranger_asks(recalling)
+    assert guard.expired(recalling.store, None, '路由器口令', 'g1')
+    later = clock.now() + timedelta(days=guard.EXPIRED_DAYS, minutes=1)
+    monkeypatch.setattr(clock, 'now', lambda: later)
+    assert guard.expired(recalling.store, None, '路由器口令', 'g1') == []
+
+
 def test_the_words_shown_with_an_expired_ask_are_never_matched(recalling):
     stranger_asks(recalling)
     for query in (guard.EXPIRED, '过期'):

@@ -106,7 +106,8 @@ def test_every_length_she_can_be_refused_for_is_stated(tmp_path):
 PROMPTS = {'common.md': 418, 'turn.md': 639, 'turn_consult.md': 187, 'executor.md': 680, 'stage_attend.md': 349,
            'turn_thinking.md': 639, 'turn_consult_thinking.md': 187,          # ADR-099: their tool-mode twins' budgets
            'stage_appraise.md': 416,
-           'turn_task_time.md': 219, 'turn_task_time_thinking.md': 211}   # ADR-112 §12.2: the program asks her at a stage's limit
+           'turn_task_time.md': 219, 'turn_task_time_thinking.md': 211,   # ADR-112 §12.2: the program asks her at a stage's limit
+           'classify_inbound.md': 494, 'classify_outbound.md': 449}        # ADR-135 D9: the classifier's two policies
 
 
 def test_the_harness_prompts_stay_within_their_budget():

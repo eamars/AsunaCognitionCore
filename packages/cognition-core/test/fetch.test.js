@@ -112,6 +112,7 @@ test('the tools/execute hook runs a tool body in its task\'s network scope; othe
     : anything });
   const states = { home: { current: { token: 't' }, network: 'any' }, group: { current: { token: 't' }, network: 'public' } };
   const plugin = { state: id => states[id], exposed: () => new Set(),
+    door: CognitionCore.prototype.door, outside: CognitionCore.prototype.outside,     // the guard's door (ADR-135 D8)
     worker: { call: async method => (method === 'stage.valid' ? { valid: true } : {}) } };
   const slim = new SlimFetch(inner(html(200, 'public')), inner(html(200, 'any')));
   // As DSH runs it (dsh-tools ToolRuntime): the gate first, answered allow, then `tools/execute`, whose last step is

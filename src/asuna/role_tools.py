@@ -270,6 +270,7 @@ THINKING_STORED_CHARS = 4000
 # leaves out what a conversation does not list, failing loudly if a sentence's wording drifts (_without).
 RECALL_ELSEWHERE = '还会带上你在别处那时的心里话。'
 RECALL_LIST = '；写「名单」，你想看看你写过哪些人'
+RECALL_REFUSALS = 'refusals 你想看看在外面没有做的那些：写「今天」、一天 YYYY-MM-DD，或从某个时刻 YYYY-MM-DDTHH:MM 起。'
 WRITE_GROUP_NOTES = ('记这个群的笔记（doc 写 group_notes），do 选一样：append_section 你想加新的一节（heading 写标题）；'
                      'replace_section 你想重写一节（写修订后的整节）；set_tags 你想改它什么时候带上。正文写在 content。'
                      '写发生过的事。pin=yes 你想让它置顶。')
@@ -315,9 +316,10 @@ TOOLS = {
         'description': ('回想，选一样：query 你想找什么，用一句话搜你的记忆（找一个词就只写那个词）；sections 你想读你文档里某一节的原文'
                          '（写 doc 和 section；只写 doc 就列出它的标题；合并转发的全文也这样读，doc 写 forward，section 写那行旁边标的 ref）；'
                          'person 你想回想一个人，读你对这个人两层理解的全文。每次 %d 回。别的对话里说过的、你以前记过的也找得到。'
-                         '想不起来的，就是你不记得。' % RECALLS_PER_TURN + RECALL_ELSEWHERE),
+                         '想不起来的，就是你不记得。' % RECALLS_PER_TURN + RECALL_ELSEWHERE + RECALL_REFUSALS),
         'parameters': {'query': _s(limit=500, description='想找什么，用一句话说；只读 sections 或 person 时可省略'),
                        'person': _s('你想回想的人：这个人的标签' + RECALL_LIST),
+                       'refusals': _s('「今天」、YYYY-MM-DD，或 YYYY-MM-DDTHH:MM'),
                        'sections': {'type': 'array', 'description': '要读原文的文档节（至多 3 条）',
                                     'items': {'type': 'object', 'additionalProperties': False, 'properties': {
                                         'doc': _s('文档，如 persona、voice；合并转发写 forward', required=True),
@@ -906,8 +908,8 @@ def placed_spec(spec, cls, scene_kind, listed):
         return spec
     if name == 'recall':
         person = spec['parameters']['person']
-        return {**spec, 'description': _without(spec['description'], RECALL_ELSEWHERE),
-                'parameters': {**spec['parameters'],
+        return {**spec, 'description': _without(spec['description'], RECALL_ELSEWHERE, RECALL_REFUSALS),
+                'parameters': {**{k: v for k, v in spec['parameters'].items() if k != 'refusals'},
                                'person': {**person, 'description': _without(person['description'], RECALL_LIST)}}}
     home_sentences = {'plan': (PLAN_LINE,), 'group_focus': (FOCUS_MUTE,), 'read_image': (READ_IMAGE_HOME,),
                       'received_file': (RECEIVED_FILE_HOME,), 'private_words': (PRIVATE_WORDS_HOME,)}
@@ -1781,7 +1783,7 @@ class RoleTools:
             return
         code, rule = decision
         outside = guard.outside(self.store, ep)
-        guard.record(self.store, ep, code, rule, name, args, sentence=outside)
+        guard.record(self.store, ep, code, rule, name, args, sentence=outside, call=call_id)
         if not outside:
             return
         self._record(ep['_id'], call_id, name, args, refused=guard.NOT_DONE, code=code, called_as=called_as, olds=olds)
@@ -2046,6 +2048,8 @@ class RoleTools:
 
     def tool_recall(self, ep, call_id, args):
         # ADR-060: query is optional when sections name what to read.
+        if args.get('refusals') not in (None, ''):
+            return self._refusals(ep, args['refusals']), False
         query = self._text(args, 'query', 500, required=not (args.get('sections') or args.get('person')))
         count = int(ep.get('recall_count') or 0)
         if count >= RECALLS_PER_TURN:
@@ -2186,6 +2190,15 @@ class RoleTools:
         if args.get('op') == 'drop':
             return credentials.drop(args.get('name'), ready=self.checkpoint), False
         raise Refused('do 是 keep 或 drop%s。' % _given(args, 'op'), ['ARGS_ENUM'])
+
+    def _refusals(self, ep, wanted):
+        """What was refused in her outside turns and tasks, by day or since a time: at home only (ADR-135 D12)."""
+        from . import guard
+        window = guard.review_window(self.store, wanted)
+        if not window:
+            raise Refused('refusals 写「今天」、一天 YYYY-MM-DD，或一个时刻 YYYY-MM-DDTHH:MM%s。' % _given({'refusals': wanted}, 'refusals'),
+                          ['ARGS_FORMAT'])
+        return guard.review(self.store, ep['persona'], *window)
 
     def _recall_person(self, ep, count, value):
         """recall's person (ADR-082): both layers of one person as this conversation reads them, pinned for a write;
@@ -3682,8 +3695,6 @@ class RoleTools:
             scene = scene_records.get(self.store, ep['scene_id'])
             return {'to': places.place_id(ep['scene_id']), 'scene_id': ep['scene_id'], 'kind': 'here',
                     'name': people.scene_title(scene)}
-        if wanted == questions.ACTION:
-            return {'to': questions.ACTION, 'kind': 'action', 'name': questions.ACTION}
         found = notes.allowed(self.store, ep['scene_id'], visibility.OWNER_PRIVATE, notes.opening(self.store, ep))
         place = notes._resolve(self.store, ep['persona'], found, wanted, visibility.OWNER_PRIVATE)
         homes = {p: sid for p, (sid, kind) in found.items() if kind == 'home'}
@@ -3693,9 +3704,9 @@ class RoleTools:
         names = '、'.join('%s（%s）' % (people.scene_title(scene_records.get(self.store, sid)), p)
                          for p, sid in homes.items())
         if place:
-            raise Refused('「%s」不是家里的对话：ask 问的是家里的几处（%s）、这里和行动脑；'
+            raise Refused('「%s」不是家里的对话：ask 问的是家里的几处（%s）和这里；'
                           '在群里或别人的私聊里问，用 note 送过去，到那边自己问。' % (echoed(wanted), names or '没有别处'), ['ASK_PLACE_NOT_HOME'])
-        raise Refused('问不到「%s」：to 写 %s这里，或 行动脑。' % (echoed(wanted), names + '、' if names else ''), ['ASK_PLACE_UNKNOWN'])
+        raise Refused('问不到「%s」：to 写 %s这里。' % (echoed(wanted), names + '、' if names else ''), ['ASK_PLACE_UNKNOWN'])
 
     def tool_ask_ask(self, ep, call_id, args):
         from . import ingress, notes, questions

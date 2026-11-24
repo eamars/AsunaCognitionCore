@@ -430,3 +430,5 @@ The guardrail (ADR-135 D8): whether a call is allowed, decided from stored facts
 - def `record` — One audit event for her call that was not allowed: the reason, for us; `sentence`: whether she got the plain sentence (an outside turn) or the program's own refusal (home).
 - def `guard_task` — The doing side's door (ToolBroker.call): a call that reaches outside the task's grant is recorded, and in an outside task refused with the plain sentence (TaskGuarded); in a home task the broker's own refusal follows.
 - def `deny_task` — One audit event for a task's call that was not allowed; the sentence in an outside task, else None (the program's own refusal stands).
+- def `review_window` — (since, before) as stored times, for `wanted`: 今天, a day YYYY-MM-DD, or a time YYYY-MM-DDTHH:MM on her clock (since then until now); None when it is none of those.
+- def `review` — What was refused in her outside turns and outside tasks between two stored times, newest first, at most REVIEW_MOST: when, where, what she tried, which kind of "no" and why, in words (REVIEW_WORDS); and how many more.

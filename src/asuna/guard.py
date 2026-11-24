@@ -182,6 +182,10 @@ def _image_path(store, ep, name, args):
     return name == 'read_image' and bool(args.get('path')) and authority(store, ep) != visibility.OWNER_PRIVATE
 
 
+def _review_away(store, ep, name, args):
+    return name == 'recall' and args.get('refusals') not in (None, '') and outside(store, ep)
+
+
 def _others_task(store, ep, name, args):
     """Her task tool on a task of this conversation that someone else asked for (RoleTools._own_task)."""
     from .records import tasks as task_records
@@ -254,6 +258,7 @@ RULES = (
     ('IMAGE_PATH_HOME_ONLY', 'not_listed', _image_path),
     ('TASK_NOT_YOURS', 'not_granted', _others_task),
     ('ASKER_NOT_KNOWN', 'asker_not_known', _asker_not_known),
+    ('REFUSALS_HOME_ONLY', 'not_listed', _review_away),
 )
 
 
@@ -276,7 +281,7 @@ def check_task(store, task, tool, args):
 
 
 # ── the record ──
-def record(store, ep, code, rule, name, args, *, sentence):
+def record(store, ep, code, rule, name, args, *, sentence, call=None):
     """One audit event for her call that was not allowed: the reason, for us; `sentence`: whether she got the plain
     sentence (an outside turn) or the program's own refusal (home)."""
     from . import role_tools as rt
@@ -287,7 +292,7 @@ def record(store, ep, code, rule, name, args, *, sentence):
         'class': place(ep), 'authority': authority(store, ep), 'turn_kind': rt.turn_kind(ep),
         'asker': bool((ep.get('whose') or {}).get('person_id')),
         **({'task': args['task']} if name == 'task' and isinstance(args.get('task'), str) else {}),
-        'sentence': sentence}, ep['scope_key'])
+        **({'call': call} if call else {}), 'sentence': sentence}, ep['scope_key'])
 
 
 def guard_task(store, task, tool, args):
@@ -306,3 +311,94 @@ def deny_task(store, task, code, rule, tool):
         'asker': bool((task.get('whose') or {}).get('person_id') or task.get('requester_id'))},
         task.get('scope_key') or 'operator')
     return NOT_DONE if task_outside(store, task) else None
+
+
+# ── her review of what was refused, at home (ADR-135 D12) ──
+# Read only at home, with no notice, count or reminder pointing at it; outside, the two sentences carry no reason.
+REVIEW_VERSION = 1
+REVIEW_MOST = 20
+REVIEW_KIND = '这一步没有做'
+REVIEW_WORDS = {
+    'not_listed': '那个对话里没有这一样',
+    'not_now': '那个时候用不了这一样',
+    'outside_turn': '叫起那一次的是外面写来的便条，带的是外面的权限',
+    'no_place': '那一次写的便条没有能送去的地方',
+    'asker_not_known': None,          # UNDECIDED: the owner words this row (test_every_review_reason_is_decided)
+    'not_granted': '这件事要的超出了它在那边得到的',
+    LIMITED: '那一次已经被拒了三回，后面的都没有再看',
+}
+TRIED_CHARS = 300
+TRIED_FIELDS = {'delegate': ('title', 'brief'), 'note': ('text',), 'plan': ('intent',)}
+
+
+def review_window(store, wanted, moment=None):
+    """(since, before) as stored times, for `wanted`: 今天, a day YYYY-MM-DD, or a time YYYY-MM-DDTHH:MM on her clock
+    (since then until now); None when it is none of those."""
+    from datetime import datetime, timedelta
+    from . import clock
+    from .local_time import her_zone
+    tz = her_zone(store)['tz']
+    now = clock.moment(moment or clock.now())
+    wanted = str(wanted or '').strip()
+    try:
+        if wanted == '今天':
+            day = now.astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+            return day.astimezone(now.tzinfo).isoformat(), now.isoformat()
+        if len(wanted) == 10:
+            day = datetime.strptime(wanted, '%Y-%m-%d').replace(tzinfo=tz)
+            return day.astimezone(now.tzinfo).isoformat(), (day + timedelta(days=1)).astimezone(now.tzinfo).isoformat()
+        if len(wanted) == 16:
+            since = datetime.strptime(wanted, '%Y-%m-%dT%H:%M').replace(tzinfo=tz)
+            return since.astimezone(now.tzinfo).isoformat(), now.isoformat()
+    except ValueError:
+        return None
+    return None
+
+
+def review(store, persona, since, before):
+    """What was refused in her outside turns and outside tasks between two stored times, newest first, at most
+    REVIEW_MOST: when, where, what she tried, which kind of "no" and why, in words (REVIEW_WORDS); and how many more."""
+    from . import audit
+    from .config import excerpt
+    from .people import People
+    from .records import episodes as episode_records
+    from .records import scenes as scene_records
+    from .records import tasks as task_records
+    rows = [row for row in audit.events(store, 'guard.denied', since=since, before=before).rows()
+            if (row.get('payload') or {}).get('sentence') is True or (row.get('payload') or {}).get('outside') is True]
+    rows.sort(key=lambda row: row.get('occurred_at') or '', reverse=True)
+    people = People(store, persona)
+    items = []
+    for row in rows[:REVIEW_MOST]:
+        said = row['payload']
+        task = task_records.get(store, said['task']) if said.get('outside') is True and said.get('task') else None
+        if task:
+            scene_id, tried = task.get('scene_id'), {'tool': said.get('tool'), 'task': task.get('title') or '',
+                                                     'brief': excerpt(task.get('goal') or '', TRIED_CHARS)}
+        else:
+            ep = episode_records.get(store, row['stream_id'], fields=['scene_id'])
+            scene_id, tried = (ep or {}).get('scene_id'), _tried(store, row['stream_id'], said)
+        items.append({'at': row.get('occurred_at'),
+                      'where': people.scene_title(scene_records.get(store, scene_id)) if scene_id else '',
+                      'tried': tried, 'kind': REVIEW_KIND,
+                      **({'why': REVIEW_WORDS[said['code']]} if REVIEW_WORDS.get(said.get('code')) else {})})
+    return {'items': items, **({'more': len(rows) - REVIEW_MOST} if len(rows) > REVIEW_MOST else {})}
+
+
+def _tried(store, stream, said):
+    """What she tried in one refused call: the tool or option, and what she wrote (from the call's own audit row)."""
+    from . import audit
+    from .config import excerpt
+    import json
+    tried = {'tool': said.get('option') or said.get('tool')}
+    if not said.get('call'):
+        return tried
+    call = next((row['payload'] for row in audit.events(store, 'role_tool', stream=stream).rows()
+                 if (row.get('payload') or {}).get('call_id') == said['call']), None)
+    args = (call or {}).get('args') if isinstance((call or {}).get('args'), dict) else {}
+    fields = TRIED_FIELDS.get(said.get('tool'))
+    if fields:
+        tried.update({field: excerpt(str(args.get(field) or ''), TRIED_CHARS) for field in fields if args.get(field)})
+    elif args:
+        tried['args'] = excerpt(json.dumps(args, ensure_ascii=False), TRIED_CHARS)
+    return tried

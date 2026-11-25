@@ -46,6 +46,8 @@ BODY_PINS = [
     ("pin_nas_delete_two_way_confirm", "删后新进程列目录双向确认无孤儿"),
     ("pin_nas_seven_rolling", "从明天起 NAS 日份稳定在 7 枚滚动"),
     ("pin_nas_host_read_from_push_log", "从上一跑的 push 日志现读"),
+    # 11-25 第二趟：NAS 地址取法换成 UNC 行首锚点，拆掉那半格要红这枚
+    ("pin_nas_host_unc_line_anchor", r"行首 `路径: \\`"),
     ("pin_weekly_cap_four_script_no_clear", "最多 4 份（我这侧的规矩）。脚本不清它。"),
     ("pin_probe_not_cleared", "`probe-<日期>.txt` 不清"),
     # 11-23 加：三格新口径各一枚（拆掉对应段要能红）
@@ -135,6 +137,7 @@ def main():
     for name, token in BODY_PINS:
         check(name, token in body, token)
     check("old_nas_delete_never_run_gone", "NAS 侧删除至今没真跑过" not in body and "第一次真删 NAS 的那趟" not in body, "旧事实又回来了")
+    check("old_nas_host_flag_gone", "找 `--nas-host`" not in body, "旧取法（在 push 日志里找 `--nas-host` 那一段）又回来了")
     check("no_ip_like_in_skill", not IP_LIKE.search(text), "SKILL.md 里不写设备地址")
 
     all_text = text

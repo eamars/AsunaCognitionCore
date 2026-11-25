@@ -682,6 +682,12 @@ SELF_MOLE_COUNT = [
     ("self_mole_count_presence_not_enough", "不许只报「在不在／在哪一侧」就算过"),
 ]
 
+# 画本人这一族的肤色那一项（形象词序列里的暖小麦色）：只钉这一串字面，同一行其余形象词被删不红
+# （代价挂在这里）。切片＝「官方定妆」那一节。
+SELF_SKIN = [
+    ("self_skin_warm_wheat_tone", "warm tanned skin, healthy wheat tone"),
+]
+
 # 画本人这一族的提示词排除配饰＋交回自检·配饰那一格＋两格共用的处理口径（同一趟复盘：提示词没提项圈，
 # 模型自己长出黑色 choker ＋圆牌，是交回之后人眼看出来的）。与上面那组各钉各的：删配饰那一格只红这一组。
 SELF_ACCESSORY = [
@@ -1001,6 +1007,10 @@ def main():
     for name, token in SELF_ACCESSORY:
         check(name, token in look_slice,
               "「%s」不在「官方定妆」的配饰那一格里（切片 %d 字）" % (token, len(look_slice)))
+    # 肤色那一项（形象词序列里的一项）：切片为空（节标题被改或删）也跟着红。
+    for name, token in SELF_SKIN:
+        check(name, token in look_slice,
+              "「%s」不在「官方定妆」的形象词序列里（切片 %d 字）" % (token, len(look_slice)))
 
     # 人像实测那一节（2026-11-05）：标题被删 → 切片为空 → 下面几条一起红；
     # 保守字面与「判不了」那条同等承重——只留配方不写适用面，下次会拿便宜档草稿的漂移去判配方失效。

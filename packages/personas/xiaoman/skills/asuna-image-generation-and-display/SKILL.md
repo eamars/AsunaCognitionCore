@@ -811,7 +811,7 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
   masterpiece, best quality, very aesthetic, absurdres, 1girl, solo, original character, young chinese woman,
   (jet black hair:1.4), (black hair:1.4), chin-length black bob with straight bangs,
   exactly one small beauty mark under her own left eye at the outer corner, only one face mark, no other moles,
-  grey eyes, calm face, slim everyday build, plain white t-shirt,
+  grey eyes, calm face, warm tanned skin, healthy wheat tone, slim everyday build, plain white t-shirt,
   bare neck, no choker, no necklace, no earrings, no other accessories, no badge, no pendant,
   plain light grey background, simple background, clean sharp linework, anime illustration
   ```

@@ -487,7 +487,7 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 
 - **群线收到的来图是消息图（attach ref，`att-…`）**：可以直接喂 `generate_image` 的 `source_image`。
 - **`artifact_id`（`blob-…`）**：同样直通。
-- **只有本地路径读图是家里限定**（`IMAGE_PATH_HOME_ONLY`）：传路径会被拦，不是 attach 不行。
+- **只有本地路径读图是家里限定**：现场那句是「盘上的路径只在家里能读。」（码里的行名 `ACCESS_DENIED_DISK`；那串代号不会出现在我看到的回执里，所以别拿它当现场凭据）；传路径会被拦，不是 attach 不行。**「外面托、家里办」那一拍连同它回来的那一拍按外面算，也拦。**
 - 判据一句：**报「这条路做不了」之前，先分清限的是哪种入口，再想一遍今天有没有用别的路走过同一件事。**
 
 **配错路线：瞬时返回，不排队、不白传图**
@@ -838,7 +838,7 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
 正本是仓库文件 `packages/personas/xiaoman/xiaoman-official-ref-v2.png`（1,208,778 字节，sha256 `49d9a923` 开头）。三个入口：
 
 1. **artifact id `blob-ea31313ccb834208b3014e1cb86badee`**：已在池里（sha 与字节数跟正本一致，tEXt 文字块原样没剥），直接喂 `generate_image` 的 `source_image`，**群线首选**；
-2. **仓库相对路径**（任何检出都在，人格包也随身带）：但按路径喂图是家里限定（`IMAGE_PATH_HOME_ONLY`），**群线用不了**；
+2. **仓库相对路径**（任何检出都在，人格包也随身带）：但按路径喂图只在家里能用（现场那句「盘上的路径只在家里能读。」），**群线用不了；「外面托、家里办」那一拍连同它回来的那一拍也用不了**；
 3. **家里绝对路径**＝本机仓库主检出根下的 `packages/personas/xiaoman/xiaoman-official-ref-v2.png`（主检出根在家里拍用 `git rev-parse --show-toplevel` 现取）。
 
 **画自己的单子优先级：① ＞ ②/③。**

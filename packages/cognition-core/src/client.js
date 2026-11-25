@@ -433,8 +433,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
   const deploymentLabel = key => DEPLOYMENT_KEYS.has(key) ? { key: 'settings.deployment.' + key } : key;
 
   // The access table (deployment.access): each row in effect with its default level, as the worker's access.py has
-  // them (IN_EFFECT, RESOURCES; tests/test_access.py compares the two). Columns are the origins from home outwards; a level is how many of them
-  // it allows. `integrations` and `development` take only home or none.
+  // them (IN_EFFECT, RESOURCES; tests/test_access.py compares the two). Columns are the origins from home outwards; a
+  // level is how many of them it allows. `integrations` and `development` take only home or none.
   const ACCESS_ROWS = [['disk', 'home'], ['commands', 'home'], ['credentials', 'home'], ['local_network', 'home'],
     ['internet', 'everywhere'], ['integrations', 'home'], ['development', 'home'], ['drawing', 'everywhere']];
   const ACCESS_HOME_OR_NONE = ['integrations', 'development'];

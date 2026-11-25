@@ -974,7 +974,7 @@ def main():
     stale_cap = [item for item in CAP_OVERRIDE_STALE if item in cap_section]
     check("cap_section_no_stale_count_line", not stale_cap, ",".join(stale_cap))
 
-    # 本机已有那张图怎么进可发清单（2026-10-24 v11）：节标题在 SECTIONS 里查（section_19），
+    # SECTIONS 的检查名按 `main()` 里 enumerate 现算（`## 本机已有那张图怎么进可发清单` 当前算出来是 `section_17`）；别手填编号，标题顺序一变编号就旧
     # 这里查节内硬指标。标题被删 → 切片为空 → 下面几条一起红：切片为空不等于查过，不会绿着放过。
     reg_section = register_section_slice(body)
     for name, token in REGISTER_SECTION:

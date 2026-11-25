@@ -454,7 +454,7 @@ reason 可能是 `attachment_descriptor_invalid` / `attachment_target_not_enable
 ### 图归哪个对话（11-25 之后怎么算）
 
 - **归属四条**：`scope_key` 是这个对话的（或主人配置联动的）、在 `shared_scopes` 里、是改自这个对话的图、或是贴纸——占一条就算这个对话发得出去。
-- **写归属只有四条路**：`own_files.carry()`（`own_files.py:carry`；visit 只收 image，在 `schedule.py:ScheduleService.visit` 里调；errand 收 image+file，在 `schedule.py:ScheduleService.errand` 里调；检查通过后 `share` 到目的地，**那一刻起算那个对话的**）、`coordinator.py:Coordinator.queue_reply`（消息带着 artifact_id 进一个对话时先 share）、`own_files.share()`、`outbound_files.offer_stored`（做事那一半用 `offer_file` 按 `artifact_id` 把一张存好的图放进某个对话的清单时直接 `share`）。
+- **归属只有两种来路**：**① 建行时就带 `scope_key`**——生下来就是这个对话的：`outbound_media.register_imported_image`、`downloads._register`、`outbound_files.register`、`outbound_files.offer_stored` 里 received 那一支、`received_files.stash`、`vision.path_image`；**② 事后 add 进 `shared_scopes`＝`own_files.share`**——别人的东西变成这个对话的：`coordinator.queue_reply` 带附件发消息那一下、`outbound_files.offer_stored` 两支、`own_files.carry`（出门带图）。**`outbound_media.offer` 不写归属**，它只读。
 - **我这条 agent 线没有 `visit` 也没有 `errand`**：要出门走家里那一拍。
 - **`speak` 一批里 picture 被拒时整批留下、文本也不出去**（11-25 现场）。
 - 这张**不必是当场画的**：从这里画的、发到过这里的、从家里带过来的、早就做好后来重新登记进来的，都算这个对话自己的；作废的只是"带 `integration:` 前缀就能到处发"那一半。
@@ -923,7 +923,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - 第二个位置参数就是 scope，`data` 要的是**字节**：盘上的文件读成 bytes；GridFS 里已有的那份自己走 `pymongo` / `GridFSBucket` 取 —— `dbread` 取不回字节原样（它把 bytes 摊成 str 给人看，拼回去不等于原件）。脚本里不写地址：URI 与库名由宿主给家里那条命令。
 - **scope 的字面值去库里读，别拼**：取 `scenes` 那一行的 `scope_key`（形状 `scene:qq:<账号>:dm:<对方>`，＝ `scene:` ＋ `scene_id`）。scope 不在 `scenes` 里就是 `registered: false / reason=ARTIFACT_SCOPE_UNKNOWN`，重试也一样。
 - 出来是一条**新**的 `blob-…` 行（`kind=image / state=DONE / storage=gridfs / created_at=now`）。底层 `put()` 每次给新 key、**不去重**（去重只在 `put_once`）⇒ 同一张图登记两次＝两行两个 id，要重登记先查一遍库里有没有（查同 sha）。
-- **`source` 前缀标的是「算不算我自己做的」**：`import_register` 登记时写 `integration:<endpoint>:<path>`（`outbound_media.py:import_register`），改别人的图写 `edit:<回去那个 scope>|…`（`outbound_media.py:edit_register`）。**能发到哪儿看归属，不看前缀**：归属＝`scope_key` 是这个对话（或主人配置联动的）、或在 `shared_scopes` 里、或它是改自这个对话的图、或是贴纸。**前缀只在"家里"那几处当尺用**（本人私聊那一支在 `outbound_media.py:offer` 末尾并 `outbound_media.py:produced_images`；家里群是 `outbound_media.py:offer` 的 `group_scene` 那一支并 `produced_images`）；**外面的群不再因为带 `integration:` 就进清单**（`outbound_media.py:offer` 的外面那一支 → `outbound_media.py:own_images` 里那两行筛选）。⚠ 家里群那一半由 core 的用例两面钉着（`tests/test_stored_ids.py:test_a_home_group_lists_her_drawings_from_anywhere_and_an_outside_group_does_not` 一个函数里两条断言，家里群列得上在别的对话画的图、外面的群列不上）
+- **`source` 前缀标的是「算不算我自己做的」**：`import_register` 登记时写 `integration:<endpoint>:<path>`（`outbound_media.py:import_register`），改别人的图写 `edit:<回去那个 scope>|…`（`outbound_media.py:edit_register`）；`web_fetch` 带 `save` 存下来的写 `download:<任务号>:downloads/<名>`（`downloads.py:_register`），**同样不算我做的**。**能发到哪儿看归属，不看前缀**：归属＝`scope_key` 是这个对话（或主人配置联动的）、或在 `shared_scopes` 里、或它是改自这个对话的图、或是贴纸。**前缀只在"家里"那几处当尺用**（本人私聊那一支在 `outbound_media.py:offer` 末尾并 `outbound_media.py:produced_images`；家里群是 `outbound_media.py:offer` 的 `group_scene` 那一支并 `produced_images`）；**外面的群不再因为带 `integration:` 就进清单**（`outbound_media.py:offer` 的外面那一支 → `outbound_media.py:own_images` 里那两行筛选）。⚠ 家里群那一半由 core 的用例两面钉着（`tests/test_stored_ids.py:test_a_home_group_lists_her_drawings_from_anywhere_and_an_outside_group_does_not` 一个函数里两条断言，家里群列得上在别的对话画的图、外面的群列不上）
 - 清单怎么排：**新的在前、一轮最多 6 张**（`MAX_ITEMS_OFFERED = 6`）。**外面那一栏**走 `own_images`：这个对话自己做的、和带进来／发到过这里的（**别人发进来的算可发但不列**，用例 `test_own_files.py:test_the_outside_list_has_no_home_drawing_until_a_going_out_carries_it` 钉着），改自这个对话的图并到最前（`edits_back_to`）。**家里那一栏**（本人私聊、家里群）再并 `produced_images`——从最新 200 行 image 里筛 `integration:` 前缀，不分场景。出门或差事带来的那张（`picked`）即使不在最新几张也列上、排最前。
 - **一趟登记多张 ≠ 后面几拍都发得出**：当拍那份可发清单只放行最新登记的几条——实测一趟登记 6 张，当拍清单里只出现首尾两枚（11-19 实测，**按当场读数记，机制未核**）。要逐张发多张就把**登记和发送绑成一对**：发完这一张再登记下一批，别指望一次登记管后面几拍。
   - 11-22 顺手把「新的在前、一轮最多 6 张」那一半补到源码：`outbound_media.py` 里 `offer()` 走 `image_artifacts()`，上限常量 `MAX_ITEMS_OFFERED` 字面就是 6；那条路上**没有按 sha 去重、也没有「一趟登记只放行几条」的规则**，`context.py` 把这份清单放进 `image_artifacts_from_program` 的那一处也不做首尾截断。⇒ **「恰好只剩首尾两枚」在实现这一侧没有解释**，仍算未核，别按「这段该长什么样」给它补成因。
@@ -943,6 +943,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - `read_image` 看过不改变清单：speak 的 picture 引不在 `image_artifacts_from_program` 里的 id 会被退（`ATTACH_ARTIFACT_NOT_IN_CONTEXT` 只认**这一轮列出的那些 id**）。
 - 所以要发哪张，就照抄**这一轮**清单里的 `artifact_id`；「我刚才看过它」不是依据，上一轮的 id 也可能已经掉出那 6 张。
 - **报告里交出去的 `artifact_id` 不能隔拍拿去发**：同一批字节登记两次就是两行两个 id（上面 `put()` 不去重那条），隔拍只剩源文件 sha 能把两个 id 对回同一份（11-19 实测：同一张图两次登记，两个 id 不同、源文件 sha 同一枚）。所以发之前一律照抄**当拍清单**里的那串，别拿上一拍报告里写过的 id 当凭据。
+- `web_fetch` 带 `save` 存的那张：前缀 `download:`、`scope_key` 是**那个任务绑定的对话**，不算我做的；生命周期同任务文件（`media_life.POLICY['download:']` 是 `OFFERED`）。≤8 MiB 登记成 `kind=image`（当得了 picture），**超 8 MiB 降级成 `file`**——回执里类型词仍写「PNG 图片」，但 `note` 是 file 那一支（「要读就用 received_file」）：**看到 note 是 file 那一支就别当 picture 发**。（11-25 读码所得，8 MiB 那一支我今天现场量，对上再撤这句。）
 
 ### 判据：图发出去没有，账面上可能永远看不见
 - 适配器**等不到自己那声 ack** 那一支会先按 `unknown` 交回就直接 return，**不进 `settle()`**：库里那行留 `delivery_state=UNKNOWN / platform_message_id=null / delivery_basis=unknown`，**`sends.jsonl` 连这一行都不落**。NapCat 事后回的那格（`retcode 1200 / reason=platform_send_timeout`）走的是迟到回执那条：`late_acks.jsonl` 里会留下一条带 publication 与 attempt 的记录，并把库里那行的回执补成 1200，`platform_message_id` 仍然是 null。契约照旧：`unknown` 不重发、不读回。
@@ -957,6 +958,8 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - `render_svg` 那两个字节数是旧读数，没重测。
 - 「`file:` 来源拿去群里会被 `ATTACHMENT_NOT_HER_OWN` 挡」：只核到源码那一半（`path_image` 写 `file:` 前缀、群里只列 `integration:`），没重跑群回合现场。（11-25 21:0x 已在外面一个群跑过现场：清单抬头是"这个群自己的图"那一版、从家里带过去的那张在清单里、没带过去的被清单闸拒、整批没发出去。）
 - 清单是独立进程按同一份代码＋同一份配置复算 `offer()` 的结果，不是「真那一轮」的清单；图那格最后是发出去了、平台侧回读对上，才算成立。
+
+- **公网地址上那张图**：`web_fetch` 带 `save`（写文件名，或 `true` 用地址末段）原样存进 `/task/downloads/`，最大 20 MiB；回执给 `artifact_id`。**它不会自己进可发清单**——要发再 `offer_file` 写那个 id。家里那一拍 `speak` 不先过清单，看得到就能发；外面那一栏必须先 `offer_file`。
 
 ## 边界（硬）
 

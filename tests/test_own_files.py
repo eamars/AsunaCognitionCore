@@ -86,8 +86,8 @@ def test_outside_another_conversation_s_file_answers_as_a_missing_one_and_is_rec
                                       origin='outside')['artifact_id'] == here
     # A message's picture of another conversation: the same words as a ref that names nothing.
     theirs = a_line_with_a_picture(store, 'g2', 'p-g2')
-    other, none = str(refused(theirs)), str(refused('att-000000000000'))
-    assert other.replace(theirs, '<ref>') == none.replace('att-000000000000', '<ref>')
+    other, none = str(refused(theirs)), str(refused('att-ffffffffffff'))
+    assert other.replace(theirs, '<ref>') == none.replace('att-ffffffffffff', '<ref>')
     # A received file's ref of another conversation, the same.
     their_file = a_line_with_a_picture(store, 'g2', 'f-g2', item={'type': 'file', 'file': 'a.txt', 'size': '9',
                                                                   'url': 'https://example.invalid/a.txt'})
@@ -95,10 +95,10 @@ def test_outside_another_conversation_s_file_answers_as_a_missing_one_and_is_rec
         received_files.run(store, where('g1'), store.config, {'ref': their_file}, persona=PERSONA, origin='outside',
                            by=by)
     with pytest.raises(Exception) as file_missing:
-        received_files.run(store, where('g1'), store.config, {'ref': 'att-000000000000'}, persona=PERSONA,
+        received_files.run(store, where('g1'), store.config, {'ref': 'att-ffffffffffff'}, persona=PERSONA,
                            origin='outside', by=by)
     assert str(file_elsewhere.value).replace(their_file, '<ref>') == str(file_missing.value).replace(
-        'att-000000000000', '<ref>')
+        'att-ffffffffffff', '<ref>')
     # Three refusals of another conversation's file recorded, none of a missing one; none names whose the file is.
     rows = denied_rows(store)
     assert [(row['resource'], row['origin']) for row in rows] == [('all_files', 'outside')] * 3

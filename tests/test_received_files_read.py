@@ -52,3 +52,15 @@ def test_the_cap_counts_bytes_read_and_a_redirect_stays_on_the_list():
             vision.download(server.base + '/away', ['127.0.0.1'], cap, 5)
     finally:
         server.httpd.shutdown()
+
+
+def test_a_stored_file_s_times_are_read(world):
+    """From 2026-11-10 (ADR-119 F4 removed media_life's own reader of a stored time) every answer of a read file, every
+    let_go and every list of kept files raised ImportError: the times are read with clock.moment."""
+    from asuna.records import artifacts as artifact_records
+    stored = rf.stash(world, b'hello\n', 'scene:g1', message_id='m-times', index=0, name='a.txt', sender='A')
+    row = artifact_records.get(world, stored['artifact_id'])
+    assert rf._life(world, row, 'g1').startswith('字节到')
+    rf.keep(world, row['_id'], '造的', {'scene:g1'})
+    assert [entry['name'] for entry in rf.kept(world, {'scene:g1'})['kept']] == ['a.txt']
+    assert rf.let_go(world, row['_id'], {'scene:g1'})['let_go']

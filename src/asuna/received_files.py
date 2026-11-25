@@ -117,9 +117,17 @@ def _entry(store, row, scene_id):
     return entry
 
 
+def _moment(value):
+    """A stored time as a moment (clock.moment), or None when there is none or it does not read."""
+    from . import clock
+    try:
+        return clock.moment(value)
+    except clock.BadTime:
+        return None
+
+
 def _when(value):
     """A stored time as a moment to sort by, never as text; one that cannot be read sorts first."""
-    from .media_life import _moment
     return _moment(value) or EARLIEST
 
 
@@ -168,7 +176,6 @@ def _over_quota(store, rows, size, scopes, scene_id):
 def let_go(store, artifact_id, scopes, scene_id=None, moment=None):
     """End a keep: the bytes have their 3 days from now, and the ref is found by its message again, as long as that is
     found. An erased kept file is taken off the list with ADR-105's sentence."""
-    from .media_life import _moment
     from .vision import REF_DAYS
     row = _row(store, artifact_id, scopes)
     if erased(row):
@@ -605,7 +612,6 @@ def _answer(store, row, text, args, scene_id, note):
 
 def _life(store, row, scene_id):
     """How long it can still be read, and which of the two finds its ref (section 5)."""
-    from .media_life import _moment
     from .vision import REF_DAYS
     if row.get('kept_at'):
         return LIFE_KEPT

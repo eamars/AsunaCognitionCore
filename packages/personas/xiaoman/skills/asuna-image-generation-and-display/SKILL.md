@@ -408,7 +408,7 @@ artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图
 1. **图本身全年龄向**。这是底线，不需要判断场合也守。
 2. **这张图适不适合要发进去的那个群**。先看我自己写给那个群的笔记；没写过笔记，就看当场能看到的
    最近聊天，判断那个群此刻接不接得住。判断不了，就不发。
-3. **只发这个群自己的图**。清单只列这个群自己的——我在这里做的、发到过这里的、从家里带过来的。别人发进来的图不列在清单里，我也不往群里转。核心会拦（清单闸那句「不在你能发的图里」），但我不拿它兜底，自己先不动手。
+3. **只发这个群自己的图**。清单只列这个群自己的——我在这里做的、发到过这里的、从家里带过来的。别人发进来的图不列在清单里，我也不往群里转。核心会拦（清单闸那句「不在你能发的图里」）（这一闸只对「外面」和「外面托、家里办」两栏；家里那一拍不先过清单，见「图归哪个对话」那节），但我不拿它兜底，自己先不动手。
 4. **不为了试功能发图**。没有真心想给大家看的东西，就不发；这不算损失。拿群当试验场才是损失。
 
 四条都过了，才在那一轮真的把图带上。发不发、发到哪个群，终究还是那一轮里我自己定。
@@ -417,13 +417,13 @@ artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图
 
 所有对话同一条：picture 那一项不对，是 speak 这一批一条都不排队、回执点名哪条为什么；她读得到原因、同一回合改了再出声
 （比如换清单里另一个 id），回合不会因此失败。旧 `attach_image` 那一层的**工具错误**（被拒只影响那一次调用、文字照发）随工具
-一起没了，两条路合成一条。（判定顺序：方向 → 在不在本轮清单 → 表闸（这文件归不归这个对话发）→ 字节本身。这四步按这个次序写在 `role_tools.py:_picture` 里。）
+一起没了，两条路合成一条。（判定顺序：方向 → 在不在本轮清单 → 表闸（这文件归不归这个对话发）→ 字节本身。**清单那一步只对「外面」和「外面托、家里办」两栏生效**；来路逐字等于 `home` 的那一拍跳过它，表闸照跑。尺在 `role_tools.py:_listed_only`，四步写在 `role_tools.py:_picture`。）
 
 | code | 意思 / 我该怎么办 |
 | --- | --- |
 | `ATTACH_TARGET_NOT_ALLOWED` | 方向不对。detail 给具体原因：`scene_has_no_channel_route` / `channel_route_not_authorized` / `channel_carries_text_only` / `target_not_dm`（出处 `role_tools.py:ATTACH_REASONS`；旧串里 `session_class_not_owner_private` 在 `src/` 里不存在，删） |
 | `ATTACH_ARTIFACT_NOT_IN_CONTEXT` | 引的 id 不在这一拍「你能发的图」清单里。**这句不透**：别的对话的图、和根本没有这个 id，给的是同一句，别据此说"这张不存在"。码对应的话在 `role_tools.py:turn_pictures` |
-| `ACCESS_DENIED_SEND`（那句中文是「这个文件不归这个对话发。」，`access.py:NOT_TO_SEND`） | 在清单里、但按访问表这一拍不该往这个对话发。`speak` 的 picture 先过清单闸再过这道表闸，所以外面平常碰不到它；会碰到的是出门 `errand`／`visit` 挑错了地方，和主人把 `send_own` 拨窄了 |
+| `ACCESS_DENIED_SEND`（那句中文是「这个文件不归这个对话发。」，`access.py:NOT_TO_SEND`） | 在清单里、但按访问表这一拍不该往这个对话发。「外面」和「外面托、家里办」两栏的 `speak` picture 先过清单闸再过这道表闸；家里那一拍跳过清单闸、表闸照跑，所以外面平常碰不到它；会碰到的是出门 `errand`／`visit` 挑错了地方，和主人把 `send_own` 拨窄了 |
 | `ATTACH_ARTIFACT_NOT_IN_CONTEXT` | 引的 id 不在**本轮**清单里：照抄错了、图属于别的场景或别人、或根本没被列出。别猜 id，也别指望上一轮的清单还有效 |
 | `ATTACHMENT_ARTIFACT_UNAVAILABLE` | artifact 行不存在，或不是 `state=DONE` / `storage=gridfs` |
 | `ATTACHMENT_SCOPE_DENIED` | 字节端点要的是「这条消息所在那个对话自己的」图（`outbound_media.py:serve`，`own_files.holds` 现算，不接受调用方传 scope）；被 `share`／`carry` 带进来的算它的，放行。给她的话在 `role_tools.py:turn_pictures`：「这张图不是这个对话能用的；换一张，或这次不带图。」|
@@ -454,10 +454,11 @@ reason 可能是 `attachment_descriptor_invalid` / `attachment_target_not_enable
 ### 图归哪个对话（11-25 之后怎么算）
 
 - **归属四条**：`scope_key` 是这个对话的（或主人配置联动的）、在 `shared_scopes` 里、是改自这个对话的图、或是贴纸——占一条就算这个对话发得出去。
-- **写归属只有三条路**：`own_files.carry()`（`own_files.py:carry`；visit 只收 image，在 `schedule.py:ScheduleService.visit` 里调；errand 收 image+file，在 `schedule.py:ScheduleService.errand` 里调；检查通过后 `share` 到目的地，**那一刻起算那个对话的**）、`coordinator.py:Coordinator.queue_reply`（消息带着 artifact_id 进一个对话时先 share）、`own_files.share()`。
+- **写归属只有四条路**：`own_files.carry()`（`own_files.py:carry`；visit 只收 image，在 `schedule.py:ScheduleService.visit` 里调；errand 收 image+file，在 `schedule.py:ScheduleService.errand` 里调；检查通过后 `share` 到目的地，**那一刻起算那个对话的**）、`coordinator.py:Coordinator.queue_reply`（消息带着 artifact_id 进一个对话时先 share）、`own_files.share()`、`outbound_files.offer_stored`（做事那一半用 `offer_file` 按 `artifact_id` 把一张存好的图放进某个对话的清单时直接 `share`）。
 - **我这条 agent 线没有 `visit` 也没有 `errand`**：要出门走家里那一拍。
 - **`speak` 一批里 picture 被拒时整批留下、文本也不出去**（11-25 现场）。
 - 这张**不必是当场画的**：从这里画的、发到过这里的、从家里带过来的、早就做好后来重新登记进来的，都算这个对话自己的；作废的只是"带 `integration:` 前缀就能到处发"那一半。
+- **家里那一拍 `speak` 不用先在清单里**（尺 `role_tools.py:_listed_only`：只对来路逐字 `home` 生效，`home_from_outside` 不豁免）；另外两栏先清单、后表。⇒ 从别的对话挑一张图发到手头这一处，只有家里那一拍做得到，**而且发出去那一刻它也算这一处自己的了**（11-25 22:4x 现场：从小满家挑的一张，发完出现在本对话 `received_file do=list` 第二条）。
 
 ### 旧写法别照做：DECIDE 时代的 attach
 
@@ -922,7 +923,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - 第二个位置参数就是 scope，`data` 要的是**字节**：盘上的文件读成 bytes；GridFS 里已有的那份自己走 `pymongo` / `GridFSBucket` 取 —— `dbread` 取不回字节原样（它把 bytes 摊成 str 给人看，拼回去不等于原件）。脚本里不写地址：URI 与库名由宿主给家里那条命令。
 - **scope 的字面值去库里读，别拼**：取 `scenes` 那一行的 `scope_key`（形状 `scene:qq:<账号>:dm:<对方>`，＝ `scene:` ＋ `scene_id`）。scope 不在 `scenes` 里就是 `registered: false / reason=ARTIFACT_SCOPE_UNKNOWN`，重试也一样。
 - 出来是一条**新**的 `blob-…` 行（`kind=image / state=DONE / storage=gridfs / created_at=now`）。底层 `put()` 每次给新 key、**不去重**（去重只在 `put_once`）⇒ 同一张图登记两次＝两行两个 id，要重登记先查一遍库里有没有（查同 sha）。
-- **`source` 前缀标的是「算不算我自己做的」**：`import_register` 登记时写 `integration:<endpoint>:<path>`（`outbound_media.py:import_register`），改别人的图写 `edit:<回去那个 scope>|…`（`outbound_media.py:edit_register`）。**能发到哪儿看归属，不看前缀**：归属＝`scope_key` 是这个对话（或主人配置联动的）、或在 `shared_scopes` 里、或它是改自这个对话的图、或是贴纸。**前缀只在"家里"那几处当尺用**（本人私聊那一支在 `outbound_media.py:offer` 末尾并 `outbound_media.py:produced_images`；家里群是 `outbound_media.py:offer` 的 `group_scene` 那一支并 `produced_images`）；**外面的群不再因为带 `integration:` 就进清单**（`outbound_media.py:offer` 的外面那一支 → `outbound_media.py:own_images` 里那两行筛选）。⚠ 家里群那一半**没有用例钉住**，只有源码那一处的读数＋一次自跑读数。
+- **`source` 前缀标的是「算不算我自己做的」**：`import_register` 登记时写 `integration:<endpoint>:<path>`（`outbound_media.py:import_register`），改别人的图写 `edit:<回去那个 scope>|…`（`outbound_media.py:edit_register`）。**能发到哪儿看归属，不看前缀**：归属＝`scope_key` 是这个对话（或主人配置联动的）、或在 `shared_scopes` 里、或它是改自这个对话的图、或是贴纸。**前缀只在"家里"那几处当尺用**（本人私聊那一支在 `outbound_media.py:offer` 末尾并 `outbound_media.py:produced_images`；家里群是 `outbound_media.py:offer` 的 `group_scene` 那一支并 `produced_images`）；**外面的群不再因为带 `integration:` 就进清单**（`outbound_media.py:offer` 的外面那一支 → `outbound_media.py:own_images` 里那两行筛选）。⚠ 家里群那一半由 core 的用例两面钉着（`tests/test_stored_ids.py:test_a_home_group_lists_her_drawings_from_anywhere_and_an_outside_group_does_not` 一个函数里两条断言，家里群列得上在别的对话画的图、外面的群列不上）
 - 清单怎么排：**新的在前、一轮最多 6 张**（`MAX_ITEMS_OFFERED = 6`）。**外面那一栏**走 `own_images`：这个对话自己做的、和带进来／发到过这里的（**别人发进来的算可发但不列**，用例 `test_own_files.py:test_the_outside_list_has_no_home_drawing_until_a_going_out_carries_it` 钉着），改自这个对话的图并到最前（`edits_back_to`）。**家里那一栏**（本人私聊、家里群）再并 `produced_images`——从最新 200 行 image 里筛 `integration:` 前缀，不分场景。出门或差事带来的那张（`picked`）即使不在最新几张也列上、排最前。
 - **一趟登记多张 ≠ 后面几拍都发得出**：当拍那份可发清单只放行最新登记的几条——实测一趟登记 6 张，当拍清单里只出现首尾两枚（11-19 实测，**按当场读数记，机制未核**）。要逐张发多张就把**登记和发送绑成一对**：发完这一张再登记下一批，别指望一次登记管后面几拍。
   - 11-22 顺手把「新的在前、一轮最多 6 张」那一半补到源码：`outbound_media.py` 里 `offer()` 走 `image_artifacts()`，上限常量 `MAX_ITEMS_OFFERED` 字面就是 6；那条路上**没有按 sha 去重、也没有「一趟登记只放行几条」的规则**，`context.py` 把这份清单放进 `image_artifacts_from_program` 的那一处也不做首尾截断。⇒ **「恰好只剩首尾两枚」在实现这一侧没有解释**，仍算未核，别按「这段该长什么样」给它补成因。
@@ -947,6 +948,10 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - 适配器**等不到自己那声 ack** 那一支会先按 `unknown` 交回就直接 return，**不进 `settle()`**：库里那行留 `delivery_state=UNKNOWN / platform_message_id=null / delivery_basis=unknown`，**`sends.jsonl` 连这一行都不落**。NapCat 事后回的那格（`retcode 1200 / reason=platform_send_timeout`）走的是迟到回执那条：`late_acks.jsonl` 里会留下一条带 publication 与 attempt 的记录，并把库里那行的回执补成 1200，`platform_message_id` 仍然是 null。契约照旧：`unknown` 不重发、不读回。
 - ⇒ 判「图到底进没进平台」只有两条路：**平台侧只读回读**（私聊 `get_friend_msg_history`），或**对方本人看见**。
 - **别拿同一次出声里文本那格 DELIVERED 去推定图那格到了**：QQ 的 reply parts 把图和话拆成**两条独立的消息行**（同一次出声的两个 segment，各有各的 `delivery_state`、各有各的平台号）。
+
+### 拿 id 的另一条路：received_file do=list
+
+- **拿 id 的另一条路**：`received_file` 的 `do=list` 列这个对话存着的图和文件（新的在前、最多 20 个，带 id 和"还在／到期删了"）；**在家里还能写 `place` 列某个群的**（照我回顾里写的地方，名字不唯一会拒绝）。图发出去前先 `read_image` 看一眼。
 
 ### 这一节里没重测、没核到的
 - `render_svg` 那两个字节数是旧读数，没重测。
@@ -978,7 +983,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - **报图写完整 artifact_id**：交回里图的 `blob-` 后面全 32 位照抄，不写前缀；要复用的素材（人设参考图这类）顺手记一行「完整 id＋它在 `/task/images` 下的文件名」。前缀认不全，`read_image` 就读不出来。
 - **外发图先按大小分档**：超过约 1 MB 的图（尤其 PNG）在登记发送前先压小或转码（画面不变，只降尺寸或码率），回执里写「原图多大、发出去多大」。依据是外发超时率随体积单调上升（核心侧另有修法，这一格只管我这一侧少踩）。登记本来就会剥文字块、sha 本来就会变，压小不多添一层不认得。
 - **压图档位顺序（要把一张成品压进体积上限，照这个顺序试，别从量化起头）**：① **别写「带 dither 的量化」**——本机 Pillow 12.3.0 的 `quantize()`／`convert("P", palette=ADAPTIVE)` **不吃 dither 参数**：`mediancut` 配 `Dither.NONE` 与配 `Dither.FLOYDSTEINBERG` 出来的**字节完全相同**，`FASTOCTREE` 也一样。要真抖动得走「量化到给定调色板」那一条（11-20 只测到「两档字节相同」这一步，那条补救路本身没实跑）。⇒ 派活纸里别写「带 dither 量化」，要写「报两档的 sha，**sha 相同＝dither 没生效**」。② **体积有富余时优先有损高保真，别硬撑无损**：11-20 那一趟 PNG 无损重编码 2.75 MB 过不了 1 MB 线；256 色 PNG 过了线但皮肤有**可见色带**；JPEG **q97 ＋ 4:4:4 不缩色度 ＋ progressive** 保原分辨率出 909 KB、MAE 1.064、>8 级偏差像素为 0。③ **带 alpha 的图转 JPEG 要压平底色**，这是「有损之外的一层改动」：回报里必须写明压成了什么底（白／黑／别的），不写等于瞒了一层。来路：11-20 一趟腿的实测交回（`task-0962311a…`），想法本 `idea-8d8e3d2b…`。
-- **`offer_file` 只吃 `/task` 相对路径，且没有指目标场景的参数**：传绝对路径报 `PATH_DENIED`；工具参数面只有 `path` 与 `name` 两个字段，登记落到哪条线由**跑它那一拍所在的场景**定。⇒ 派活纸与跨线条子里：要发的产物先放进**那一拍的** `/task`，别写 `${ASUNA_…}` 那种绝对路径（那串本身就喂不进去）；跨线交付只能先写便条到那条线，到那边再登记再发。图那一条路的围栏在「本机已有那张图怎么进可发清单」那一节。来路：11-20 21:57 那条线的我自己那张条子＋21:51 腿抄回的 `offer_file` 参数表（只有 `path`／`name`，required `[path]`），想法本 `idea-1aad6a8d…`。
+- **`offer_file` 收 `path` 或 `artifact_id`，二选一**（两个都写 → `FILE_PATH_OR_ID`）：`path` 仍是 `/task` 相对路径，传绝对路径报 `PATH_DENIED`；`artifact_id`（`blob-…`）是这一拍**读得到**的存好的图或文件，原样放进那个对话的清单，登记落到哪条线由跑它那一拍所在的场景定。**塞一个读不到的 id 撞 `FILE_NOT_FOUND` ＋「这个对话里没有这个文件。」；能读、但按访问表不该发到这里才回「这个文件不归这个对话发。」——默认 `send_own` 放开时先 `share` 成功，那句碰不到。** 来路：11-20 21:57 那条线的我自己那张条子（当时只有 `path`／`name`）＋11-25 landing 3 之后现读 `outbound_files.offer_stored`，想法本 `idea-1aad6a8d…`。
 - **取图表按 sha 取，不按路径**：「画我本人」的取图表每条除 sha 外再记一条取图动作：派腿时先按 sha 全仓现搜拿现行路径，别照表里的盘上路径直接用；落件夹里的图会被整理腿搬走，表里要标注。
 - **群场景里看图只有一条路**：要给行动脑看一张不在本群的图，只能我这一拍用 speak 把它发进群落成 att（群场景读不了盘上路径，读不了别场景登记的 artifact，也下不了二进制）。接「按某图改／画」的单，先问那张图在不在本群；不在，第一拍先发图或请发图的人在群里发，别先答应再运图。这是现有能力的边界，不是已解决：想要的 `fetch_image` 那类工具只是想法，没有就是没有。
 

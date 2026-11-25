@@ -7,13 +7,13 @@ import sys
 
 import pytest
 
-from asuna import access, guard, outbound_media, own_files, received_files, role_tools, vision, whose
+from asuna import access, guard, media_life, outbound_media, own_files, received_files, role_tools, vision, whose
 from asuna.blobs import BlobStore
 from asuna.config import ROOT
 from asuna.records import artifacts as artifact_records
 from asuna.records import scenes as scene_records
 from asuna.store.words import Set
-from test_whose import AGENT, LINE, LOCAL, OWNER, PERSONA, coordinator, home, turn  # noqa: F401  (home, coordinator: fixtures)
+from test_whose import AGENT, LINE, LOCAL, OWNER, PERSONA, home, turn  # noqa: F401  (home: a fixture)
 
 sys.path.insert(0, str(ROOT / 'tools'))
 import adr120_shared_scopes_backfill  # noqa: E402
@@ -105,15 +105,22 @@ def test_outside_another_conversation_s_file_answers_as_a_missing_one_and_is_rec
     assert all(set(row) <= {'resource', 'origin', 'tool', 'call', 'task', 'send'} for row in rows)
 
 
-def test_home_reads_any_conversation_s_file_with_no_age_check(home):
+def test_home_reads_any_stored_file_with_no_age_check_and_message_pictures_of_seven_days(home):
     store = home
-    theirs = picture(store, 'scene:g1', 'upload:someone')          # not hers, in an outside group
+    theirs = picture(store, 'scene:g1', 'upload:someone')          # not hers, in an outside group, long stored
+    store.collection('artifacts').update({'_id': theirs}, Set({'created_at': '2026-01-01T00:00:00+00:00'}))
     for origin in ('home', 'home_from_outside'):
         read = vision.read_image_for_task(store, BlobStore(store), where(LOCAL), store.config, {'ref': theirs},
                                           look=False, origin=origin)
         assert read['artifact_id'] == theirs
-    old = a_line_with_a_picture(store, 'g1', 'p-old', received_at='2026-01-01T00:00:00+00:00')
-    assert vision.attachment_by_ref(store, where(LOCAL), store.config, old, wide=True)[0]['ref'] == old
+    # A message's picture is reachable from any conversation for its last 7 days, as long as its pulled copy lives,
+    # and no further: neither a home read nor an outside miss's check reads a conversation's older lines.
+    recent = a_line_with_a_picture(store, 'g1', 'p-recent')
+    old = a_line_with_a_picture(store, 'g2', 'p-old', received_at='2026-01-01T00:00:00+00:00')
+    assert vision.REF_DAYS == media_life.PULLED_DAYS
+    assert vision.attachment_by_ref(store, where(LOCAL), store.config, recent, wide=True)[0]['ref'] == recent
+    assert vision.attachment_by_ref(store, where(LOCAL), store.config, old, wide=True)[0] is None
+    assert not vision.elsewhere(store, where('g1'), store.config, old)
     assert received_files.reach(store, where(LOCAL), store.config, 'home_from_outside') >= {'scene:g1', 'scene:g2'}
     assert received_files.reach(store, where('g1'), store.config, 'outside') == {'scene:g1'}
     # A narrowed table: home reads only its own conversation's then.

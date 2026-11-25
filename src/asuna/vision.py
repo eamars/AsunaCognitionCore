@@ -12,9 +12,9 @@ ref 也可以是一个本机文件路径（绝对路径，或行动任务自己�
 ``disk`` 一行（access.py），按这一次或这个任务的来路（``origin`` 参数，两个入口各自算好传进来）。裸文件名 +
 ``vision.image_dirs`` 的老路一个字没改。
 
-哪些图读得到看同一个来路（own_files.py）：来路许 ``all_files`` 的（默认家里与外面托、家里办），任何对话的 ref
-（不限天数）与存好的图（不问是谁的、在哪个对话）都读得到，字节还在就行；只许 ``own_files`` 的（默认外面），只读
-这个对话自己的（含联动的）。别的对话的图和没有的图回同一句话，另记一笔（access.record）。
+哪些图读得到看同一个来路（own_files.py）：来路许 ``all_files`` 的（默认家里与外面托、家里办），任何对话 REF_DAYS
+天内的 ref（拉下来的副本也只留这么久）与存好的图（不限天数，不问是谁的、在哪个对话）都读得到，字节还在就行；只许
+``own_files`` 的（默认外面），只读这个对话自己的（含联动的）。别的对话的图和没有的图回同一句话，另记一笔（access.record）。
 """
 from __future__ import annotations
 import base64
@@ -401,14 +401,15 @@ def attachment_by_ref(store, task, config, ref, wide=False, entries=None):
     and its linked scenes (the same fence as scene_attachments), or (None, listing). The newest few come first.
 
     `wide` (work whose origin may read every conversation's files, own_files.reach): a ref from any of her
-    conversations, of any age, is found, marked `wide_reach`."""
+    conversations is found, within the same REF_DAYS (as long as its pulled copy lives, media_life.PULLED_DAYS), marked
+    `wide_reach`. No lookup reads further back, so a miss never scans a conversation's whole history."""
     entries = entries or attachments_of
     listing = scene_attachments(store, task, config, entries=entries)
     entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
     if entry:
         return entry, listing
     from datetime import timedelta
-    window = {} if wide else {'since': (clock.now() - timedelta(days=REF_DAYS)).isoformat()}
+    window = {'since': (clock.now() - timedelta(days=REF_DAYS)).isoformat()}
     scopes = [{**scope, 'policy_epoch': task['policy_epoch']} for scope in readable_image_scenes(store, task, config)]
     if wide:
         fenced = {scope['scene_id'] for scope in scopes}
@@ -651,9 +652,10 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
         # 不区分「不存在」与「在别的对话／别的纪元」：不借这个工具探测别人的图。只列本任务可读范围里的 ref。
         recent = [item['ref'] for item in listing['attachments']]
         if reach == 'all':
-            # The search covered all her conversations, of any age: say that, not this one's recent lines.
-            raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在你任何一个对话的图里：ref 抄错一个字也是这样；%s'
-                             % (echoed(ref), '这个对话最近的图是 ' + '、'.join(recent) if recent else GIVE_UP))
+            # The search covered all her conversations: say that, not this one's recent lines.
+            raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在你所有对话最近 %d 天的图里：超过 %d 天的图 ref 找不回，'
+                             'ref 抄错一个字也是这样；%s' % (echoed(ref), REF_DAYS, REF_DAYS,
+                                                    '这个对话最近的图是 ' + '、'.join(recent) if recent else GIVE_UP))
         if elsewhere(store, task, config, ref):
             access.record(store, by, origin, 'all_files', tool)      # another conversation's: said as a missing one
         raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在这个对话最近 %d 天的图里；%s'
@@ -924,7 +926,7 @@ READ_IMAGE_TOOL = {
     'name': READ_IMAGE_TOOL_NAME,
     'description': ('看一张图：ref 照抄图旁标的 ref，或附件清单里的，7 天内都认；'
                     '也可以是一张存好的图的 artifact_id（blob-…），比如这个对话里你画的、这次能发的，画完或发之前用它看一遍。'
-                    '没调用就是没看过。家里还能看你任何一个对话里的图，不限 7 天，也能读盘上的图（ref 写绝对路径，'
+                    '没调用就是没看过。家里还能看你别的对话里 7 天内的图，也能读盘上的图（ref 写绝对路径，'
                     '或行动任务工作区里的 /task/… 路径）。视频的 ref 也认：给你按时间截的一张格子图（没有声音），'
                     '视频超过 %d MB 不下载。看不了会照实说原因。' % VIDEO_MAX_MB),
     'parameters': {'ref': {'type': 'string', 'required': True}}}

@@ -158,8 +158,8 @@ home from outside), `everywhere`, or `none`. The table (defaults in `access.RESO
 | Resource | Covers | Default |
 |---|---|---|
 | `own_files` | the conversation's own files ([Own files](#own-files)): read by id or ref, listed | `everywhere` |
-| `all_files` | every conversation's files by id or ref, with no conversation or age check while the bytes exist | `home_from_outside` |
-| `list_files` | other conversations' files in the lists of a home conversation (`image_artifacts_from_program`, `file_artifacts_from_program`) | `home_from_outside` |
+| `all_files` | every conversation's stored files by id, with no conversation or age check while the bytes exist; every conversation's message attachments by ref, for 7 days | `home_from_outside` |
+| `list_files` | other conversations' pictures and files in a home conversation's lists (`image_artifacts_from_program`, `file_artifacts_from_program`, `your_pictures_from_program`) | `home_from_outside` |
 | `disk` | a disk path to `read_image`, for both brains | `home` |
 | `commands` | `sandbox_run` | `home` |
 | `credentials` | `credentials` on `sandbox_run` | `home` |
@@ -218,8 +218,10 @@ binding.
   write of the row) when a message carrying it is written there (`Coordinator.queue_reply`, before the row), and when
   an errand or a visit picks it for that place (`own_files.carry`). An erasure of a conversation takes it out of every
   row's `shared_scopes` (`BlobStore.erase_scope`).
-- **Reading.** Work whose origin may use `all_files` reads any conversation's picture, file or ref by id, of any age,
-  while its bytes exist; work that may use only `own_files` reads its own conversation's.
+- **Reading.** Work whose origin may use `all_files` reads any conversation's stored picture or file by id, of any
+  age, while its bytes exist, and any conversation's message attachment by its ref for 7 days (`vision.REF_DAYS`, as
+  long as a pulled copy lives, `media_life.PULLED_DAYS`; no lookup reads further back); work that may use only
+  `own_files` reads its own conversation's.
 - **Sending** (`own_files.send_refused`). Into a home conversation (her local chat, a chat of the owner's, a home line,
   a home group), whatever the work may read; into another, any file where its origin may use `send_any`, any file into
   the conversation the work is for where it may use `send_to_asker`, that conversation's own files where it may use
@@ -227,9 +229,12 @@ binding.
   bytes](#fetch-attachment-bytes)).
 - **Lists.** An outside conversation lists its own pictures she made there or that were sent or carried there, the
   edits that go back there, and the one an errand or visit carried (`image_artifacts_from_program`), and its own
-  files (`file_artifacts_from_program`); a picture someone sent there is its own but not listed. A home conversation
-  lists as before (the owner's chat its own and linked pictures, her pictures from anywhere, a home group her pictures
-  from anywhere, every conversation's files) where the turn's origin may use `list_files`, else its own only.
+  files (`file_artifacts_from_program`); a picture someone sent there is its own but not listed. `list_files` decides
+  which home lists show other conversations' items: where the turn's origin may use it, a home conversation lists as
+  before (the owner's chat its own and linked pictures and her pictures from anywhere, a home group her pictures from
+  anywhere and every conversation's files, her local chat her pictures from anywhere to look at,
+  `your_pictures_from_program`); where it may not (a home turn a note from outside opened), only the turn's own
+  conversation's. No list is searched by another conversation's name.
 - **Going out.** `errand` takes a picture or a file, `visit` a picture: one the picking turn may read and may send
   there; refused with `ACCESS_DENIED_SEND`, or `ARTIFACT_NOT_FOUND` for one that does not exist.
 
@@ -1103,7 +1108,7 @@ does not declare `voice_in` keeps its placeholder.
 
 ### Reading images
 
-`read_image` (both brains) takes a reference, a stored image's `artifact_id`, or a file path where the turn's or the task's origin may use `disk` ([Access](#access); home by default). Which references and pictures it reads is the origin's too ([Own files](#own-files)): any conversation's, of any age, where it may use `all_files`; else its own conversation's (references of its last 7 days), and the pictures this turn may send. It is offered only where the brain's route declares image input and `vision.image_hosts` is not empty.
+`read_image` (both brains) takes a reference, a stored image's `artifact_id`, or a file path where the turn's or the task's origin may use `disk` ([Access](#access); home by default). Which references and pictures it reads is the origin's too ([Own files](#own-files)): where it may use `all_files`, any conversation's stored picture of any age and any conversation's references of their last 7 days; else its own conversation's (references of its last 7 days), and the pictures this turn may send. It is offered only where the brain's route declares image input and `vision.image_hosts` is not empty.
 
 | `vision` setting | Default | Effect |
 |---|---|---|
@@ -1119,7 +1124,7 @@ does not declare `voice_in` keeps its placeholder.
 
 | Code | When |
 |---|---|
-| `IMAGE_NOT_PULLABLE`, `IMAGE_ATTACHMENT_NOT_IN_SCENE` | the reference cannot be read, or is not in this conversation's last 7 days (where the origin reads every conversation's: in none of them) |
+| `IMAGE_NOT_PULLABLE`, `IMAGE_ATTACHMENT_NOT_IN_SCENE` | the reference cannot be read, or is not in this conversation's last 7 days (where the origin reads every conversation's: in none of their last 7 days) |
 | `IMAGE_ARTIFACT_NOT_READABLE` | an `artifact_id` this turn may not read, or none: 「这个对话里没有这个文件。」 where it reads only its own conversation's |
 | `ACCESS_DENIED_DISK`, `IMAGE_TASK_DIR_UNAVAILABLE`, `IMAGE_FILE_NAME_DENIED`, `IMAGE_FILE_NOT_AVAILABLE` | a file read refused or missing |
 | `IMAGE_URL_MISSING`, `IMAGE_SOURCE_UNAVAILABLE` | no link or file to read from |
@@ -1153,7 +1158,7 @@ A file goes to a group as its own message: speak's `file` part names a file a ta
 
 A file someone sends her is offered by ref and read only when she asks: `received_file`, one tool for both halves (her turn's scene, or the task's binding). Code: `src/asuna/received_files.py`.
 
-- **Offer.** A file on a platform line gets a note under the line: `（文件 ref：att-…，45.0 KB）`, or why it is not read: no link, a platform that declares no `FILE_HOSTS`, a name the first version does not open (archives, PDF, Office, media, programs: `received_files.NOT_OPENED`), a declared size over 1 MiB, a link off the platform's file hosts. A ref is found among the newest 8 files and pictures of the last 50 messages others sent in each conversation in reach, or among all of those of its last 7 days (there the listing's 8 and 50 do not apply, the cap of 8 items in one message still does), the same fence and window as pictures; where the origin may use `all_files`, in any of her conversations, of any age.
+- **Offer.** A file on a platform line gets a note under the line: `（文件 ref：att-…，45.0 KB）`, or why it is not read: no link, a platform that declares no `FILE_HOSTS`, a name the first version does not open (archives, PDF, Office, media, programs: `received_files.NOT_OPENED`), a declared size over 1 MiB, a link off the platform's file hosts. A ref is found among the newest 8 files and pictures of the last 50 messages others sent in each conversation in reach, or among all of those of its last 7 days (there the listing's 8 and 50 do not apply, the cap of 8 items in one message still does), the same fence and window as pictures; where the origin may use `all_files`, in any of her conversations.
 - **Fetching.** Only on `do=read`, only the item's own `https` link on the hosts its channel kind declares (`FILE_HOSTS`; NapCat: `.ftn.qq.com`), redirects included; at most 1,048,576 bytes counted as they are read, the bytes in memory until judged. A wait of 20 s without data ends a fetch, and after 20 s it ends at the next piece (a host that drips can hold it about 40 s). A fetch is a best attempt: a link the platform no longer serves is said once, in words.
 - **Judging.** A BOM decides the encoding; else a program or other binary is refused and never stored (`名字是 .txt，内容却是Windows 程序`); else strict UTF-8; else GB18030 with at most 1 control character per 1,000; else `编码没认出来`. Every answer carries `marks`: caution always (`这个文件是<sender>发来的…`), and runnable for a script's extension or a text starting with `#!`. The text comes after a fixed line saying it is the sender's material.
 - **Reading.** One page per call: up to 200 lines and 6,000 characters, counted on the decoded text (a line ends at `\r\n`, `\n` or `\r`); `page` goes to any page, `find` gives the count of matches (Latin letters in either case) and the first 5 pages holding one, with the line. `life` says when the bytes go and how the ref is found.

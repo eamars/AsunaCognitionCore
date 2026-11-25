@@ -490,8 +490,8 @@ def reach(store, where, config, origin):
 
 
 def found(store, where, config, ref, origin, by=None):
-    """(entry, row, scopes): the item a ref names among the files in reach (the picture fence: of the last REF_DAYS
-    days in this conversation, of any age in every conversation where the origin reads them all), and its stored row;
+    """(entry, row, scopes): the item a ref names among the files of the last REF_DAYS days in reach (the picture
+    fence: this conversation's, or every conversation's where the origin reads them all), and its stored row;
     or a kept file's own row, whose ref never ends. Neither: not found, as a ref outside the fence is, and a ref of
     another conversation is recorded apart. Work that may read no file is refused by the table."""
     from . import access, own_files
@@ -649,7 +649,7 @@ RECEIVED_FILE_TOOL = {
     'name': TOOL_NAME,
     'description': ('读别人发来的文件（文本类，1 MiB 以内）。do=read：ref 照抄文件旁标的；第一次读从平台拉下来，每次一页，'
                     'page 翻页，find 找一个词（拉丁字母不分大小写）。拉下来的 3 天后删；keep 留下（why 写为什么），let_go 放下，kept 列出留着的。'
-                    '在家里也能读你任何一个对话里的文件，不限 7 天。'),
+                    '在家里也能读你别的对话里 7 天内的文件。'),
     'parameters': {'op': {'type': 'string', 'enum': list(OPS), 'description': '默认 read'},
                    'ref': {'type': 'string', 'description': '文件旁标的 ref'},
                    'page': {'type': 'integer', 'description': '第几页'},

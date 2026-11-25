@@ -993,7 +993,8 @@ class ContextBuilder:
             self.store.audit('scene:'+scene['_id'],'outbound.offer_unread',{'error':type(exc).__name__},scene['scope_key'])
             offer={'items':[],'note':outbound_media.OFFER_UNREAD}
         if offer:context['image_artifacts_from_program']=offer
-        elif session_class==visibility.OWNER_PRIVATE and _own_files.reach(self.store.config,origin)=='all':
+        elif (session_class==visibility.OWNER_PRIVATE and _access.allowed(self.store.config,origin,'list_files')
+              and _own_files.reach(self.store.config,origin)=='all'):
             # Looking does not wait on sending: where none of her pictures can go out (her local chat), she
             # still sees her own newest ones listed, and read_image comes with them (role_tools.her_pictures).
             from .vision import vision_capability as _vision

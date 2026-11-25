@@ -89,7 +89,7 @@ home outwards, so a row's setting is one of four levels: **home only**, **home a
 
 | Resource | Covers | home | home from outside | outside | Default level |
 |---|---|---|---|---|---|
-| `own_files` | this conversation's files (§4): read, save into them (web downloads included), list | ✓ | ✓ | ✓ | everywhere |
+| `own_files` | this conversation's files (§4): read, save into them (web downloads included, from landing 4), list | ✓ | ✓ | ✓ | everywhere |
 | `all_files` | every conversation's files by id, with no scope or age check while the bytes exist | ✓ | ✓ | ✗ | home and home from outside |
 | `list_files` | list or search other conversations' files | ✓ | ✓ | ✗ | home and home from outside |
 | `disk` | files on the computer outside her data (a disk path to `read_image`) | ✓ | ✗ | ✗ | home only |
@@ -163,9 +163,15 @@ levels go into `RUNTIME_API.md` as present behaviour.
   folder inside those files: what it saves there it registers into them.
 - **Outside sees only its own.** By id or by name within its own files; an id from elsewhere gets the same answer as
   an id that does not exist (§9), so nothing tells it that a file exists elsewhere.
-- **Home sees all.** Any row or ref by id, no scope, age or "is it hers" check while the bytes exist (`all_files`,
-  home and home from outside by default); a home conversation's lists as today, other conversations' items in them
-  only where the turn's origin may use `list_files`.
+- **Home sees all.** Any stored row by id, no scope, age or "is it hers" check while the bytes exist (`all_files`,
+  home and home from outside by default). "No age check" is for stored files: a message's attachment ref (`att-…`) of
+  any conversation is reachable for 7 days, as its pulled copy lives (`media_life.PULLED_DAYS`; past it there are
+  usually no bytes), so a miss never scans a conversation's whole history.
+- **What `list_files` decides now:** which home lists show other conversations' items. Where the turn's origin may use
+  it, a home conversation lists as before (the owner's chat its own and linked pictures and her pictures from
+  anywhere; a home group her pictures from anywhere and every conversation's files; her local chat her pictures from
+  anywhere to look at); where it may not (a home turn a note from outside opened), only its own conversation's.
+  Listing or searching by conversation name moves to landing 3 (§8 item 3).
 - **Sends** (`own_files.send_refused`). Into a home conversation is no crossing: whatever the work may read. Into an
   outside one: any file with `send_any` (home), any file into the conversation the work is for with `send_to_asker`
   (home from outside), that conversation's own with `send_own` (everywhere); else 「这个文件不归这个对话发。」
@@ -244,7 +250,8 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
 2. **Own files.** `own_files.py`; `shared_scopes` (added when the outbound message row is written, and at pick time
    for a going-out; removed by an erasure; the backfill for what was sent before); the outside fences narrowed to own
    files, an outside read of another conversation's file answered exactly as a missing one and recorded apart; home's
-   scope, age and "is it hers" checks removed (`all_files`); the sends by origin and target, the errand's and visit's
+   scope, age and "is it hers" checks removed for stored files (`all_files`; a message's attachment ref of any
+   conversation for 7 days); the sends by origin and target, the errand's and visit's
    picture by the same rule; the two offer lists by conversation (closes the 2026-11-24 case). All 14 rows apply and
    are drawn on the settings page (`IN_EFFECT` goes: no row is left out). Every refusal by the table leaves one audit
    row `access.denied` (the plugin's two, a tool not given for the origin and a local address, through `guard.task`),
@@ -252,7 +259,8 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
    (盘上的路径、跑命令、凭据、家里的网、公网、主人的集成、自我开发、画图、这个对话自己的文件、别的对话的文件、翻看别的
    对话的文件) and the column (家里、外面托、家里办、外面), every send 「这里不许：把这个文件发到这里（<column>）」, so a row
    the owner narrowed is seen at home before it is met again.
-3. **D1 and D3.** Stored ids in `received_file` and `offer_file`.
+3. **D1 and D3.** Stored ids in `received_file` and `offer_file`; listing and searching other conversations' files by
+   conversation name from home (§4, `list_files`).
 4. **D2.** `web_fetch` `save`.
 5. **D4.** A frame at a time.
 6. **R1 and R2** (R3 read first).

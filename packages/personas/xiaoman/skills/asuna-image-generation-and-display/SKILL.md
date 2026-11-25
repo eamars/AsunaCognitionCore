@@ -428,7 +428,7 @@ artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图
 | `ATTACHMENT_ARTIFACT_UNAVAILABLE` | artifact 行不存在，或不是 `state=DONE` / `storage=gridfs` |
 | `ATTACHMENT_SCOPE_DENIED` | 字节端点要的是「这条消息所在那个对话自己的」图（`outbound_media.py:serve`，`own_files.holds` 现算，不接受调用方传 scope）；被 `share`／`carry` 带进来的算它的，放行。给她的话在 `role_tools.py:turn_pictures`：「这张图不是这个对话能用的；换一张，或这次不带图。」|
 | `ATTACHMENT_NOT_AN_IMAGE` | 行上 `kind` 不是 image，或字节魔数不是 png/jpeg/webp/gif |
-| `ATTACHMENT_NOT_AN_IMAGE` | `speak` 的 `picture` 指向一张 `kind=file` 的东西（包括超上限的图）→ 回执「第 1 条 picture 这不是一张能发的图片；换一张，或这次不带图。」；判在 `outbound_media.py:accept_artifact` 的 kind 校验（`if item.get('kind') != ATTACHMENT_KIND:`，`ATTACHMENT_KIND = 'image'`） |
+| `ATTACHMENT_NOT_AN_IMAGE` | `speak` 的 `picture` 指向一张 `kind=file` 的东西（`web_fetch` 带 `save` 存的公网图超过 8 MiB 在落库时就被降成 `file`，撞这句；`kind=image` 而超上限撞的是 `ATTACHMENT_OVER_LIMIT` 那句）→ 回执「第 1 条 picture 这不是一张能发的图片；换一张，或这次不带图。」；判在 `outbound_media.py:accept_artifact` 的 kind 校验（`if item.get('kind') != ATTACHMENT_KIND:`，`ATTACHMENT_KIND = 'image'`） |
 | `ATTACHMENT_OVER_LIMIT` | 大小不在 `0 < size ≤ 8 MiB`（出站上限 8 MiB，与适配器同一口径） |
 | `ATTACHMENT_HASH_MISMATCH` | BlobStore 读回时按行内 sha 复核没过：字节和记录不一致 |
 

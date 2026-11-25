@@ -214,6 +214,7 @@ ATTACH = [
     ("attach_err_artifact_unavailable", "ATTACHMENT_ARTIFACT_UNAVAILABLE"),
     ("attach_err_scope_denied", "ATTACHMENT_SCOPE_DENIED"),
     ("attach_err_not_an_image", "ATTACHMENT_NOT_AN_IMAGE"),
+    ("attach_err_not_an_image_literal", "这不是一张能发的图片"),
     ("attach_err_over_limit", "ATTACHMENT_OVER_LIMIT"),
     ("attach_err_hash_mismatch", "ATTACHMENT_HASH_MISMATCH"),
     ("attach_outbound_size_cap", "8 MiB"),

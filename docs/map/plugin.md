@@ -189,14 +189,27 @@ Her web_fetch, underneath (ADR-026 §6): one fetch provider on DSH's web seam. A
 
 - def `FETCH_PROVIDER_ID`
 - def `FETCH_LIMITS`
+- def `SAVE_MAX_BYTES` — What a save may take (ADR-120 §11: 20 MB): the fetch's limits with its own byte cap and two minutes for the body.
+- def `SAVE_LIMITS`
+- def `WEB_FETCH_TIMEOUT_MS` — The tool's own budget: a save's two minutes and the worker's write after it.
+- def `SAVE_FIELD`
+- def `SAVE_TOO_BIG`
+- def `SAVE_NOT_THERE`
+- def `SAVE_EMPTY`
+- def `SAVE_HINT`
 - def `LAN_REFUSED` — What a public-only task is told when its address is on the local network or this machine, after DSH's line, unless its binding gives its own words (the access table's, for a task that is not an outside one).
 - def `withNetwork` — Run `fn` as a call of a task whose network is `network` (anything but 'any' is public); `refused`: the words a local address is refused with, LAN_REFUSED when none are given.
 - def `slimHtml` — The page without what is not its content: the head reduced to its title, no scripts, styles, SVG or templates.
 - def `isCloudflareChallenge` — Cloudflare's challenge: it answers 403 or 503 and loads its challenge platform.
+- def `bytesOf` — `Provider` reading a body as bytes, whatever its type (a save): its own address checks, pinning, redirects and deadline, and its byte cap (`readCapped`), which a body over is refused by, never cut.
 - class `SlimFetch`
   - `available`
+  - `through` — One request on this call's network: `open` in the scope `any`, else `inner`, whose refusal of a local address ends with the scope's words.
+  - `download` — A save's bytes (ADR-120 D2), on the same line as a page: { url, statusCode, contentType, bytes }.
   - `fetch`
 - def `applyFetch` — Registers the fetch provider on ctx.web for this plugin's lifetime; the profile pins it.
+- def `saving` — Whether a web_fetch call saves what it fetches: `save` is a file name (blank: the address's own) or true.
+- def `registerWebFetch` — The action brain's web_fetch: DSH's tool (schema, validation, output text, cards, guidance) with `save` (ADR-120 D2).
 
 ## `floor.js`
 

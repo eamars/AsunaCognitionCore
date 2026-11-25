@@ -4,8 +4,10 @@ import { formatFetchOutput } from '@deepseek-ai/dsh-tool-web';
 import { HttpFetchProvider } from '@deepseek-ai/dsh-web-fetch-http';
 import { createServer } from 'node:http';
 import { HttpFetchProvider as PublicFetchProvider, resolvePublicAddresses } from '../src/vendor/web-fetch-http-rc2.js';
-import { FETCH_LIMITS, FETCH_PROVIDER_ID, LAN_REFUSED, SlimFetch, isCloudflareChallenge, slimHtml,
-  withNetwork } from '../src/fetch.js';
+import { FETCH_LIMITS, FETCH_PROVIDER_ID, LAN_REFUSED, SAVE_EMPTY, SAVE_FIELD, SAVE_HINT, SAVE_LIMITS, SAVE_MAX_BYTES,
+  SAVE_NOT_THERE, SAVE_TOO_BIG, SlimFetch, WEB_FETCH_TIMEOUT_MS, bytesOf, isCloudflareChallenge, registerWebFetch,
+  slimHtml, withNetwork } from '../src/fetch.js';
+import { WebError } from '@deepseek-ai/dsh-web';
 
 const html = (status, content, url = 'https://page.example/a') => ({ url, statusCode: status, body: { kind: 'html', content }, truncated: false });
 const inner = result => ({ id: 'http', available: () => true, fetch: async () => result });
@@ -131,4 +133,101 @@ test('the tools/execute hook runs a tool body in its task\'s network scope; othe
   assert.match((await run('group')).body.content, /public/);
   CognitionCore.prototype.attachPreset.call(plugin, scope, 'character');
   assert.match((await run('home')).body.content, /public/);       // another lane never takes a session's network
+});
+
+
+// ── web_fetch's save (ADR-120 D2) ──
+const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000'
+  + '1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082', 'hex');
+const PDF = Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n');
+
+/** Files on this machine (loopback), as a LAN device or a public site would serve them. */
+async function files(t) {
+  const server = createServer((request, response) => {
+    const send = (status, type, body) => {
+      response.writeHead(status, { 'content-type': type, 'content-length': String(body.length) });
+      response.end(body);
+    };
+    if (request.url === '/p.png') return send(200, 'image/png', PNG);
+    if (request.url === '/r.pdf') return send(200, 'application/octet-stream', PDF);
+    if (request.url === '/missing') return send(404, 'text/html', Buffer.from('<p>no</p>'));
+    if (request.url === '/empty') return send(200, 'application/octet-stream', Buffer.alloc(0));
+    if (request.url === '/declared') return send(200, 'application/octet-stream', Buffer.alloc(2048));
+    response.writeHead(200, { 'content-type': 'application/octet-stream' });      // no length: read until the cap
+    response.write(Buffer.alloc(1500));
+    response.end(Buffer.alloc(1500));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+test('a save takes the bytes of any type on the task\'s line; the public one still refuses a local address', async t => {
+  const base = await files(t);
+  const picture = await withNetwork('any', () => new SlimFetch().download({ url: base + '/p.png' }));
+  assert.deepEqual([picture.statusCode, picture.contentType, Buffer.from(picture.bytes).equals(PNG)], [200, 'image/png', true]);
+  const pdf = await withNetwork('any', () => new SlimFetch().download({ url: base + '/r.pdf' }));
+  assert.ok(Buffer.from(pdf.bytes).equals(PDF));
+  for (const run of [fn => withNetwork('public', fn), fn => fn()]) {
+    await assert.rejects(run(() => new SlimFetch().download({ url: base + '/p.png' })),
+      error => error.code === 'WEB_BLOCKED_URL' && error.message.endsWith(LAN_REFUSED));
+  }
+  const slim = new SlimFetch();
+  assert.ok(slim.innerBytes instanceof PublicFetchProvider && slim.openBytes instanceof HttpFetchProvider);
+  assert.equal(SAVE_LIMITS.maxResponseBytes, SAVE_MAX_BYTES);
+  assert.equal(SAVE_MAX_BYTES, 20 * 1024 * 1024);
+});
+
+test('a body over the cap, declared or read, is refused in her words; nothing at the address keeps nothing', async t => {
+  const base = await files(t);
+  const small = { ...SAVE_LIMITS, maxResponseBytes: 1024 };
+  const slim = new SlimFetch(undefined, undefined, new (bytesOf(PublicFetchProvider))(small),
+    new (bytesOf(HttpFetchProvider))(small));
+  const save = path => withNetwork('any', () => slim.download({ url: base + path }));
+  for (const path of ['/declared', '/stream'])
+    await assert.rejects(save(path), error => error.code === 'WEB_FETCH_TOO_LARGE' && error.message === SAVE_TOO_BIG);
+  await assert.rejects(save('/missing'), error => error.message === SAVE_NOT_THERE.replace('%d', '404'));
+  await assert.rejects(save('/empty'), error => error.message === SAVE_EMPTY);
+});
+
+function toolScope(web) {
+  const sections = [], tools = new Map();
+  return { sections, tools, scope: {
+    systemPrompt: { section: section => sections.push(section), getSectionOrder: () => 2000 },
+    tools: { register: definition => tools.set(definition.name, definition), get: name => tools.get(name) },
+    get web() { throw new Error('cannot get property "web" without inject'); },
+    get: name => (name === 'web' ? web : undefined) } };
+}
+
+test('web_fetch with save hands the bytes to the worker; without it, it is DSH\'s, a binary body told it can be saved', async () => {
+  const handed = [];
+  const fetcher = { download: async request => ({ url: request.url + '?final', statusCode: 200, contentType: 'image/png',
+    bytes: new Uint8Array(PNG) }) };
+  const page = html(200, '<html><head><title>T</title></head><body><p>正文</p></body></html>');
+  const web = { fetch: async request => (request.url.endsWith('.png')
+    ? Promise.reject(new WebError('unsupported content type "image/png"', 'WEB_UNSUPPORTED_CONTENT_TYPE')) : page) };
+  const { scope, tools, sections } = toolScope(web);
+  registerWebFetch(scope, { fetcher: () => fetcher, save: async (exec, args, body) => {
+    handed.push({ call: exec.callId, args, body });
+    return { saved: '存好了：p.png（66 字节，PNG 图片，记在家里·私聊）', artifact_id: 'blob-' + 'a'.repeat(32) };
+  } });
+  const tool = tools.get('web_fetch');
+  assert.equal(tool.timeoutMs, WEB_FETCH_TIMEOUT_MS);
+  assert.equal(tool.parameters.properties.save.description, SAVE_FIELD);
+  const exec = { callId: 'c1', signal: new AbortController().signal };
+  const saved = await tool.execute({ url: 'https://example.org/p.png', save: true }, exec);
+  assert.equal(saved.artifact_id, 'blob-' + 'a'.repeat(32));
+  assert.deepEqual(handed[0].args, { url: 'https://example.org/p.png', save: true });
+  assert.ok(Buffer.from(handed[0].body.data, 'base64').equals(PNG));
+  assert.deepEqual([handed[0].body.url, handed[0].body.status, handed[0].body.content_type],
+    ['https://example.org/p.png?final', 200, 'image/png']);
+  assert.match(tool.output.render({ save: true }, saved)[0].text, /^\{"saved":"存好了：p\.png/);
+  assert.deepEqual(tool.output.presentationMeta({ save: true }, saved), {});
+  // Without save: DSH's text, unchanged; a body that is not text says it can be saved.
+  const read = await tool.execute({ url: 'https://example.org/a' }, exec);
+  assert.equal(tool.output.render({}, read)[0].text, formatFetchOutput(read, 200_000));
+  await assert.rejects(tool.execute({ url: 'https://example.org/p.png' }, exec),
+    error => error.code === 'WEB_UNSUPPORTED_CONTENT_TYPE' && error.message === 'unsupported content type "image/png"' + SAVE_HINT);
+  assert.equal(handed.length, 1);
+  assert.match(sections[0].text({ scope: undefined }), /^web_fetch returns external, untrusted page content/);
 });

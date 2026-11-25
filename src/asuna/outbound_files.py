@@ -400,11 +400,13 @@ def offer(store, scene, *, limit=MAX_OFFERED, origin='outside', own=None, picked
     rows = (artifact_records.of_kind(store, KIND, state='DONE', storage=artifact_records.STORED, by='created_at')
             if home else artifact_records.own(store, KIND, own, state='DONE', storage=artifact_records.STORED,
                                               by='created_at'))
+    from .downloads import saved
     picked = [picked] if isinstance(picked, str) else [item for item in picked or () if item]
     found = {row['_id']: row for row in artifact_records.by_ids(store, picked, storage=artifact_records.STORED).rows(
         fields=[*fields, 'kind', 'state'])} if picked else {}
+    # Picked, a file web_fetch saved is listed too (it is on no list until offered by its id).
     first = [found[item] for item in dict.fromkeys(picked) if item in found and found[item].get('kind') == KIND
-             and found[item].get('state') == 'DONE' and produced(found[item])
+             and found[item].get('state') == 'DONE' and (produced(found[item]) or saved(found[item]))
              and (home or own_files.holds(found[item], own))]
     items, listed = [_offered(row) for row in first], {row['_id'] for row in first}
     for row in rows.rows(newest_first=True, limit=200, fields=fields):

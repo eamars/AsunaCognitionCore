@@ -12,7 +12,8 @@ A copy that a lasting row still names (her shelf, the pool, a message that sent 
 
 A file a task registered to send (`outbound_files`) keeps its bytes `outbound_files.KEEP_DAYS` after it was last
 sent, or after it was registered when it never was, and while a message still on its way names it; then its bytes
-go and its row stays as the record, with `storage` `removed` and `bytes_removed_at`.
+go and its row stays as the record, with `storage` `removed` and `bytes_removed_at`. A picture or file `web_fetch` saved
+(`downloads`) lives as a task's file; a saved picture a lasting row names is kept, as every picture is.
 A file someone sent her (`received_files`) keeps its bytes `received_files.KEEP_DAYS` after it was last fetched or
 let go (`days_from`, else `created_at`); a kept one (`kept_at`) is not removed. Its row stays, as a task file's does.
 `sweep` deletes the rest once at start and then daily; it reports what it removed and never raises for one bad row.
@@ -34,6 +35,7 @@ POLICY = {
     'local-upload:': RECORD,     # a picture the owner sent her at home
     'task-file:': OFFERED,       # a file a task registered to send (outbound_files)
     'received-file:': RECEIVED,  # a file someone sent her, fetched when she read it (received_files)
+    'download:': OFFERED,        # a picture or file web_fetch saved (downloads): a task's file, as offer_file's are
 }
 
 
@@ -88,7 +90,9 @@ def _sweep_one(store, row, moment, cutoff, keep, going, removed):
     from .records import artifacts as artifact_records
     cycle = life(row)
     if cycle == OFFERED:
-        if row['_id'] in going or not _older(row.get('last_sent_at') or row.get('created_at'), cutoff[OFFERED], removed):
+        # A picture among them (one web_fetch saved) that a lasting row names is kept, as every such picture is.
+        if row['_id'] in going or row['_id'] in keep \
+                or not _older(row.get('last_sent_at') or row.get('created_at'), cutoff[OFFERED], removed):
             return
         _remove_bytes(store, row, moment, removed, 'files')
         return

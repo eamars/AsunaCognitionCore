@@ -386,6 +386,7 @@ The action brain's tasks, grants, schedules, sandbox, development and integratio
 - [`tasks`](../../src/asuna/tasks.py) — The action brain's tasks: `TaskService` claims, leases, cancels and hands each result back to her, `ToolBroker` checks and runs every tool call a task makes, and `Executor` runs one task in its workspace.
 - [`access`](../../src/asuna/access.py) — Who may use what: the access table.
 - [`own_files`](../../src/asuna/own_files.py) — A conversation's own files (ADR-120 §4), the one answer every read, list and send fence asks.
+- [`downloads`](../../src/asuna/downloads.py) — web_fetch's save (ADR-120 D2): an address's bytes into the task's folder and its conversation's own files.
 - [`action_tiers`](../../src/asuna/action_tiers.py) — ADR-075: her action brain in two tiers, 低 and 高, told by what each can do, never by model, provider, price or how it is run.
 - [`machine_words`](../../src/asuna/machine_words.py) — What a conversation outside home reads of an action brain's report holds nothing of the machine (ADR-050, ADR-098).
 - [`local_roots`](../../src/asuna/local_roots.py) — No local root of this computer reaches her character brain (ADR-098): the root table and its two directions.

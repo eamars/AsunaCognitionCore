@@ -596,13 +596,13 @@ def without_text(data):
     return b''.join(out) if at == len(data) else data
 
 
-def register_imported_image(store, scope_key, data, *, source=None):
+def register_imported_image(store, scope_key, data, *, source=None, fields=None):
     """把刚导入的字节登记成这个 scope 里的 image artifact；不是图片就什么都不做。
 
     哈希与格式都以宿主自己从字节算出来的为准（BlobStore.put 自己算 sha 并回读复核），行动侧
     声明的 nothing 都不参与。超过出站上限、scope 不认识、存储写失败都不登记，只如实回报原因——
     文件已经写进工作区了，不能因为登记失败把一次成功的导入判成失败。返回 None 表示「这不是图，
-    没什么可报」。
+    没什么可报」。``fields``：行上再记的几项（web_fetch 存下的图记它的名字与任务，downloads.py）。
     """
     media_type = sniff_media_type(data)
     if media_type is None:
@@ -617,7 +617,7 @@ def register_imported_image(store, scope_key, data, *, source=None):
     try:
         from .blobs import BlobStore
         stored = BlobStore(store).put(bytes(data), scope_key, ATTACHMENT_KIND, media_type=media_type,
-                                      source_ids=[source[:200]] if source else ())
+                                      source_ids=[source[:200]] if source else (), fields=fields)
     except Exception as exc:
         reason = str(exc).split(':')[0].split(' ')[0].strip() or 'ARTIFACT_REGISTER_FAILED'
         return {'registered': False, 'reason': reason[:80], 'media_type': media_type, 'bytes': size,

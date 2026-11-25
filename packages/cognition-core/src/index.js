@@ -9,7 +9,6 @@ import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { argsRefusal } from './tool-args.js';
 import * as todoTool from '@deepseek-ai/dsh-tool-todo';
-import * as webTool from '@deepseek-ai/dsh-tool-web';
 import * as skillTool from '@deepseek-ai/dsh-tool-skill';
 import * as skillFilesystem from '@deepseek-ai/dsh-skill-filesystem';
 import SkillService from '@deepseek-ai/dsh-skill';
@@ -33,7 +32,7 @@ import { withoutWorkingDirectory } from './contexts.js';
 import { marked } from './marks.js';
 import { NativeChildren } from './children.js';
 import { applySearch, registerWebSearch } from './search.js';
-import { LAN_REFUSED, applyFetch, withNetwork } from './fetch.js';
+import { LAN_REFUSED, applyFetch, registerWebFetch, withNetwork } from './fetch.js';
 import { renderSvg } from './svg.js';
 import { carrySession, lastSummary, overflowed } from './carry.js';
 import { TurnEnds, summaryAsNextRequest } from './compaction.js';
@@ -1767,8 +1766,16 @@ export class CognitionCore {
     // registered in this action scope. Do not pass scoped names as globals.
     scope.tools.restrict({ allow: [] });
     if (allowed.has('todo_write')) await scope.plugin(todoTool, { allowParallelInProgress: true });
-    // web_fetch is DSH's; web_search is DSH's tool with a `detail` choice and 10 sources (search.js, ADR-026).
-    if (allowed.has('web_fetch')) await scope.plugin(webTool, { search: false, fetch: true });
+    // web_fetch is DSH's tool with `save` (fetch.js, ADR-120 D2): a save's bytes go to the worker beside the call's
+    // arguments (`body`, base64 in the one line; never in the call's record), which writes and registers them.
+    // web_search is DSH's tool with a `detail` choice and 10 sources (search.js, ADR-026).
+    if (allowed.has('web_fetch')) registerWebFetch(scope, { web: () => this.web, fetcher: () => this.fetcher,
+      save: async (exec, args, body) => {
+        const value = await toolReply(() => this.worker.call('tool', { session_id: agent.session.id,
+          operation: this.state(agent.session.id).current?.token, call_id: exec.callId, tool: 'web_fetch', args, body }));
+        if (value?.asuna_guard === true) throw this.deny(agent.session.id, exec.callId, value.denied);
+        return value;
+      } });
     if (allowed.has('web_search')) registerWebSearch(scope, { fetchEnabled: allowed.has('web_fetch'), web: () => this.web,
       zone: { timezone: binding.timezone ?? null, utc_offset_minutes: binding.utc_offset_minutes } });
     if (allowed.has('skill') && binding.skill_directories?.length) {
@@ -1829,8 +1836,9 @@ export function apply(ctx, config = {}) {
   new AsunaApi(ctx, core);
   // Her web_search tries the configured backends in order (ADR-026); the profile pins this provider on ctx.web.
   applySearch(ctx, core);
-  // web_fetch reads whole pages and drops what is not content before DSH converts them (ADR-026 §6).
-  applyFetch(ctx);
+  // web_fetch reads whole pages and drops what is not content before DSH converts them (ADR-026 §6), and saves an
+  // address's bytes on the same provider (ADR-120 D2).
+  applyFetch(ctx, core);
   // ADR-012 §8: /heartbeat gives her one heartbeat now, through DSH's own command surface (no model message),
   // and says when the next scheduled one is due. Her rhythm stays program-owned; this only knocks early.
   ctx.inject(['commands'], child => child.effect(() => child.commands.register({

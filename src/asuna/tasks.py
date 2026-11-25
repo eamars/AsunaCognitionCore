@@ -794,8 +794,11 @@ DRAWING_TOOLS = ('generate_image', 'render_svg', 'private_words')
 
 
 def needs(tool, args=None):
-    """The rows of the access table a call of this action tool needs."""
+    """The rows of the access table a call of this action tool needs (a web tool's network aside: network_of)."""
     tool = str(tool)
+    if tool == 'web_fetch':
+        from .downloads import saves
+        return ['own_files'] if saves(args) else []       # its save writes into this conversation's files (D2)
     if tool == 'sandbox_run':
         return ['commands', *(['credentials'] if (args or {}).get('credentials') else [])]
     if tool in DRAWING_TOOLS:
@@ -818,8 +821,8 @@ def network_of(config, origin):
 def barred(config, origin, tool, args=None):
     """The row of the access table that bars this call for a task of this origin, or None."""
     from . import access
-    if tool in WEB_TOOLS:
-        return None if network_of(config, origin) else 'internet'
+    if tool in WEB_TOOLS and not network_of(config, origin):
+        return 'internet'
     return next((row for row in needs(tool, args) if not access.allowed(config, origin, row)), None)
 
 
@@ -887,7 +890,9 @@ class ToolBroker:
         protected=[Path(workspace)/p for p in grant.get('read_only_paths',[])]
         self.bindings[session]=(task,Sandbox(workspace,protected,allowed_root=Path(grant['workspace']),config=self.store.config))
 
-    def call(self,session,call_id,tool,args):
+    def call(self,session,call_id,tool,args,body=None):
+        """One call of an action tool for the task bound to `session`. `body`: what the plugin hands over beside the
+        arguments, never in the call's record (web_fetch's saved bytes)."""
         from .tool_args import normalize
         from . import param_names
         args,old_names=param_names.inbound(tool,args)  # the new names mapped to what the tool reads (ADR-060)
@@ -947,7 +952,7 @@ class ToolBroker:
         # lines) and every cancellation needs it. A later cancellation still fences new calls; recording this accepted
         # call cannot revive the task.
         with (nullcontext() if integration_gated(tool) or tool in DEVELOPMENT_NAMES or tool=='ask_character'
-                  or tool in ('persona_job_run','generate_image','render_svg','private_words','sandbox_run','offer_file') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME or tool==RECEIVED_FILE_TOOL_NAME else self.service.lock):
+                  or tool in ('persona_job_run','generate_image','render_svg','private_words','sandbox_run','offer_file','web_fetch') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME or tool==RECEIVED_FILE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
                 if not task.get('development_grant'):raise Denied(capability_refusal(self.store,task,tool))
@@ -1045,6 +1050,15 @@ class ToolBroker:
                 # The bytes stream into storage in the task's own scope (its binding, not a parameter); a large file
                 # takes a while, so no lock is held across the copy.
                 result=outbound_files.register(self.store,task,sandbox.task_dir,args)
+                with self.service.lock:self.service.valid(task)
+            elif tool=='web_fetch':
+                # web_fetch's save (ADR-120 D2): the plugin fetched the bytes on the task's network (fetch.js) and hands
+                # them over beside the arguments; they are written into the task folder and registered in its own
+                # conversation, without the lock (up to 20 MB). Without save web_fetch never comes here.
+                from . import downloads
+                if not downloads.saves(args):
+                    raise Denied('UNKNOWN_TOOL: web_fetch 不带 save 时不在这里执行；重试也一样，换用工具清单里的工具')
+                result=downloads.save(self.store,task,sandbox.task_dir,args,body)
                 with self.service.lock:self.service.valid(task)
             elif tool=='sandbox_run':
                 if args.get('credentials'):

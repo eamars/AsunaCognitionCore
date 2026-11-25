@@ -1447,7 +1447,10 @@ class BusinessWorker:
             try:
                 with self.calls.timed('action', args['call_id'], args['tool'], args['args'], task,
                                       failed=(ToolFailed, TaskGuarded)):
-                    result = self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args'])
+                    # `body`: what the plugin hands over beside the arguments (web_fetch's saved bytes, base64), never
+                    # in the call's record.
+                    result = self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args'],
+                                                  body=args.get('body'))
             except TaskGuarded as exc:
                 return {'asuna_guard': True, 'denied': str(exc)}   # the plain sentence, returned as it is (ADR-135 D8)
             return local_time.for_model(result, local_time.her_zone(self.app.store))

@@ -49,7 +49,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
   - `give_up_handback` — Nothing more is tried: the result stays stored, she sees it could not be handed over, the developer is told.
   - `close_orphan` — A run whose lease expired while no one runs it (ADR-030 D2): closed as not finished, handed back as such.
 - def `capability_refusal` — The one sentence for a tool this task was not given: who gets it, where this task came from, retrying won't help.
-- def `needs` — The rows of the access table a call of this action tool needs.
+- def `needs` — The rows of the access table a call of this action tool needs (a web tool's network aside: network_of).
 - def `network_of` — Where a task of this origin may fetch: 'any' (the owner's own network too), 'public', or None (nowhere).
 - def `barred` — The row of the access table that bars this call for a task of this origin, or None.
 - def `granted` — The tools this task may use now: those given when it was made that the table still allows its origin.
@@ -60,7 +60,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
   - `specs`
   - `catalogue` — Every tool the action brain can be given.
   - `bind`
-  - `call`
+  - `call` — One call of an action tool for the task bound to `session`.
   - `close`
 - def `files_left` — The files in a task's folder changed since it started, newest first, as she reads them: path under /task, size, the first 16 hex digits of the sha256.
 - def `workspace_lock_path` — The lease file that keeps two task workers out of one workspace.
@@ -108,6 +108,17 @@ A conversation's own files (ADR-120 §4), the one answer every read, list and se
 - def `send_refused` — The row of the table that bars work of `origin` (whose own conversation's scopes are `own`) from sending a stored `row` into `place` (a scene row), or None when it may.
 - def `refuse_send` — The send refusal, recorded: one sentence whatever row refused it (§9, her 0668).
 - def `carry` — A going-out's picture or file (a visit's or an errand's `artifact_id`; `kinds` it may be), checked and shared with the place it goes to: a stored one the picking turn may read and may send there (`send_refused`), which is that place's own f
+
+## `downloads`
+
+[src/asuna/downloads.py](../../src/asuna/downloads.py)
+
+web_fetch's save (ADR-120 D2): an address's bytes into the task's folder and its conversation's own files.
+
+- def `saves` — Whether a web_fetch call saves what it fetches: `save` is a file name (blank: the address's own) or true.
+- def `saved` — A row web_fetch saved.
+- def `name_for` — The file name: `save`'s when it gives one, else the address's last part, made safe, with the extension of its type when it has none.
+- def `save` — web_fetch with `save`: the fetched bytes (`body`: the plugin's {url, status, content_type, data (base64)}) written to /task/downloads/ and registered in the task's own conversation.
 
 ## `action_tiers`
 

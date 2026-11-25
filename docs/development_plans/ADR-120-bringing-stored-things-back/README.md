@@ -205,7 +205,7 @@ levels go into `RUNTIME_API.md` as present behaviour.
 | # | Direction | How | Resources |
 |---|---|---|---|
 | D1 | A stored thing's body by id | `received_file` (both brains) takes a `blob-` id as `ref` (kinds `image`, `file`, `received_file`), through `own_files.stored`: outside another conversation's id answers as a missing one (`RECEIVED_FILE_NOT_FOUND: 这个对话里没有这个文件。`) and is recorded (`all_files`). `do=read`: a received file, or a task's file that is text within 1 MiB, in pages as today; anything else said for what it is (kind, type, size), a picture with `read_image`, and how to copy it. `do=copy` (the action brain): any kind into `/task/stored/` with the existing copy (name cleaning, the deny-execute folder, copy tracking; `drop_copies` now takes the copies of all three kinds). `read_file` reads the copy; `read_image` of a `/task` path is the `disk` row (home only), so outside a picture is read by its id. | `own_files` or `all_files` |
-| D2 | A public URL's bytes into `/task` | `web_fetch` gains `save`: a body of any type is written to `/task/downloads/<name>` (up to 20 MB, the type from its bytes, sha256 returned), registered into this conversation's files; the network line stays `fetch.js`'s, now set by `internet`/`local_network`. | `own_files`, `internet` |
+| D2 | A public URL's bytes into `/task` | `web_fetch` (the core registers DSH's tool with one more argument, `fetch.js` `registerWebFetch`) gains `save`, a file name or `true`: a body of any type is read as bytes on the same line as a page (`SlimFetch.download`: the same two providers, the task's scope, the same refusal of a local address), at most 20 MiB (over it, declared or read, refused and nothing kept), and handed to the worker with the call (`ToolBroker.call`'s `body`, base64 in the one worker line, never in its record). The worker (`downloads.py`) writes it to `/task/downloads/<name>` (the name made safe as a received copy's, ` (2)` for a name that exists), reads its type from the bytes and registers it in the task's conversation (source `download:`, kept as a task file is): a picture as an `image` row, anything else a `file` row, neither listed until `offer_file` offers it by id. She reads 「存好了：…」 with its id, its path and the sha256. Without `save` nothing changes, and a body that is not text is told it can be saved. | `own_files`, `internet` (or `local_network`) |
 | D3 | An old picture or file onto this turn's list | `offer_file` takes `artifact_id` (a stored id) in place of `path` (`outbound_files.offer_stored`): readable as D1, sendable into the task's conversation (`own_files.send_refused`, else 「这个文件不归这个对话发。」), then shared into it. A picture (kind `image`) goes on the picture list, a task's file on the file list as it is, a received file is registered as a file of the task (its sender kept). The turn about the task lists what the task offered first on both blocks, whatever its age (`outbound_files.offered_by`, from the task's done `offer_file` calls, passed as `picked` with a going-out's pick). At home the list is a convenience, not a gate: a home turn's `speak` picture and file parts take any id it may read and send there; outside, the list gate stays as it was. | `send_own`, `send_to_asker` or `send_any` |
 | D4 | A viewed frame as a picture | `read_image` of a video takes `at` (seconds): the video child cuts that one frame (`media_children`), stored as this conversation's picture (source prefix `frame:`, 7 days unless sent); the grid stays as it is. It is then offered like any picture (D3). | `own_files`, then a send row |
 
@@ -285,7 +285,20 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
    removed (`media_life._moment`), so in the code every answer of a read received file, every `let_go`, and every
    `kept` list or over-quota `keep` with a kept file in it raised ImportError (read from the code, not from her
    records); fixed in its own commit with a test.
-4. **D2.** `web_fetch` `save`.
+4. **D2.** `web_fetch` `save` (§5). The action brain's `web_fetch` is now the core's registration of DSH's tool (its
+   schema, output text, cards and guidance kept; DSH's 30-second budget raised to 150 for a save's two minutes) with
+   `save`, a string or a boolean: a name when she has one, `true` when the address's own will do. The bytes cross
+   from the plugin to the worker in the one call that saves them, base64, as the existing byte paths cross (a persona
+   job's snapshot, up to 8 MiB): at most 20 MiB, about 28 million characters, which the worker's reader thread reads
+   and parses in about 64 ms (measured 2026-11-25 on this machine, 20 MiB of random bytes read from an in-memory
+   stream, the pipe itself not timed); the decode and the writes
+   run on the call's own thread. The table decides in the broker (`needs`: `save` needs `own_files`, the network as
+   before), after the fetch: a save refused only by a narrowed `own_files` fetches its bytes and keeps nothing. A
+   saved picture's bytes live as a task file's (`media_life.POLICY` `download:`); one a message names is kept, as every
+   picture is (the sweep's task-file branch asks the same `named` rows the picture branches ask). Cost: the action
+   brain's `web_fetch` as it is sent +175 characters (242 -> 417, measured on the two registrations). Not built: the
+   `/task/downloads/` folder is a folder of the task like any other (no deny-execute entry, its files not removed with
+   the stored bytes), and the address's `Content-Disposition` name is not read.
 5. **D4.** A frame at a time.
 6. **R1 and R2** (R3 read first).
 7. **§6**, the classifier's line.

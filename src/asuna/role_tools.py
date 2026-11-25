@@ -2842,18 +2842,11 @@ class RoleTools:
     # ── her own records ─────────────────────────────────────────────
     def _group_named(self, ep, name):
         """The group a home turn names, as her review names places; refused with the names there are."""
-        from .people import People
-        people = People(self.store, ep['persona'])
-        wanted = ' '.join(str(name).split())
-        groups = {}
-        for scene in scene_records.of_kind(self.store, 'group'):
-            groups.setdefault(people.scene_title(scene), []).append(scene['_id'])
-        if len(groups.get(wanted) or ()) == 1:
-            return groups[wanted][0]
-        if wanted in groups:
-            raise Refused('叫「%s」的群不止一个，分不出是哪一个；这一次写不了。' % echoed(name), ['GROUP_AMBIGUOUS'])
-        raise Refused('没有叫「%s」的群；group 照抄这些里的一个：%s。' % (echoed(name), '、'.join(sorted(groups)) or '（没有群）'),
-                      ['GROUP_UNKNOWN'])
+        from . import places
+        found, code = places.group_named(self.store, ep['persona'], name)
+        if code:
+            raise Refused(places.group_refusal(self.store, ep['persona'], name, code, 'group', '写不了'), [code])
+        return found
 
     def tool_write_document(self, ep, call_id, args):
         from .render import budget_gate

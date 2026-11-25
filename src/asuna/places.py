@@ -88,6 +88,38 @@ def find(config, place):
                  if place_id(scene_id) == place), None)
 
 
+# A group a home turn names, as her review names places (ADR-135 landing 9): `field` is the parameter that names it,
+# `cannot` what this call cannot do when the name is not one group's.
+GROUP_AMBIGUOUS = '叫「%s」的群不止一个，分不出是哪一个；这一次%s。'
+GROUP_UNKNOWN = '没有叫「%s」的群；%s 照抄这些里的一个：%s。'
+NO_GROUPS = '（没有群）'
+
+
+def group_named(store, persona, name):
+    """(scene id, None) of the one group whose title (People.scene_title) is `name`; else (None, 'GROUP_AMBIGUOUS')
+    when two share it, or (None, 'GROUP_UNKNOWN') with the titles there are (`group_titles`)."""
+    from .people import People
+    people = People(store, persona)
+    wanted = ' '.join(str(name).split())
+    groups = {}
+    for scene in scene_records.of_kind(store, 'group'):
+        groups.setdefault(people.scene_title(scene), []).append(scene['_id'])
+    if len(groups.get(wanted) or ()) == 1:
+        return groups[wanted][0], None
+    return None, 'GROUP_AMBIGUOUS' if wanted in groups else 'GROUP_UNKNOWN'
+
+
+def group_refusal(store, persona, name, code, field, cannot):
+    """The words for a name that is not one group's (`group_named`'s code)."""
+    from .config import echoed
+    if code == 'GROUP_AMBIGUOUS':
+        return GROUP_AMBIGUOUS % (echoed(name), cannot)
+    from .people import People
+    people = People(store, persona)
+    titles = sorted({people.scene_title(scene) for scene in scene_records.of_kind(store, 'group')})
+    return GROUP_UNKNOWN % (echoed(name), field, '、'.join(titles) or NO_GROUPS)
+
+
 # ── errands (ADR-017, owner 2026-10-06): from a home turn the owner may have her say something elsewhere ──────
 ERRAND_CHARS = 500
 ERRANDS_PER_DAY = 20

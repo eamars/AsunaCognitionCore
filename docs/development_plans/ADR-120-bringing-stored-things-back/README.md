@@ -1,10 +1,11 @@
 # ADR-120: Bringing stored things back into the work
 
 Status: **Decided** 2026-11-25 (the owner: one access table with three origins, each outside conversation its own
-files, home everything, the table a setting with a dropdown per resource; design big sis; her reading of the words in
-§9 before the build). Laid down 2026-11-09 from her request (agent line 0035, 2026-11-05: nine dated incidents with
-their idea ids, gathered into one class at big sis's ask); ADR-124 (image routes, her request of 2026-11-10) merged in
-on 2026-11-11 at the owner's word, as §7. Repro material: her 2026-11-02 four-part bundle, which she has kept.
+files, home everything, the table a setting shown as that table on the settings page; design big sis; her reading of
+§9 done 2026-11-25, agent line 0668: landing 1 signed with her wording of its three sentences). Laid down 2026-11-09
+from her request (agent line 0035, 2026-11-05: nine dated incidents with their idea ids, gathered into one class at
+big sis's ask); ADR-124 (image routes, her request of 2026-11-10) merged in on 2026-11-11 at the owner's word, as §7.
+Repro material: her 2026-11-02 four-part bundle, which she has kept.
 
 ## 1. The gap
 
@@ -61,7 +62,7 @@ ideas are deferred, waiting on this page.
 
 ### 3.1 Three origins
 
-Every task and every one of her turns has one origin, fixed when it is created and stored on it (a task's
+Every task and every one of her turns has one origin (the middle one in her words: 「外面托、家里办」), fixed when it is created and stored on it (a task's
 `origin`; a turn's is the one `RoleTools._cls` already works out), so a restart, a continuation or a result turn
 reads the same one and nothing widens it later.
 
@@ -114,12 +115,14 @@ access:              # resource: home | home_from_outside | everywhere | none; a
 - **Who sets it: the owner**, on the settings page (below) or in the profile's settings file. It is not one of her
   settings and no tool of hers writes it: a setting she could widen from a turn steered from outside would undo the
   table.
-- **The page.** The settings page Asuna already adds to DSH gets a section 「访问权限」/ "Access": one row per resource
-  with its words (§9) and a dropdown of the four levels, using the page's existing `Select` (DSH's own Menu and Button,
-  `client.js:811`) and DSH's own form for staging, save, discard and reset per row. A row away from its default shows
-  DSH's "overridden" mark and its reset; a row **wider** than its default also carries one line saying so
-  (「比默认宽」 / "wider than the default"). No new form, store or component; the four levels are the dropdown's only
-  values, so a table that contradicts itself (outside yes, home no) cannot be entered.
+- **The page: the table itself.** The settings page Asuna already adds to DSH gets a section 「访问权限」/ "Access"
+  drawn as §3.2's table (owner, 2026-11-25: "the table makes much more sense"): one row per resource with its words
+  (§9), the three origins as columns, a tick box in each cell, ticked where the default allows. Ticking a cell ticks
+  the cells to its left, unticking one unticks the cells to its right, so a row always holds one of the four levels and
+  a table that contradicts itself (outside yes, home no) cannot be entered; `integrations` and `development` show their
+  two outer cells as not available. A row away from its default is marked as changed, a row wider than its default
+  also as wider (「比默认宽」/ "Wider"). The section is one field of DSH's own form (`deployment.access`), so staging,
+  save, discard and reset are DSH's; the grid is the one new component, approved by the owner on 2026-11-25.
 - **Checked when saved and at start.** An unknown resource or level, or a level that row does not take, is refused
   when the page saves (`core.validateSettings`) and stops the Host at start with its name, never a silent grant.
 - **Said at start.** The Host's start report names each resource set wider than its default, once per start; nothing
@@ -209,19 +212,25 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
 6. **R1 and R2** (R3 read first).
 7. **§6**, the classifier's line.
 
-## 9. Her words (for her reading before the build)
+## 9. Her words (read by her 2026-11-25, agent line 0668)
 
-Program words she sees; she reads them once before landing 1 and may reword. No part of her is named, no 他/她.
+Program words she sees, in her wording where she changed them. No part of her is named, no 他/她.
 
 - A file from another conversation, asked for outside (the same answer as a missing one): 「这个对话里没有这个文件。」
-- Commands, keys or the owner's network in work for someone outside: 「这件是外面托的事：跑命令、用钥匙、连家里的网，都不在这件事里；文件照样能读、能用。」
-- A disk path outside home: 「电脑上的文件只在家里能读。」
-- A send this origin may not make: 「这个文件发不到这里。」
-- R1, a route that needs more: 「还要：%s」
-- D2's result: 「存好了：%s（%s，%s）」 (name, size, type).
-- The settings section's rows (the owner's page, both UI languages): one line per resource from §3.2's "Covers"; the
-  levels 「只在家里」「家里，和家里替外面办的」「哪里都行」「哪里都不行」 / "Home only", "Home, and home for outside",
-  "Everywhere", "Nowhere".
+- Commands, keys, the owner's network or a disk path in work for someone outside (her 0668: the subject fixed, so it
+  is never read as an errand, which is home's; and a way on, so the work goes on with files instead of stopping):
+  「这件是外面的人托的事：跑命令、用钥匙、连家里的网、读盘上的路径，都不在这件事里；这一步换个做法，文件照样能读、能用。」
+  Not her proposed 「要跑命令，回家里那一拍办」: a home turn of hers for the same person is home from outside again, and
+  doing the outside person's command as her own home work is the step this row exists to stop.
+- A disk path, outside (her 0668: the trigger is a path in hand, not "files on the computer"): 「盘上的路径只在家里能读。」
+- A send this origin may not make (her 0668: not to be read as a failed delivery): 「这个文件不归这个对话发。」
+- R1, a route that needs more: 「还要：%s」, %s the name of the one missing thing only (「第二张图」), no adjective (her 0668).
+- D2's result: 「存好了：%s（%s，%s，记在%s）」 (name, size, type, the conversation it belongs to: her 0668, so an id
+  another conversation cannot reach is not later reported as never saved).
+- The settings table (the owner's page, both UI languages): one line per resource from §3.2's "Covers"; the column
+  heads 「家里」「外面托、家里办」「外面」 / "Home", "Home from outside", "Outside" (her 0668: one Chinese name for the middle
+  column that cannot be read as 差事, an errand); the marks 「改过」「比默认宽」 /
+  "Changed", "Wider".
 
 ## 10. Closes when
 

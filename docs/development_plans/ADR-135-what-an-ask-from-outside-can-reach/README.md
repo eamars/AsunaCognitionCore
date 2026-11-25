@@ -15,6 +15,8 @@ word: "I approve in principle. … I'd approve all if both of you agrees. Unlike
 approval from [her] this time." Everything in §1 was read 2026-11-24 from the code on `main` and from her profile,
 read-only: rows by state, kind, class and time, program text, and counts. No model was called.
 
+Found after (2026-11-25, ADR-120 §2): the guard row `_image_path` checks `args['path']`, which `read_image` never takes (a path arrives as `ref`), so it never fires; the fence in `vision.py:703-713` does. Nothing was exposed; the row is removed in ADR-120 landing 1.
+
 The texts of all 28 tools are in [tool-texts.md](tool-texts.md).
 
 ## The ask

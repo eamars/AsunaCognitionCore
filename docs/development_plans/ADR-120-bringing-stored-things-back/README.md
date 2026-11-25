@@ -7,6 +7,11 @@ from her request (agent line 0035, 2026-11-05: nine dated incidents with their i
 big sis's ask); ADR-124 (image routes, her request of 2026-11-10) merged in on 2026-11-11 at the owner's word, as §7.
 Repro material: her 2026-11-02 four-part bundle, which she has kept.
 
+Landing 1 installed 2026-11-25 18:38 (`ae4b97ae3e35`): the table, origins on tasks and turns, the eight rows of
+`access.IN_EFFECT`, the settings table; her §9 sentence for work from outside without 「换个做法」 (agent line 0669). Her
+same-day case (0672): she reads table refusals apart from the guard's and the classifier's on the spot, but her
+refusal review (`recall` `refusals`) does not list them; landing 2 adds them.
+
 ## 1. The gap
 
 The program keeps "what is stored" and "what this turn can use or send" as two worlds, with no way across for her or
@@ -221,7 +226,10 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
    Behaviour changes only in the middle column (no commands, credentials, local network or disk for home from
    outside) and in the dead guard row's removal.
 2. **Own files.** `shared_scopes`, the outside fences narrowed to own files, home's checks removed, the two offer lists
-   by conversation (closes the 2026-11-24 case).
+   by conversation (closes the 2026-11-24 case); the six file and send rows join `IN_EFFECT` and the settings table.
+   Her refusal review lists the table's refusals too (her 0672): each with the row it was refused by, in her words
+   for the row (盘上的路径、跑命令、凭据、家里的网、公网、主人的集成、自我开发、画图, and the file and send rows'), so a
+   row the owner narrowed is seen at home before it is met again.
 3. **D1 and D3.** Stored ids in `received_file` and `offer_file`.
 4. **D2.** `web_fetch` `save`.
 5. **D4.** A frame at a time.

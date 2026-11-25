@@ -924,7 +924,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
               h('th', { scope: 'col', style: { ...cell, textAlign: 'left' } }, t('settings.access.resource')),
               ...ACCESS_ORIGINS.map(origin => h('th', { key: origin, scope: 'col', style: { ...cell, whiteSpace: 'nowrap' } },
                 t('settings.access.' + origin))),
-              h('th', { scope: 'col', style: cell }))),
+              // Room for the marks from the start, so a tick that adds one moves no column under the pointer.
+              h('th', { scope: 'col', style: { ...cell, minWidth: 140 } }))),
             h('tbody', null, ...ACCESS_ROWS.map(([resource, fallback]) => {
               const level = accessLevel(value, resource);
               const count = ACCESS_LEVELS.indexOf(level), base = ACCESS_LEVELS.indexOf(fallback);

@@ -87,7 +87,7 @@ home outwards, so a row's setting is one of four levels: **home only**, **home a
 | `own_files` | this conversation's files (§4): read, save into them (web downloads included), list | ✓ | ✓ | ✓ | everywhere |
 | `all_files` | every conversation's files by id, with no scope or age check while the bytes exist | ✓ | ✓ | ✗ | home and home from outside |
 | `list_files` | list or search other conversations' files | ✓ | ✓ | ✗ | home and home from outside |
-| `disk` | files on the computer outside her data (a disk path to `read_image`, `read_file`) | ✓ | ✗ | ✗ | home only |
+| `disk` | files on the computer outside her data (a disk path to `read_image`) | ✓ | ✗ | ✗ | home only |
 | `commands` | `sandbox_run` (the owner's own user, his ssh and git keys) | ✓ | ✗ | ✗ | home only |
 | `credentials` | the credentials a command may carry | ✓ | ✗ | ✗ | home only |
 | `local_network` | `web_fetch` and commands reaching the owner's own network (scope `any`) | ✓ | ✗ | ✗ | home only |
@@ -98,6 +98,9 @@ home outwards, so a row's setting is one of four levels: **home only**, **home a
 | `send_any` | send any stored file or picture to any conversation she may speak in | ✓ | ✗ | ✗ | home only |
 | `send_to_asker` | send any stored file or picture to the conversation the work is for | ✓ | ✓ | ✗ | home and home from outside |
 | `send_own` | send this conversation's own files there | ✓ | ✓ | ✓ | everywhere |
+
+The Host sandbox confines writes only, so `commands` also carries the owner's network, the database address and his
+ssh and git keys; widening `commands` widens those with it.
 
 `disk` is its own row because a file on the computer can be a key (`~/.ssh`): with it under `all_files`, work for
 someone outside could read a key it may not use. `integrations` and `development` take only home only or nowhere:
@@ -202,16 +205,21 @@ the action brain's drawing tool.
 One branch each from main, staged on an isolated stub profile, the full suite per landing; installed one at a time.
 
 1. **The table.** `access.py` (origins, the 14 resources with their defaults, levels; `table`, `check`, `allowed`,
-   `wider`, `origin_of_turn`, `origin_of_task`); a turn's origin from `guard.authority`, a task's written once as
+   `wider`, `origin_of_turn`, `origin_of_task`); a turn's origin from `guard.authority`, never wider than the task a
+   turn is about (so the result turn of home-from-outside work is home from outside); a task's written once as
    `origin` in `delegate` (a continuation, or a task made in a turn about another task, never wider than that task; a
-   row without it computed by the same rule when read). The non-file rows decide through `allowed` at grant time and
-   at call time: `commands` (`_grants`, `ToolBroker.call`), `credentials` (`credentials.home_task`, the broker),
-   `local_network`/`internet` (the task's network and the binding, from the current table), `disk` (`read_image`'s
-   path for both brains), `integrations` and `development` (today's rules and the table), `drawing`. The dead guard
-   row `_image_path` goes. The file and send rows are in the table, the setting and the page; their fences are landing
-   2's. §9's three refusal sentences; the setting `deployment.access`, checked at save and at start; the start report
-   of wider rows (Host log, settings page); the settings section as the table. Behaviour changes only in the middle
-   column (no commands, credentials, local network or disk for home from outside) and in the dead guard row's removal.
+   row without it computed when read by the same rule from the turn that made it, or from its place when that turn is
+   gone). The rows in effect (`IN_EFFECT`: `disk`, `commands`, `credentials`, `local_network`, `internet`,
+   `integrations`, `development`, `drawing`) decide through `allowed` at grant time and at call time: `commands`
+   (`_grants`, `ToolBroker.call`), `credentials` (`credentials.home_task`, the broker), `local_network`/`internet` (the
+   task's network and the binding, from the current table), `disk` (`read_image`'s path for both brains),
+   `integrations` and `development` (today's rules and the table), `drawing`. The dead guard row `_image_path` goes.
+   The six file and send rows stay in `RESOURCES` with their defaults, are not drawn on the page, and a setting that
+   names one is refused (`INVALID_ACCESS: <row> is not in effect yet`); landing 2 moves them into `IN_EFFECT` with
+   their fences. §9's three refusal sentences; the setting `deployment.access`, checked at save and at start; the
+   start report of wider rows (Host log, settings page); the settings section as the table of the rows in effect.
+   Behaviour changes only in the middle column (no commands, credentials, local network or disk for home from
+   outside) and in the dead guard row's removal.
 2. **Own files.** `shared_scopes`, the outside fences narrowed to own files, home's checks removed, the two offer lists
    by conversation (closes the 2026-11-24 case).
 3. **D1 and D3.** Stored ids in `received_file` and `offer_file`.

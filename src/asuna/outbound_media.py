@@ -373,22 +373,36 @@ def _item(row, own_scope=None):
     return item
 
 
+def picked_images(store, picked, own=None):
+    """The pictures `picked` names (a going-out's picture, those the task a turn is about offered), as a list shows
+    them, in that order: stored pictures, each one of `own`'s (own_files.holds) when `own` is given (outside)."""
+    from . import own_files
+    picked = [picked] if isinstance(picked, str) else [item for item in picked or () if item]
+    if not picked:
+        return []
+    found = {row['_id']: row for row in artifact_records.by_ids(store, picked, storage=artifact_records.STORED).rows()}
+    rows = [found[item] for item in dict.fromkeys(picked) if item in found]
+    return [item for item in (_item(row) for row in rows if row.get('kind') == ATTACHMENT_KIND
+                              and row.get('state') == 'DONE' and (own is None or own_files.holds(row, own))) if item]
+
+
+def _first(picked, items, count=None):
+    """`picked` first, then `items` without them: `count` at most (every picked one kept), or all of them."""
+    listed = {item['artifact_id'] for item in picked}
+    rest = [item for item in items if item['artifact_id'] not in listed]
+    return picked + (rest if count is None else rest[:max(0, count - len(picked))])
+
+
 def own_images(store, own, *, limit=MAX_ITEMS_OFFERED, picked=None):
     """A conversation's own pictures to send (`own`: its scopes, own_files.scopes), newest first: those she made
-    there and those sent or carried there; not the pictures people sent there. `picked`, a going-out's picture, comes
-    first when it is one of them, even past the newest few."""
-    from . import own_files
+    there and those sent or carried there; not the pictures people sent there. `picked` (a going-out's picture, what
+    the task this turn is about offered) come first when they are its own, whatever their age."""
     own, count = [scope for scope in own or () if scope], max(1, int(limit or 1))
     rows = artifact_records.own(store, ATTACHMENT_KIND, own, state='DONE', storage=artifact_records.STORED,
                                 by='created_at').rows(newest_first=True, limit=200)
     mine = [row for row in rows if (produced(row) and row.get('scope_key') in own)
             or set(row.get('shared_scopes') or ()) & set(own)]
-    if picked:
-        row = next((row for row in rows if row['_id'] == picked), None) or artifact_records.by_ids(
-            store, [picked], storage=artifact_records.STORED).first()
-        first = [row] if row and row.get('kind') == ATTACHMENT_KIND and own_files.holds(row, own) else []
-        mine = first + [row for row in mine if row['_id'] != picked]
-    return [item for item in (_item(row) for row in mine) if item][:count]
+    return _first(picked_images(store, picked, own), [item for item in (_item(row) for row in mine) if item], count)
 
 
 def image_artifacts(store, scope_keys, *, limit=MAX_ITEMS_OFFERED, own_scope=None):
@@ -423,7 +437,8 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
     """上下文里那块 ``image_artifacts_from_program``；方向不允许或没图可引用就不出现。
     外面的对话（``session_class`` 不是 owner_private），和这一次的来路 ``origin`` 不许 ``list_files`` 的家里那一次：
     只列这个对话自己的图（own_images；``own`` 是这一次自己那个对话的 scope，默认这个场景的）。家里照旧。
-    picked：出门或差事带来的那张图（挑的时候已经算这里的了），不在最新几张里也列上。"""
+    picked：出门或差事带来的那张图（挑的时候已经算这里的了），和这一次所关的任务用 offer_file 交上来的图
+    （交的时候已经问过能不能发到这里），不在最新几张里也排在前面列上。"""
     from . import access, own_files
     allowed, _reason = target_allowed(config, scene, session_class)
     if not allowed:
@@ -436,11 +451,10 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
         note = ('' if session_class == OWNER_PRIVATE else GROUP_NOTE if group_scene(config, scene) else DM_NOTE)
         return ({'items': items, 'note': SPEAK_OFFER_NOTE + note + (EDITS_NOTE if edits else '')}
                 if items else None)
+    first = picked_images(store, picked)
     if group_scene(config, scene):
         # A home group: her pictures from anywhere, as every home conversation lists them.
-        items = produced_images(store, limit=limit)
-        if picked and picked not in {item['artifact_id'] for item in items}:
-            items = [item for item in produced_images(store, limit=50) if item['artifact_id'] == picked] + items
+        items = _first(first, produced_images(store, limit=limit))
         for item in items:
             item.pop('from_linked_scene', None); item.pop('scene_id', None)
         items = edits + [item for item in items if item['artifact_id'] not in {e['artifact_id'] for e in edits}]
@@ -453,10 +467,11 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
     listed = {item['artifact_id'] for item in items}
     items = [edit for edit in edits if edit['artifact_id'] not in listed] + items
     listed |= {edit['artifact_id'] for edit in edits}
-    for item in produced_images(store, limit=50 if picked else limit):
-        if item['artifact_id'] not in listed and (len(items) < limit or item['artifact_id'] == picked):
+    for item in produced_images(store, limit=limit):
+        if item['artifact_id'] not in listed and len(items) < limit:
             item.pop('from_linked_scene', None); item.pop('scene_id', None)
             items.append(item); listed.add(item['artifact_id'])
+    items = _first(first, items)
     if not items:
         return None
     note = (SPEAK_OFFER_NOTE + (PEER_NOTE if any(item.get('from_linked_scene') for item in items) else '')

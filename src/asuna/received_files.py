@@ -20,6 +20,12 @@ Every function that takes an artifact id also takes the scopes this call may rea
 as pictures' is, by the work's origin: `reach`) and checks them first, then ADR-105's mark: a row outside the fence is
 not found, whatever happened to it, and a ref of another conversation is answered as a missing one and recorded apart
 (access.record). A kept file stays in its conversation's fence.
+
+- **By a stored id** (ADR-120 D1, `read_stored`, `copy_stored`): `ref` may be a `blob-…` id of a picture, a task's file
+  or a received file, read through `own_files.stored`'s fence; a text-like body is read in pages, anything else is said
+  for what it is, and the action brain copies any of them into /task/stored/.
+- **A conversation's list** (`listing`): its stored files and pictures by id, newest first; another group's by its
+  name where the origin may use `list_files`.
 """
 from __future__ import annotations
 
@@ -275,7 +281,7 @@ NOT_GOT_BACK = ('RECEIVED_FILE_GONE: 这个文件%s拉过，字节在%s到期删
 BAD_PAGE = 'RECEIVED_FILE_PAGE_INVALID: 这个文件只有 %d 页，page 写 1 到 %d'
 BAD_FIND = 'RECEIVED_FILE_FIND_INVALID: find 写一个要找的词'
 NO_MATCH = '全文 %d 页里没有「%s」'
-OPS = ('read', 'keep', 'let_go', 'kept')               # her half; the tool's enum and the refusal both read these
+OPS = ('read', 'keep', 'let_go', 'kept', 'list')       # her half; the tool's enum and the refusal both read these
 TASK_OPS = OPS + ('copy',)                            # the action brain's half
 _said = lambda ops: '、'.join(ops[:-1]) + ' 或 ' + ops[-1]
 BAD_OP = 'RECEIVED_FILE_OP_INVALID: do 写 ' + _said(OPS)
@@ -585,6 +591,11 @@ def _answer(store, row, text, args, scene_id, note):
     if note:
         out['refetched'] = note
     out['intro'] = INTRO % row.get('sender')
+    return _paged(out, text, pages, args)
+
+
+def _paged(out, text, pages, args):
+    """The page asked for (`page`), or where a word is (`find`), added to `out`."""
     if args.get('find') is not None:
         word = str(args['find']).strip()
         if not word:
@@ -628,15 +639,23 @@ def run(store, where, config, args, *, persona, origin, moment=None, task_dir=No
     turn's or the task's (access.py), `by` the turn or task a refusal by the table is recorded under; only the action
     brain, which has a task folder, copies (`task_dir`). `ready`, when given, runs before what writes (a caller's
     checkpoint, ADR-132 D2)."""
+    from .vision import ARTIFACT_REF
     args = args or {}
     op = args.get('op') or 'read'
     if op == 'kept':
         return kept(store, reach(store, where, config, origin), where.get('scene_id'))
+    if op == 'list':
+        return listing(store, where, config, args, persona=persona, origin=origin, by=by)
+    by_id = bool(ARTIFACT_REF.fullmatch(str(args.get('ref') or '').strip()))
     if op == 'read':
         if ready:
             ready()
+        if by_id:
+            return read_stored(store, where, config, args, origin=origin, by=by, task=bool(task_dir))
         return read(store, where, config, args, persona=persona, origin=origin, moment=moment, by=by)
     if op == 'copy' and task_dir:
+        if by_id:
+            return copy_stored(store, where, config, args, task_dir=task_dir, origin=origin, by=by)
         return copy(store, where, config, args, task_dir=task_dir, origin=origin, by=by)
     if op not in ('keep', 'let_go'):
         raise Denied(BAD_OP_TASK if task_dir else BAD_OP)
@@ -651,16 +670,134 @@ def run(store, where, config, args, *, persona, origin, moment=None, task_dir=No
     return {'ref': ref, **let_go(store, row['_id'], scopes, where.get('scene_id'), moment)}
 
 
+# ── a stored file or picture by its id, and a conversation's list (ADR-120 D1, §8 item 3) ──
+STORED_DIR = 'stored'              # /task/stored/: a stored thing copied by its id
+STORED_CODE = 'RECEIVED_FILE_NOT_FOUND'
+LIST_MOST = 20
+KIND_WORDS = {'image': '一张图', 'file': '一个文件', 'received_file': '一个别人发来的文件'}
+LIST_KINDS = {'image': '图', 'file': '文件', 'received_file': '别人发来的文件'}
+BYTES_WORDS = {artifact_records.STORED: '还在', artifact_records.REMOVED: '到期删了',
+               artifact_records.ERASED: '隐私清除删掉了'}
+PICTURE_EXTENSIONS = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp'}
+NOT_TEXT_STORED = '这是%s（%s，%s），不是文本，读不了正文。'
+OVER_CAP_STORED = '这是%s（%s，%s），超过 1 MiB，这里不读正文。'
+LOOK_AT_IT = '看图用 read_image，ref 写这个 id。'
+COPY_WHEN_DOING = '要拿它做事，动手时用 received_file 的 copy 把它复制到 /task/stored/ 再用。'
+COPY_IT = '要用就 do=copy，把它复制到 /task/stored/ 再用。'
+LISTED_MORE = '只列了最新的 %d 个，更早的没列出。'
+LISTED_NONE = '这里没有存着的文件和图。'
+
+
+def _maybe_text(media_type):
+    """A task's file worth decoding: its type is text-like, or was not recognized (judge decides)."""
+    return media_type is None or _text_like(media_type)
+
+
+def read_stored(store, where, config, args, *, origin, by=None, task=False):
+    """op=read by a stored id (`own_files.stored`'s fence: another conversation's answers as a missing one): a received
+    file or a task's text-like file within MAX_BYTES read in pages as a received file is; anything else said for what
+    it is (its kind, type and size), with how to use it (`task`: the action brain, which copies it)."""
+    from . import own_files
+    from .outbound_files import type_words
+    artifact_id = str(args.get('ref') or '').strip()
+    row = own_files.stored(store, origin, artifact_id, where, by, TOOL_NAME, STORED_CODE)
+    size, kind, text = int(row.get('size') or 0), row['kind'], None
+    if kind == KIND:
+        text = BlobStore(store).get(row['_id'], row['scope_key'], operator=True).decode(row.get('encoding') or 'utf-8')
+        mark_read(store, row['_id'], [row['scope_key']])          # inside the fence: it was read above
+        return {'id': artifact_id, **_answer(store, row, text, args, where.get('scene_id'), None)}
+    if kind == 'file' and size <= MAX_BYTES and _maybe_text(row.get('media_type')):
+        try:
+            text, _ = judge(BlobStore(store).get(row['_id'], row['scope_key'], operator=True), row.get('name'))
+        except Denied:                       # not text after all: said for what it is
+            text = None
+    if text is None:
+        over = kind == 'file' and size > MAX_BYTES and _maybe_text(row.get('media_type'))
+        note = (OVER_CAP_STORED if over else NOT_TEXT_STORED) % (KIND_WORDS[kind], type_words(row.get('media_type')),
+                                                                 size_words(size))
+        return {'id': artifact_id, 'note': note + (LOOK_AT_IT if kind == 'image' else '')
+                + (COPY_IT if task else COPY_WHEN_DOING)}
+    pages = pages_of(text)
+    out = {'id': artifact_id, 'file': row.get('name'), 'pages': len(pages), 'chars': len(text)}
+    sender = (row.get('received_from') or {}).get('sender')
+    if sender:                               # a received file a task registered: still the sender's material
+        out.update({'from': sender, 'marks': marks_of(text, row.get('name'), sender), 'intro': INTRO % sender})
+    return _paged(out, text, pages, args)
+
+
+def copy_stored(store, where, config, args, *, task_dir, origin, by=None):
+    """op=copy by a stored id (the action brain only): its bytes to /task/stored/<name> (a picture is named by its id
+    and type), with the received copy's guards (`_write_copy`)."""
+    from . import own_files
+    artifact_id = str(args.get('ref') or '').strip()
+    row = own_files.stored(store, origin, artifact_id, where, by, TOOL_NAME, STORED_CODE)
+    name = safe_name(row.get('name') or '%s.%s' % (row['_id'], PICTURE_EXTENSIONS.get(row.get('media_type'), 'bin')))
+    shown, note = _write_copy(store, row, task_dir, STORED_DIR, name)
+    return {'id': artifact_id, 'path': shown, **({'marks': row['marks']} if row.get('marks') else {}), 'note': note}
+
+
+def listing(store, where, config, args, *, persona, origin, by=None):
+    """op=list: a conversation's stored files and pictures (not stickers), newest first, at most LIST_MOST, each with
+    its id, kind, name or type, size, when it was stored and whether its bytes are still there. Without `place` this
+    conversation's own (own_files); with `place`, a group by its name (places.group_named), where the origin may use
+    `list_files`, else refused by the table whatever the name."""
+    from . import access, local_time, own_files, places
+    place = args.get('place')
+    named = place not in (None, '')
+    if named:
+        access.require(store, by, origin, 'list_files', TOOL_NAME, config)
+        scene_id, code = places.group_named(store, persona, place)
+        if code:
+            raise Denied('%s: %s' % (code, places.group_refusal(store, persona, place, code, 'place', '列不了')))
+        scene = scene_records.get(store, scene_id) or {'_id': scene_id}
+    else:
+        if own_files.reach(config, origin) is None:
+            access.require(store, by, origin, 'own_files', TOOL_NAME, config)
+        scene = where
+    own = own_files.scopes(config, scene)
+    fields = ['kind', 'name', 'media_type', 'size', 'created_at', 'storage']
+    rows = [row for kind in own_files.KINDS for row in artifact_records.own(
+        store, kind, own, state='DONE', by='created_at').rows(newest_first=True, limit=LIST_MOST + 1, fields=fields)]
+    rows.sort(key=lambda row: _when(row.get('created_at')), reverse=True)
+    zone = local_time.her_zone(store)
+    out = {'items': [_listed(row, zone) for row in rows[:LIST_MOST]]}
+    if named:
+        from .people import People
+        out = {'place': People(store, persona).scene_title(scene), **out}
+    if len(rows) > LIST_MOST:
+        out['note'] = LISTED_MORE % LIST_MOST
+    elif not rows:
+        out['note'] = LISTED_NONE
+    return out
+
+
+def _listed(row, zone):
+    from . import local_time
+    from .outbound_files import type_words
+    item = {'id': row['_id'], 'kind': LIST_KINDS.get(row.get('kind'))}
+    if row.get('name'):
+        item['name'] = row['name']
+    else:
+        item['type'] = type_words(row.get('media_type'))
+    item.update({'size': size_words(row.get('size')), 'at': local_time.stamp(row.get('created_at'), zone),
+                 'bytes': BYTES_WORDS.get(row.get('storage'), BYTES_WORDS[artifact_records.REMOVED])})
+    return item
+
+
 RECEIVED_FILE_TOOL = {
     'name': TOOL_NAME,
-    'description': ('读别人发来的文件（文本类，1 MiB 以内）。do=read：ref 照抄文件旁标的；第一次读从平台拉下来，每次一页，'
-                    'page 翻页，find 找一个词（拉丁字母不分大小写）。拉下来的 3 天后删；keep 留下（why 写为什么），let_go 放下，kept 列出留着的。'
-                    '在家里，连同外面托、家里办的事，也能读你别的对话里 7 天内的文件。'),
+    'description': ('读文件（文本类，1 MiB 以内）。do=read：ref 照抄别人发来的文件旁标的，或一个存好的文件、图的 id（blob-…）；'
+                    '别人发来的第一次读从平台拉下来；每次一页，page 翻页，find 找一个词（拉丁字母不分大小写）；不是文本的只说它是什么。'
+                    '拉下来的 3 天后删；keep 留下（why 写为什么），let_go 放下，kept 列出留着的；'
+                    'list 列出这个对话存着的文件和图（新的在前，最多 20 个，带 id）。'
+                    '在家里，连同外面托、家里办的事，也能读你别的对话里 7 天内的文件和存好的任何一个，'
+                    'list 写 place（一个群的名字）就列那个群的。'),
     'parameters': {'op': {'type': 'string', 'enum': list(OPS), 'description': '默认 read'},
-                   'ref': {'type': 'string', 'description': '文件旁标的 ref'},
+                   'ref': {'type': 'string', 'description': '文件旁标的 ref，或存好的 id（blob-…）'},
                    'page': {'type': 'integer', 'description': '第几页'},
                    'find': {'type': 'string', 'description': '要找的词'},
-                   'why': {'type': 'string', 'description': '为什么留'}}}
+                   'why': {'type': 'string', 'description': '为什么留'},
+                   'place': {'type': 'string', 'description': 'list 时列哪个群：群的名字'}}}
 
 
 # ── the action brain's copy (section 7) ──────────────────────────────
@@ -713,8 +850,6 @@ def _deny_execute(folder):
 def copy(store, where, config, args, *, task_dir, origin, by=None):
     """op=copy (the action brain only): the stored bytes to /task/received/<name>, with the marks. The program never
     runs a received file; the copy cannot be started as a program, and a script runs only when she runs it herself."""
-    import os
-    from pathlib import Path
     ref = str(args.get('ref') or '').strip()
     _, row, scopes = found(store, where, config, ref, origin, by)
     if not row:
@@ -722,12 +857,21 @@ def copy(store, where, config, args, *, task_dir, origin, by=None):
     refuse_erased(store, row, where.get('scene_id'))
     if row.get('storage') != artifact_records.STORED:
         raise Denied(NOT_STORED)
+    shown, note = _write_copy(store, row, task_dir, COPY_DIR, safe_name(row.get('name')))
+    return {'ref': ref, 'path': shown, 'marks': row.get('marks') or [], 'note': note}
+
+
+def _write_copy(store, row, task_dir, folder_name, name):
+    """A stored row's bytes written to /task/<folder_name>/<name> (a clash gets ` (2)`), the folder denied execution
+    when it is made, the copy's path kept on the row (removed with the bytes, `drop_copies`): (its /task path, the
+    note that says it cannot be run)."""
+    import os
+    from pathlib import Path
     data = BlobStore(store).get(row['_id'], row['scope_key'], operator=True)
-    folder = Path(task_dir) / COPY_DIR
+    folder = Path(task_dir) / folder_name
     fresh = not folder.exists()
     folder.mkdir(parents=True, exist_ok=True)
     denied = _deny_execute(folder) if fresh else True
-    name = safe_name(row.get('name'))
     target, n = folder / name, 2
     stem, dot, ext = name.rpartition('.')
     while target.exists():
@@ -737,20 +881,20 @@ def copy(store, where, config, args, *, task_dir, origin, by=None):
     if os.name != 'nt':
         os.chmod(target, 0o600)
     artifact_records.add_copy(store, row['_id'], str(target))
-    shown = '/task/%s/%s' % (COPY_DIR, target.name)
-    out = {'ref': ref, 'path': shown, 'marks': row.get('marks') or [], 'note': COPIED % shown}
-    if not denied:
-        out['note'] = COPIED.split('；')[0] % shown + '；' + NO_DENY + '，程序也不会运行它。'
-    return out
+    shown = '/task/%s/%s' % (folder_name, target.name)
+    return shown, (COPIED % shown if denied else COPIED.split('；')[0] % shown + '；' + NO_DENY + '，程序也不会运行它。')
 
 
 def drop_copies(store):
-    """Remove the copies of every received file whose bytes are gone (expired or erased); a copy that cannot be
-    deleted now (locked on Windows) stays listed and is tried again at the next sweep. Returns (removed, failed)."""
+    """Remove the copies of every stored file or picture whose bytes are gone (expired or erased): a received file's
+    in /task/received/, any by its id in /task/stored/. A copy that cannot be deleted now (locked on Windows) stays
+    listed and is tried again at the next sweep. Returns (removed, failed)."""
     from pathlib import Path
+    from .own_files import KINDS
     removed = failed = 0
-    for row in artifact_records.with_copies(store, KIND, besides_storage=artifact_records.STORED).rows(
-            fields=['copies']):
+    rows = [row for kind in KINDS for row in artifact_records.with_copies(
+        store, kind, besides_storage=artifact_records.STORED).rows(fields=['copies'])]
+    for row in rows:
         left = []
         for path in row.get('copies') or []:
             try:
@@ -766,7 +910,8 @@ def drop_copies(store):
 # The action brain's tool: the same, and copy (section 7).
 RECEIVED_FILE_TASK_TOOL = {
     **RECEIVED_FILE_TOOL,
-    'description': RECEIVED_FILE_TOOL['description'] + 'do=copy 把读过的文件复制到 /task/received/（能读，不能被当成程序直接启动）。',
+    'description': RECEIVED_FILE_TOOL['description'] + ('do=copy 把读过的文件复制到 /task/received/，按 id 的复制到 /task/stored/'
+                                                        '（能读，不能被当成程序直接启动）。'),
     'parameters': {**RECEIVED_FILE_TOOL['parameters'],
                    'op': {**RECEIVED_FILE_TOOL['parameters']['op'], 'enum': list(TASK_OPS)}}}
 

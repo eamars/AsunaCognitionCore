@@ -102,6 +102,8 @@ A conversation's own files (ADR-120 §4), the one answer every read, list and se
 - def `share` — The row is `scope`'s own from now on; a row already its own, or a sticker, is left as it is.
 - def `reach` — How far work of this origin reads stored files: 'all' (any conversation's), 'own' (its own conversation's) or None (none).
 - def `readable` — Whether work of this origin, whose own conversation's scopes are `own`, may read this stored row.
+- def `missing` — The refusal for an id this work cannot use: where it reads every conversation's files, that there is none (or its bytes went); else the one sentence of its own conversation (§9, her 0668), the same for a file of another conversation as for 
+- def `stored` — The stored picture or file (`KINDS`) an id names that work of this origin may read, whose own conversation is `place` (a scene row, a turn's place or a task's binding), its bytes stored.
 - def `at_home` — Whether a conversation is a home one: her local chat, a chat of the owner's, a home line or a home group.
 - def `send_refused` — The row of the table that bars work of `origin` (whose own conversation's scopes are `own`) from sending a stored `row` into `place` (a scene row), or None when it may.
 - def `refuse_send` — The send refusal, recorded: one sentence whatever row refused it (§9, her 0668).

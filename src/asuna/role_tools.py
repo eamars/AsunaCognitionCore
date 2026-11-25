@@ -300,10 +300,13 @@ READ_IMAGE_WORDS = ('看一张图：ref 写你想看的那张图旁边标的，7
                     '画完或发之前看一遍。调用了才算看过。视频的 ref 也认：给你按时间截的一张格子图（没有声音），'
                     '%d MB 以内的视频。看不了会照实说原因。')
 READ_IMAGE_HOME = '你别的对话里 7 天内的图也能看，盘上的图也能读（ref 写绝对路径，或 /task/… 路径）。'
-RECEIVED_FILE_WORDS = ('读别人发来的文件（文本类，1 MiB 以内），do 选一样：read 你想读它（ref 写文件旁边标的；第一次读时取回来，'
-                       '每次一页，page 翻页，find 找一个词，拉丁字母不分大小写）；keep 你想留下它（why 写为什么）；'
-                       'let_go 你想放下它；kept 你想看看留着哪些。取回来的 3 天后删。')
-RECEIVED_FILE_HOME = '你别的对话里 7 天内的文件也能读。'
+RECEIVED_FILE_WORDS = ('读文件（文本类，1 MiB 以内），do 选一样：read 你想读它（ref 写别人发来的文件旁边标的，或一个存好的文件、'
+                       '图的 id（blob-…）；别人发来的第一次读时取回来；每次一页，page 翻页，find 找一个词，拉丁字母不分大小写；'
+                       '不是文本的只告诉你它是什么）；keep 你想留下别人发来的（why 写为什么）；let_go 你想放下它；'
+                       'kept 你想看看留着哪些；list 你想看看这个对话存着的文件和图（新的在前，最多 20 个，带 id）。'
+                       '取回来的 3 天后删。')
+RECEIVED_FILE_HOME = ('你别的对话里 7 天内的文件和存好的任何一个也能读；list 写 place（一个群的名字，照你回顾里写的地方）'
+                      '就列那个群的。')
 PRIVATE_WORDS_WORDS = ('你的「别带出去」名单：能指到具体某个人或某个地方的词（真名、群名片、群名、号码、站点 id、'
                        '主机名和局域网地址、邮箱）。add 你想记一条（category、word、why 都写；同一个词再记就是改它）。'
                        '名单上的词以后不再显示给你：碰到时只说哪一类、第几条。称呼词、你自己的名字、技术词不用记。')
@@ -921,7 +924,10 @@ def placed_spec(spec, cls, scene_kind, listed):
                 'parameters': {**{k: v for k, v in spec['parameters'].items() if k != 'refusals'},
                                'person': {**person, 'description': _without(person['description'], RECALL_LIST)}}}
     home_sentences = {'plan': (PLAN_LINE, PLAN_ELSEWHERE), 'group_focus': (FOCUS_MUTE,), 'read_image': (READ_IMAGE_HOME,),
-                      'received_file': (RECEIVED_FILE_HOME,), 'private_words': (PRIVATE_WORDS_HOME,)}
+                      'private_words': (PRIVATE_WORDS_HOME,)}
+    if name == 'received_file':          # a group's list by its name is home's (ADR-120 §8 item 3)
+        return {**spec, 'description': _without(spec['description'], RECEIVED_FILE_HOME),
+                'parameters': {k: v for k, v in spec['parameters'].items() if k != 'place'}}
     if name in home_sentences:
         return {**spec, 'description': _without(spec['description'], *home_sentences[name])}
     return spec
@@ -2396,7 +2402,8 @@ class RoleTools:
                                     'shown': 'picture'})
             elif kind == 'file':
                 from . import outbound_files
-                meta, why = outbound_files.check(self.store, ep, scene, str(part.get('artifact_id') or ''))
+                meta, why = outbound_files.check(self.store, ep, scene, str(part.get('artifact_id') or ''),
+                                                 gate=self._listed_only(ep))
                 if why:
                     problem('第 %d 条 file %s' % (index, why))
                     continue
@@ -2591,6 +2598,12 @@ class RoleTools:
             raise own_files.refuse_send(self.store, {'turn': ep['_id'], 'call': call_id, 'scope': ep['scope_key']},
                                         access.origin_of_turn(self.store, ep), refused, 'speak')
 
+    def _listed_only(self, ep):
+        """Whether her speak sends only what this turn lists: everywhere but a home turn, where the list is a
+        convenience and any picture or file the turn may read and send there goes (ADR-120 D3)."""
+        from . import access
+        return access.origin_of_turn(self.store, ep) != 'home'
+
     def _picture(self, ep, scene, artifact, call_id=None):
         """The attachment of a picture she may send here, or Refused in words."""
         from . import outbound_media
@@ -2601,7 +2614,8 @@ class RoleTools:
             raise Refused('发不了：%s' % ATTACH_REASONS.get(reason, reason), ['ATTACH_TARGET_NOT_ALLOWED'])
         scene_id = (scene or {}).get('_id')
         offered = (ep.get('context') or {}).get('image_artifacts_from_program') or {}
-        if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
+        if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)} \
+                and (self._listed_only(ep) or not artifact):
             outbound_media.refuse_erased_named(self.store, artifact, lambda row: not self._send_refused(ep, scene, row),
                                                scene_id=scene_id)
             raise Refused('不在你能发的图里', ['ATTACH_ARTIFACT_NOT_IN_CONTEXT'])

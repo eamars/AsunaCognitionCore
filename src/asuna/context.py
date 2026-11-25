@@ -983,12 +983,16 @@ class ContextBuilder:
         # A read that fails says so in the block (ADR-119 F1): never the absence of a block, which reads as no picture.
         # What this turn lists is the access table's (ADR-120): a conversation outside home lists its own files, and so
         # does a home turn whose origin may not list other conversations' (its own: where a note from outside came from).
-        from . import access as _access, own_files as _own_files
+        from . import access as _access, own_files as _own_files, outbound_files
         origin=_access.origin_of_input(self.store,event,session_class)
         own=_own_files.scopes(self.store.config,self._own_place(event,scene,session_class))
+        # First on both lists, whatever their age: what a going-out carried here, and what the task this turn is about
+        # offered (ADR-120 D3: offer_file by a stored id, checked then for this conversation).
+        picked=[item for item in ((event.get('visit') or {}).get('artifact_id'),
+                                  *outbound_files.offered_by(self.store,event.get('task_id'))) if item]
         try:
             offer=outbound_media.offer(self.store,self.store.config,scene,session_class,event['person_id'],
-                                     picked=(event.get('visit') or {}).get('artifact_id'),origin=origin,own=own)
+                                     picked=picked,origin=origin,own=own)
         except Exception as exc:
             self.store.audit('scene:'+scene['_id'],'outbound.offer_unread',{'error':type(exc).__name__},scene['scope_key'])
             offer={'items':[],'note':outbound_media.OFFER_UNREAD}
@@ -1005,8 +1009,7 @@ class ContextBuilder:
                 self.store.audit('scene:'+scene['_id'],'outbound.offer_unread',{'error':type(exc).__name__,'block':'your_pictures'},scene['scope_key'])
                 context['your_pictures_from_program']={'items':[],'note':outbound_media.OWN_UNREAD}
         # ADR-092: the files her tasks registered that this conversation may send (a group whose adapter takes files).
-        from . import outbound_files
-        files=outbound_files.offer(self.store,scene,origin=origin,own=own,picked=(event.get('visit') or {}).get('artifact_id'))
+        files=outbound_files.offer(self.store,scene,origin=origin,own=own,picked=picked)
         if files:context['file_artifacts_from_program']=files
         f.context,f.people=context,people
 

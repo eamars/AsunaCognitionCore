@@ -5,14 +5,18 @@ as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days a
   artifact in the task's own scope. The bytes stream into the blob store (`BlobStore.put_stream`); the program computes the
   sha256, the size and the type (`sniff`, from the first bytes: an unknown type is recorded as unknown and still
   goes). Her name for it passes her private words list: a hit warns, by category and entry line, and does not block.
+  `offer_file` also takes a stored id (`offer_stored`, ADR-120 D3): a picture or a task's file this task may read and
+  send into its conversation, shared into it as it is; a received file registered as a file of this task.
 - **What a conversation may send** (`offer`, `file_artifacts_from_program`): a file her tasks registered in this
   conversation or one sent or carried here (own_files.py), where the channel declares `file`; at home every
-  conversation's, where the turn's origin may list other conversations' files (access `list_files`). Whether it may go
+  conversation's, where the turn's origin may list other conversations' files (access `list_files`); first, whatever
+  its age, what an errand carried here and what the task the turn is about offered (`offered_by`). Whether it may go
   is the access table's (own_files.send_refused, asked by the turn). Files go to groups only (v0).
-- **Sending** (`check`): the part names a listed file whose bytes are still stored and whose size is within the
-  limit the adapter declared (`capabilities.limit`); the program sets no size or type limit of its own. A file is its
-  own message: her record line is 「[文件：名字，大小]」 (「类型没认出来」 added when its type was not recognized) and
-  the row carries the `file` descriptor.
+- **Sending** (`check`): the part names a listed file (in a home turn, any task's file it may read and send here:
+  there the list is a convenience, not a gate) whose bytes are still stored and whose size is within the limit the
+  adapter declared (`capabilities.limit`); the program sets no size or type limit of its own. A file is its own
+  message: her record line is 「[文件：名字，大小]」 (「类型没认出来」 added when its type was not recognized) and the
+  row carries the `file` descriptor.
 - **Bytes** (`serve_piece`): the adapter reads a claimed file in pieces of at most `PIECE_MAX`, fenced by its
   publication, attempt and artifact; it checks the whole file's sha256 itself.
 - **Retention**: the bytes are removed `KEEP_DAYS` after the file was last sent, or after it was registered when it
@@ -224,19 +228,33 @@ OFFER_FILE_TOOL = {
     'name': 'offer_file',
     'description': ('Register a file inside /task as one your talking half may send to a group (speak file part): '
                     'the program stores its bytes and reads its size and type. name is what people will see '
-                    '(default: the file name). The result gives the artifact_id to hand back.'),
-    'parameters': {'path': {'type': 'string', 'required': True},
+                    '(default: the file name). The result gives the artifact_id to hand back. '
+                    'Or give artifact_id (blob-…) instead of path: a stored picture or file this conversation may '
+                    'send, offered as it is; back in the conversation a picture is among the pictures you can send, '
+                    'anything else among the files.'),
+    'parameters': {'path': {'type': 'string', 'description': 'a file inside /task'},
+                   'artifact_id': {'type': 'string', 'description': 'a stored picture or file (blob-…), instead of path'},
                    'name': {'type': 'string', 'description': 'the file name people see, e.g. 报告.pdf'}},
 }
+BOTH_GIVEN = 'FILE_PATH_OR_ID: path 和 artifact_id 只写一个：/task 里的文件写 path，存好的写 artifact_id'
+OFFERED_PICTURE = '交回去后，回到对话时它在你能发的图里，用 speak 的 picture 发（artifact_id 照抄这个）。'
+OFFERED_FILE = '交回去后，回到对话时在能发文件的群里用 speak 的 file 发（artifact_id 照抄这个）；只发得进群。'
+NO_PICTURES_HERE = 'ATTACH_TARGET_NOT_ALLOWED: 这里不能带图：私聊和你在的群能带。'
+PICTURE_TOO_LARGE = 'ATTACHMENT_OVER_LIMIT: 这张图超过 8 MiB，发不了。'
 
 
 def register(store, task, root, args):
     """offer_file: register a file of this task's folder in the task's own scope (its binding, never a parameter).
-    A refused or failed operation is a result she reads (TASK_OPERATION_FAILED with the reason)."""
+    A refused or failed operation is a result she reads (TASK_OPERATION_FAILED with the reason). With `artifact_id`,
+    a stored picture or file offered as it is (`offer_stored`)."""
     from .blobs import BlobStore
     from .tasks import workspace_reason
     root = Path(root).resolve()
     args = args or {}
+    if args.get('artifact_id') not in (None, ''):
+        if args.get('path') not in (None, ''):
+            raise Denied(BOTH_GIVEN)
+        return offer_stored(store, task, args)
     given = str(args.get('path', ''))[:200]
     try:
         scope = (task or {}).get('scope_key')
@@ -280,6 +298,63 @@ def register(store, task, root, args):
     return out
 
 
+def offer_stored(store, task, args):
+    """offer_file by a stored id (ADR-120 D3): one this task may read (own_files.stored, as received_file's read: another
+    conversation's answers as a missing one) and may send into its own conversation (own_files.send_refused), shared
+    into it (own_files.share). A picture goes on the result turn's picture list, a task's file on its file list as it
+    is; a received file becomes a file of this task (its bytes registered as `register` registers a copy of it, its
+    origin kept). The result turn lists what was offered (`offered_by`)."""
+    from . import access, outbound_media, own_files, whose as whose_of
+    from .blobs import BlobStore
+    from .records import scenes as scene_records
+    origin = access.origin_of_task(store, task)
+    by = {'task': task['_id'], 'scope': task.get('scope_key')}
+    artifact_id = str(args['artifact_id']).strip()
+    row = own_files.stored(store, origin, artifact_id, task, by, 'offer_file', 'FILE_NOT_FOUND')
+    place = scene_records.get(store, task['scene_id']) or {'_id': task['scene_id'], 'scope_key': task['scope_key']}
+    refused = own_files.send_refused(store, origin, row, place, own_files.scopes(store.config, task),
+                                     (whose_of.of_task(store, task) or {}).get('scene_id'))
+    if refused:
+        raise own_files.refuse_send(store, by, origin, refused, 'offer_file')
+    if row['kind'] == 'image':
+        if not outbound_media.target_allowed(store.config, place, None)[0]:
+            raise Denied(NO_PICTURES_HERE)
+        if int(row.get('size') or 0) > outbound_media.MAX_ATTACHMENT_BYTES:
+            raise Denied(PICTURE_TOO_LARGE)
+        own_files.share(store, artifact_id, place['scope_key'])
+        return {'offered': True, 'artifact_id': artifact_id, 'as': 'picture', 'type': type_words(row.get('media_type')),
+                'size': size_words(row.get('size')), 'note': OFFERED_PICTURE}
+    if row['kind'] == KIND:
+        own_files.share(store, artifact_id, place['scope_key'])
+        return {'offered': True, 'artifact_id': artifact_id, 'as': 'file', 'name': row.get('name'),
+                'size': size_words(row.get('size')), 'type': type_words(row.get('media_type')), 'note': OFFERED_FILE}
+    name = str(args.get('name') or row.get('name') or artifact_id)
+    problem = name_problem(name)
+    if problem:
+        raise Denied('FILE_NAME_INVALID: %s；name 写人看到的文件名，例如 报告.pdf' % problem)
+    data = BlobStore(store).get(row['_id'], row['scope_key'], operator=True)
+    media_type = sniff(data[:HEAD_BYTES], whole=len(data) <= HEAD_BYTES)
+    stored = BlobStore(store).put(data, task['scope_key'], KIND, media_type=media_type,
+                                  source_ids=[(SOURCE + '%s:stored/%s' % (task['_id'], artifact_id))[:200]],
+                                  fields={'name': name, 'task_id': task['_id'],
+                                          'source': {'task_id': task['_id'], 'artifact_id': artifact_id}})
+    artifact_records.set_received_from(store, stored['artifact_id'], {'ref': row.get('ref'), 'sender': row.get('sender')})
+    return {'offered': True, 'artifact_id': stored['artifact_id'], 'as': 'file', 'name': name,
+            'size': size_words(stored['size']), 'type': type_words(media_type), 'note': OFFERED_FILE, **name_check(name)}
+
+
+def offered_by(store, task_id):
+    """The stored ids a task offered with offer_file (its done calls, every revision): what its result turn lists."""
+    if not task_id:
+        return []
+    found = []
+    for row in artifact_records.tool_records(store, task_id, 'offer_file', state='DONE').rows(fields=['result']):
+        artifact_id = (row.get('result') or {}).get('artifact_id')
+        if isinstance(artifact_id, str) and artifact_id and artifact_id not in found:
+            found.append(artifact_id)
+    return found
+
+
 def name_check(name):
     """What her private words list says about a file name: a warning by category and entry line, never the word."""
     from . import private_words
@@ -313,31 +388,41 @@ def sends_here(store, scene):
 def offer(store, scene, *, limit=MAX_OFFERED, origin='outside', own=None, picked=None):
     """The block `file_artifacts_from_program`: the files her tasks registered whose bytes are still stored, newest
     first: this conversation's own (`own`, its scopes, by default the scene's), and at home, where the turn's `origin`
-    may list other conversations' files, every conversation's; `picked`, the file an errand carried here, first. None
-    when there are none or files do not go out here."""
+    may list other conversations' files, every conversation's. `picked` (ids: the file an errand carried here, the
+    files the task this turn is about offered) come first, whatever their age, and over `limit`. None when there are
+    none or files do not go out here."""
     from . import access, own_files
     if not sends_here(store, scene):
         return None
-    fields = ['name', 'size', 'media_type', 'created_at', 'source_ids', 'received_from']
+    fields = ['name', 'size', 'media_type', 'created_at', 'source_ids', 'received_from', 'scope_key', 'shared_scopes']
     home = own_files.at_home(store, scene) and access.allowed(store.config, origin, 'list_files')
+    own = own_files.scopes(store.config, scene) if own is None else own
     rows = (artifact_records.of_kind(store, KIND, state='DONE', storage=artifact_records.STORED, by='created_at')
-            if home else artifact_records.own(store, KIND, own_files.scopes(store.config, scene) if own is None else own,
-                                              state='DONE', storage=artifact_records.STORED, by='created_at'))
-    cursor = rows.rows(newest_first=True, limit=200, fields=fields)
-    cursor = ([row for row in cursor if row['_id'] == picked] + [row for row in cursor if row['_id'] != picked]
-              if picked else cursor)
-    items = []
-    for row in cursor:
-        if not produced(row):
-            continue
-        items.append({'artifact_id': row['_id'], 'name': row.get('name'), 'size': size_words(row.get('size')),
-                      'type': type_words(row.get('media_type')), 'registered_at': row.get('created_at')})
-        if row.get('received_from'):
-            from .received_files import FORWARDED
-            items[-1]['from'] = FORWARDED % row['received_from'].get('sender')
-        if len(items) >= limit:
+            if home else artifact_records.own(store, KIND, own, state='DONE', storage=artifact_records.STORED,
+                                              by='created_at'))
+    picked = [picked] if isinstance(picked, str) else [item for item in picked or () if item]
+    found = {row['_id']: row for row in artifact_records.by_ids(store, picked, storage=artifact_records.STORED).rows(
+        fields=[*fields, 'kind', 'state'])} if picked else {}
+    first = [found[item] for item in dict.fromkeys(picked) if item in found and found[item].get('kind') == KIND
+             and found[item].get('state') == 'DONE' and produced(found[item])
+             and (home or own_files.holds(found[item], own))]
+    items, listed = [_offered(row) for row in first], {row['_id'] for row in first}
+    for row in rows.rows(newest_first=True, limit=200, fields=fields):
+        if len(items) >= max(limit, len(first)):
             break
+        if produced(row) and row['_id'] not in listed:
+            items.append(_offered(row))
     return {'items': items, 'note': OFFER_NOTE} if items else None
+
+
+def _offered(row):
+    """A file as `file_artifacts_from_program` lists it."""
+    item = {'artifact_id': row['_id'], 'name': row.get('name'), 'size': size_words(row.get('size')),
+            'type': type_words(row.get('media_type')), 'registered_at': row.get('created_at')}
+    if row.get('received_from'):
+        from .received_files import FORWARDED
+        item['from'] = FORWARDED % row['received_from'].get('sender')
+    return item
 
 
 def source_present(item):
@@ -385,8 +470,14 @@ def descriptor(raw):
             'sha256': digest, 'size': size}
 
 
-def check(store, ep, scene, artifact_id):
-    """(descriptor, None) for a file her speak part may send here, else (None, why in words). Whether it may go here
+NO_FILES_HERE = '这里发不了文件：文件只发得进能收文件的群'
+NOT_A_FILE = '这不是任务登记过的文件：图用 picture 发；别人发来的文件，先让任务用 offer_file 登记'
+NO_SUCH_FILE = '没有这个文件：artifact_id 照抄能发的文件或任务回执里的'
+
+
+def check(store, ep, scene, artifact_id, gate=True):
+    """(descriptor, None) for a file her speak part may send here, else (None, why in words). `gate`: only a listed
+    one (outside); without it (a home turn: the list is a convenience there) any task's file. Whether it may go here
     by the access table is asked after (RoleTools._may_send)."""
     from . import capabilities, local_time
     from .blobs import erased, erased_words
@@ -397,7 +488,12 @@ def check(store, ep, scene, artifact_id):
         return None, expired_words(item, local_time.her_zone(store))
     offered = ((ep.get('context') or {}).get('file_artifacts_from_program') or {}).get('items') or ()
     if artifact_id not in {row.get('artifact_id') for row in offered if isinstance(row, dict)}:
-        return None, '不在能发的文件里：artifact_id 照抄那里列出的'
+        if gate:
+            return None, '不在能发的文件里：artifact_id 照抄那里列出的'
+        if not sends_here(store, scene):
+            return None, NO_FILES_HERE
+        if not item:
+            return None, NOT_A_FILE if artifact_records.get(store, artifact_id, fields=['kind']) else NO_SUCH_FILE
     if not item or item.get('state') != 'DONE' or item.get('storage') != artifact_records.STORED:
         return None, '这个文件已经不在了；换能发的文件里别的'
     from . import blobs

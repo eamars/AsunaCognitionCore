@@ -780,15 +780,20 @@ def a_picture_part_accepts_a_listed_artifact_and_yields_metadata():
 
 @case
 def a_picture_part_refuses_artifact_not_offered_this_turn():
+    """Outside, only what this turn lists goes; at home the list is a convenience (ADR-120 D3): any picture the turn
+    may read and send there."""
     store, _stored = world()
     elsewhere = BlobStore(store).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg')
     offered = outbound_media.offer(store, CONFIG, scene_row(), 'owner_private')
     offered['items'] = [item for item in offered['items'] if item['artifact_id'] != elsewhere['artifact_id']]
-    ep = turn_ep(store, context={'image_artifacts_from_program': offered})
+    ep = turn_ep(store, session='public', context={'image_artifacts_from_program': offered})
     outcome, said, why = pick(store, ep, elsewhere['artifact_id'])
     assert outcome == 'refused' and why == 'ATTACH_ARTIFACT_NOT_IN_CONTEXT', said
     assert '你能发的图' in said, '退回的话没告诉她该从哪里抄 artifact_id'
-    return True, '清单外的 artifact 退回给她：%s' % said
+    at_home = turn_ep(store, context={'image_artifacts_from_program': offered}, ep_id='ep-turn-home')
+    outcome, meta = pick(store, at_home, elsewhere['artifact_id'])
+    assert outcome == 'ok' and meta['artifact_id'] == elsewhere['artifact_id'], meta
+    return True, '外面：清单外的 artifact 退回给她：%s；家里：读得到、发得到这里的就能发' % said
 
 
 @case
@@ -902,7 +907,8 @@ def a_speaking_turn_carries_the_picture_on_its_speak_row():
         [THINK, ('speak', {'parts': [{'kind': 'text', 'text': '这张我找不到了'},
                                      {'kind': 'picture', 'artifact_id': 'blob-not-offered'}]})], ''))
     assert done2['state'] == 'COMMITTED' and speak_rows(store2, ep2) == [], done2['state']
-    assert lane2.tool_results[1][5] is False and code(store2.db.episodes.find_one({'_id': ep2['_id']})) == 'ATTACH_ARTIFACT_NOT_IN_CONTEXT'
+    # a home turn: no such picture (outside, the list refuses it first)
+    assert lane2.tool_results[1][5] is False and code(store2.db.episodes.find_one({'_id': ep2['_id']})) == 'ATTACHMENT_ARTIFACT_UNAVAILABLE'
     return True, 'think → speak（text、picture）：picture 那行带元数据；有一条被退回时一条都不发'
 
 

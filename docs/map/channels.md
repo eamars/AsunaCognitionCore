@@ -315,6 +315,7 @@ How long stored media bytes live: every kind of stored picture has an owner or a
 - def `own_pictures` — Her own newest pictures, to look at where none can be sent (her local chat): ids and when, in words.
 - def `image_scopes` — 这一轮能引用哪些场景里登记的图（本场景永远排第一）。
 - def `row_scene` — The conversation an outbound row is in, as its scene row with the row's own scope and channel where the scene lacks them.
+- def `picked_images` — The pictures `picked` names (a going-out's picture, those the task a turn is about offered), as a list shows them, in that order: stored pictures, each one of `own`'s (own_files.holds) when `own` is given (outside).
 - def `own_images` — A conversation's own pictures to send (`own`: its scopes, own_files.scopes), newest first: those she made there and those sent or carried there; not the pictures people sent there.
 - def `image_artifacts` — 本轮可引用的图片：这些 scope 里已存好的 image artifact（新的在前，最多 limit 条）。
 - def `offer` — 上下文里那块 ``image_artifacts_from_program``；方向不允许或没图可引用就不出现。
@@ -342,6 +343,8 @@ Files she sends to a group through the outbox (ADR-092): registered from a task'
 - def `record_line` — Her own record of a file she sent: what her later turns read (D4: an unrecognized type is said, not hidden).
 - def `name_problem` — Why a file name cannot be one, in words; None when it can.
 - def `register` — offer_file: register a file of this task's folder in the task's own scope (its binding, never a parameter).
+- def `offer_stored` — offer_file by a stored id (ADR-120 D3): one this task may read (own_files.stored, as received_file's read: another conversation's answers as a missing one) and may send into its own conversation (own_files.send_refused), shared into it (own
+- def `offered_by` — The stored ids a task offered with offer_file (its done calls, every revision): what its result turn lists.
 - def `name_check` — What her private words list says about a file name: a warning by category and entry line, never the word.
 - def `produced` — A file one of her tasks registered.
 - def `removed`
@@ -384,9 +387,12 @@ Files people send her (ADR-102): offered by ref, read when she asks, stored, kep
 - def `found` — (entry, row, scopes): the item a ref names among the files of the last REF_DAYS days in reach (the picture fence: this conversation's, or every conversation's where the origin reads them all), and its stored row; or a kept file's own row, w
 - def `read` — op=read: the first read fetches the file; every read answers one page (`page`), or where a word is (`find`).
 - def `run` — The `received_file` tool, for both halves: `where` is her turn's place or the task's binding, `origin` the turn's or the task's (access.py), `by` the turn or task a refusal by the table is recorded under; only the action brain, which has a 
+- def `read_stored` — op=read by a stored id (`own_files.stored`'s fence: another conversation's answers as a missing one): a received file or a task's text-like file within MAX_BYTES read in pages as a received file is; anything else said for what it is (its ki
+- def `copy_stored` — op=copy by a stored id (the action brain only): its bytes to /task/stored/<name> (a picture is named by its id and type), with the received copy's guards (`_write_copy`).
+- def `listing` — op=list: a conversation's stored files and pictures (not stickers), newest first, at most LIST_MOST, each with its id, kind, name or type, size, when it was stored and whether its bytes are still there.
 - def `safe_name` — A received file's name made safe before it touches a disk: no path parts, no `..`, no Windows device name, no trailing dot or space, at most NAME_BYTES bytes in UTF-8 (the extension kept).
 - def `copy` — op=copy (the action brain only): the stored bytes to /task/received/<name>, with the marks.
-- def `drop_copies` — Remove the copies of every received file whose bytes are gone (expired or erased); a copy that cannot be deleted now (locked on Windows) stays listed and is tried again at the next sweep.
+- def `drop_copies` — Remove the copies of every stored file or picture whose bytes are gone (expired or erased): a received file's in /task/received/, any by its id in /task/stored/.
 - def `received_from` — {ref, sender} of a received file with these bytes in the task's fence, or None: by content, so a copy renamed or moved inside /task keeps where it came from.
 
 ## `animated`

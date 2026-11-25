@@ -174,7 +174,7 @@ levels go into `RUNTIME_API.md` as present behaviour.
   it, a home conversation lists as before (the owner's chat its own and linked pictures and her pictures from
   anywhere; a home group her pictures from anywhere and every conversation's files; her local chat her pictures from
   anywhere to look at); where it may not (a home turn a note from outside opened), only its own conversation's.
-  Listing or searching by conversation name moves to landing 3 (§8 item 3).
+  Listing by conversation name is landing 3's (§8 item 3).
 - **Sends** (`own_files.send_refused`). Into a home conversation is no crossing: whatever the work may read. Into an
   outside one: any file with `send_any` (home), any file into the conversation the work is for with `send_to_asker`
   (home from outside), that conversation's own with `send_own` (everywhere); else 「这个文件不归这个对话发。」
@@ -196,9 +196,9 @@ levels go into `RUNTIME_API.md` as present behaviour.
 
 | # | Direction | How | Resources |
 |---|---|---|---|
-| D1 | A stored thing's body by id | `received_file` takes a `blob-` id too: text read as today (1 MiB), any kind copied into `/task/stored/` with `do=copy` (the existing copy: name cleaning, the deny-execute folder, copy tracking for erasure); `read_file` and `read_image` then read the copy. | `own_files` or `all_files` |
+| D1 | A stored thing's body by id | `received_file` (both brains) takes a `blob-` id as `ref` (kinds `image`, `file`, `received_file`), through `own_files.stored`: outside another conversation's id answers as a missing one (`RECEIVED_FILE_NOT_FOUND: 这个对话里没有这个文件。`) and is recorded (`all_files`). `do=read`: a received file, or a task's file that is text within 1 MiB, in pages as today; anything else said for what it is (kind, type, size), a picture with `read_image`, and how to copy it. `do=copy` (the action brain): any kind into `/task/stored/` with the existing copy (name cleaning, the deny-execute folder, copy tracking; `drop_copies` now takes the copies of all three kinds). `read_file` reads the copy; `read_image` of a `/task` path is the `disk` row (home only), so outside a picture is read by its id. | `own_files` or `all_files` |
 | D2 | A public URL's bytes into `/task` | `web_fetch` gains `save`: a body of any type is written to `/task/downloads/<name>` (up to 20 MB, the type from its bytes, sha256 returned), registered into this conversation's files; the network line stays `fetch.js`'s, now set by `internet`/`local_network`. | `own_files`, `internet` |
-| D3 | An old picture or file onto this turn's list | `offer_file` takes a stored id as well as a `/task` path; a picture's type becomes a picture for speak's `picture`, anything else a file part. The block `image_artifacts_from_program` lists this conversation's newest own pictures plus anything offered this turn (`offer`'s existing `picked`). Home offers any id. | `send_own`, `send_to_asker` or `send_any` |
+| D3 | An old picture or file onto this turn's list | `offer_file` takes `artifact_id` (a stored id) in place of `path` (`outbound_files.offer_stored`): readable as D1, sendable into the task's conversation (`own_files.send_refused`, else 「这个文件不归这个对话发。」), then shared into it. A picture (kind `image`) goes on the picture list, a task's file on the file list as it is, a received file is registered as a file of the task (its sender kept). The turn about the task lists what the task offered first on both blocks, whatever its age (`outbound_files.offered_by`, from the task's done `offer_file` calls, passed as `picked` with a going-out's pick). At home the list is a convenience, not a gate: a home turn's `speak` picture and file parts take any id it may read and send there; outside, the list gate stays as it was. | `send_own`, `send_to_asker` or `send_any` |
 | D4 | A viewed frame as a picture | `read_image` of a video takes `at` (seconds): the video child cuts that one frame (`media_children`), stored as this conversation's picture (source prefix `frame:`, 7 days unless sent); the grid stays as it is. It is then offered like any picture (D3). | `own_files`, then a send row |
 
 ## 6. The classifier sees what rides along
@@ -264,8 +264,19 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
    (盘上的路径、跑命令、凭据、家里的网、公网、主人的集成、自我开发、画图、这个对话自己的文件、别的对话的文件、翻看别的
    对话的文件) and the column (家里、外面托、家里办、外面), every send 「这里不许：把这个文件发到这里（<column>）」, so a row
    the owner narrowed is seen at home before it is met again.
-3. **D1 and D3.** Stored ids in `received_file` and `offer_file`; listing and searching other conversations' files by
-   conversation name from home (§4, `list_files`).
+3. **D1 and D3.** Stored ids in `received_file` and `offer_file` (§5); `received_file` `do=list`: a conversation's
+   stored files and pictures (not stickers), newest first, at most 20, each with its id, kind, name or type, size,
+   when (her clock) and whether its bytes are still there; without `place` this conversation's own, with `place` a
+   group by its name, resolved as `write_document`'s `group` (ADR-135 landing 9, the resolver moved to
+   `places.group_named`; unknown and ambiguous names with those words, the field and the verb its own), only where the
+   origin may use `list_files`. Elsewhere `place` is refused by the table (`ACCESS_DENIED_LIST_FILES: 这一步这里用不了。`,
+   recorded), one answer whatever it names: the unknown-name sentence lists every group's name, which an outside turn
+   is not told. Searching by name is not built: a list of 20 by id is the whole of it. Cost: the character brain's
+   tools +215 characters declared (19,630 -> 19,845, inside its budget), the action brain's +567 (17,376 -> 17,943,
+   budget raised). Found while building: from 2026-11-10 `received_files` imported a time reader ADR-119 F4 had
+   removed (`media_life._moment`), so in the code every answer of a read received file, every `let_go`, and every
+   `kept` list or over-quota `keep` with a kept file in it raised ImportError (read from the code, not from her
+   records); fixed in its own commit with a test.
 4. **D2.** `web_fetch` `save`.
 5. **D4.** A frame at a time.
 6. **R1 and R2** (R3 read first).

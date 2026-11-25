@@ -108,6 +108,11 @@ def of_tasks(store, task_ids):
     return _view(store, {'task_id': AnyOf(texts(task_ids))})
 
 
+def tool_records(store, task_id, tool, *, state=ANY):
+    """View: a task's records of one tool, of every revision (in this state)."""
+    return _view(store, _where({}, fences=_fences(task=task_id), pins=_pins(state=state, tool=tool)))
+
+
 def of_kind(store, kind, *, state=ANY, storage=ANY, scope=ANY, scopes=ANY, source=ANY, by=()):
     """View: the rows of a kind (in this state and storage; in this scope or one of these; listing this source),
     ordered by `by`."""

@@ -238,6 +238,8 @@ Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what 
 - def `place_id`
 - def `groups` — (scene_id, route, channel) for every group she is routed to and nobody blocked.
 - def `find`
+- def `group_named` — (scene id, None) of the one group whose title (People.scene_title) is `name`; else (None, 'GROUP_AMBIGUOUS') when two share it, or (None, 'GROUP_UNKNOWN') with the titles there are (`group_titles`).
+- def `group_refusal` — The words for a name that is not one group's (`group_named`'s code).
 - def `errand_targets` — (scene_id, route, channel) for every platform chat she has a route to that is not a home one: her groups nobody blocked, and the direct chats configured for her.
 - def `find_errand`
 - def `errand_places` — errand_places_from_program: where an errand can go, by name.

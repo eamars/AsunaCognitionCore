@@ -845,6 +845,7 @@ The owner of `artifacts`: the rows of what she and the program keep apart from t
 - def `by_ids` — View: the rows with these ids (in this storage).
 - def `of_task` — View: the rows of a task's revision (its tool records) in this state or one of these.
 - def `of_tasks` — View: the rows of these tasks.
+- def `tool_records` — View: a task's records of one tool, of every revision (in this state).
 - def `of_kind` — View: the rows of a kind (in this state and storage; in this scope or one of these; listing this source), ordered by `by`.
 - def `own` — View: the rows of a kind that are these conversations' own (their `scope_key` one of `scopes`, or `scopes` in their `shared_scopes`), in this state and storage, ordered by `by`.
 - def `of_scene` — View: the rows of a kind held for a conversation (notices, passed lines), by when they came.

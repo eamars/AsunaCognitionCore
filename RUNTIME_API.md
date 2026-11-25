@@ -159,7 +159,7 @@ home from outside), `everywhere`, or `none`. The table (defaults in `access.RESO
 |---|---|---|
 | `own_files` | the conversation's own files ([Own files](#own-files)): read by id or ref, listed | `everywhere` |
 | `all_files` | every conversation's stored files by id, with no conversation or age check while the bytes exist; every conversation's message attachments by ref, for 7 days | `home_from_outside` |
-| `list_files` | other conversations' pictures and files in a home conversation's lists (`image_artifacts_from_program`, `file_artifacts_from_program`, `your_pictures_from_program`) | `home_from_outside` |
+| `list_files` | other conversations' pictures and files in a home conversation's lists (`image_artifacts_from_program`, `file_artifacts_from_program`, `your_pictures_from_program`); `received_file`'s `list` of a group by its name (`place`) | `home_from_outside` |
 | `disk` | a disk path to `read_image`, for both brains | `home` |
 | `commands` | `sandbox_run` | `home` |
 | `credentials` | `credentials` on `sandbox_run` | `home` |
@@ -221,7 +221,12 @@ binding.
 - **Reading.** Work whose origin may use `all_files` reads any conversation's stored picture or file by id, of any
   age, while its bytes exist, and any conversation's message attachment by its ref for 7 days (`vision.REF_DAYS`, as
   long as a pulled copy lives, `media_life.PULLED_DAYS`; no lookup reads further back); work that may use only
-  `own_files` reads its own conversation's.
+  `own_files` reads its own conversation's. A stored id (`blob-…`, kinds `image`, `file`, `received_file`) is read
+  through `own_files.stored` by `received_file` and `offer_file` ([Received files](#received-files), [Sending
+  files](#sending-files)): an id of another conversation, and one whose bytes expired, answers as one that does not
+  exist (an erased one in reach with the [Erased media](#erased-media) sentence): outside `这个对话里没有这个文件。`,
+  where every conversation's are read
+  `没有 <id> 这个存好的文件，或它的字节已经不在了；id 照抄 received_file 的 list 列出的。`.
 - **Sending** (`own_files.send_refused`). Into a home conversation (her local chat, a chat of the owner's, a home line,
   a home group), whatever the work may read; into another, any file where its origin may use `send_any`, any file into
   the conversation the work is for where it may use `send_to_asker`, that conversation's own files where it may use
@@ -234,7 +239,11 @@ binding.
   before (the owner's chat its own and linked pictures and her pictures from anywhere, a home group her pictures from
   anywhere and every conversation's files, her local chat her pictures from anywhere to look at,
   `your_pictures_from_program`); where it may not (a home turn a note from outside opened), only the turn's own
-  conversation's. No list is searched by another conversation's name.
+  conversation's. Every list puts first, whatever their age, what an errand or a visit carried there and what the
+  task the turn is about offered (`offer_file`, `outbound_files.offered_by`). A home turn's `speak` may also send a
+  picture or a file on no list, any it may read and send there; elsewhere only a listed one goes.
+- **By name.** `received_file` `do=list` lists a conversation's stored files and pictures by id; with `place`, a
+  group's by its name, where the origin may use `list_files` ([Received files](#received-files)).
 - **Going out.** `errand` takes a picture or a file, `visit` a picture: one the picking turn may read and may send
   there; refused with `ACCESS_DENIED_SEND`, or `ARTIFACT_NOT_FOUND` for one that does not exist.
 
@@ -1143,6 +1152,7 @@ A picture leaves as a `speak` picture part, its own message carrying an `attachm
 
 - Pictures go to a conversation whose route targets a `dm`, or a group, on a kind that is not `TEXT_ONLY` (`outbound_media.target_allowed`).
 - Which pictures go where is the access table's ([Own files](#own-files)); one this turn may not send there is refused with `ACCESS_DENIED_SEND`. A sticker on her shelf goes wherever stickers go.
+- Outside, a part names a picture on this turn's `image_artifacts_from_program` (`ATTACH_ARTIFACT_NOT_IN_CONTEXT` otherwise, before the table is asked); a home turn may name any stored picture it may read and send there.
 - A picture is at most 8 MiB; the registered copy of a PNG has its text chunks removed.
 
 ### Sending files
@@ -1150,8 +1160,9 @@ A picture leaves as a `speak` picture part, its own message carrying an `attachm
 A file goes to a group as its own message: speak's `file` part names a file a task registered ([Claim public output](#claim-public-output), [Fetch attachment bytes](#fetch-attachment-bytes)). Code: `src/asuna/outbound_files.py`.
 
 - **Registration.** The action brain's `offer_file` (`path` inside `/task`, `name` the file name people see, default the file's own) stores the file in the task's own scope as a `file` artifact (source `task-file:<task>:<path>`), streamed into the blob store (`BlobStore.put_stream`). The program computes the sha256, the size and the type from the first bytes (`outbound_files.sniff`); an unrecognized type is recorded as `类型没认出来` and still goes. A name containing a word on her private words list is warned about by category and entry line, never the word, and not refused. The row keeps the task folder and path it came from (`source`).
-- **Offer.** A file her tasks registered may be sent where the channel declares `file` and the access table allows it ([Own files](#own-files)): in an outside group, its own files; in a home group, every conversation's where the turn may use `list_files`. `file_artifacts_from_program` lists them, newest first and at most 8, each with `artifact_id`, `name`, a readable `size`, `type` and `registered_at`; it appears in a group whose kind lists `file` in `REPLY_PARTS` and whose adapter declares `file`.
-- **Sending.** The part is refused in words when the file is not listed, its bytes are gone, or its size is over the limit the adapter declared; the program has no size or type limit of its own. Her record line is `[文件：名字，大小]`, with `，类型没认出来` when its type was not recognized.
+- **By a stored id.** `offer_file` with `artifact_id` (`blob-…`) in place of `path` (both given: `FILE_PATH_OR_ID`) offers a stored picture or file as it is (`outbound_files.offer_stored`): one the task may read ([Own files](#own-files); another conversation's is `FILE_NOT_FOUND`, as one that does not exist) and may send into its own conversation (`ACCESS_DENIED_SEND` otherwise), which is that conversation's own from then on (`shared_scopes`). A picture (`as` `picture`) must be one the conversation takes (`ATTACH_TARGET_NOT_ALLOWED`) and at most 8 MiB (`ATTACHMENT_OVER_LIMIT`); a task's file goes as it is (`as` `file`); a received file is registered as a file of the task (source `task-file:<task>:stored/<id>`, `received_from` its ref and sender, `name` as for a path). The turn about the task lists what it offered first on both lists.
+- **Offer.** A file her tasks registered may be sent where the channel declares `file` and the access table allows it ([Own files](#own-files)): in an outside group, its own files; in a home group, every conversation's where the turn may use `list_files`. `file_artifacts_from_program` lists them, newest first and at most 8 (what an errand carried there and what the task the turn is about offered first, over the 8), each with `artifact_id`, `name`, a readable `size`, `type` and `registered_at`; it appears in a group whose kind lists `file` in `REPLY_PARTS` and whose adapter declares `file`.
+- **Sending.** The part is refused in words when the file is not listed (outside; a home turn may name any task's file it may read and send there, refused where files do not go out, for an id that is no task's file, or one that does not exist), its bytes are gone, or its size is over the limit the adapter declared; the program has no size or type limit of its own. Her record line is `[文件：名字，大小]`, with `，类型没认出来` when its type was not recognized.
 - **Bytes kept.** A file's bytes are removed 7 days after it was last delivered, or 7 days after registration if never delivered, and kept while a message on its way names it (`media_life.sweep`, daily). The artifact row stays, with `storage` `removed` and `bytes_removed_at`. A part or claim naming it then says when the bytes expired and whether the task folder still holds the original unchanged.
 
 ### Received files
@@ -1163,7 +1174,9 @@ A file someone sends her is offered by ref and read only when she asks: `receive
 - **Judging.** A BOM decides the encoding; else a program or other binary is refused and never stored (`名字是 .txt，内容却是Windows 程序`); else strict UTF-8; else GB18030 with at most 1 control character per 1,000; else `编码没认出来`. Every answer carries `marks`: caution always (`这个文件是<sender>发来的…`), and runnable for a script's extension or a text starting with `#!`. The text comes after a fixed line saying it is the sender's material.
 - **Reading.** One page per call: up to 200 lines and 6,000 characters, counted on the decoded text (a line ends at `\r\n`, `\n` or `\r`); `page` goes to any page, `find` gives the count of matches (Latin letters in either case) and the first 5 pages holding one, with the line. `life` says when the bytes go and how the ref is found.
 - **Keeping.** Bytes go 3 days after the last fetch or `let_go` (`media_life`, the `RECEIVED` cycle); a read does not move that. `do=keep` (`why`) keeps a file within 20 MiB or 50 files, `let_go` ends it, `kept` lists what she keeps there and counts the rest. A kept file's ref never ends. Bytes that expired are fetched again onto the same row while the ref is found.
-- **Copy (the action brain).** `do=copy` writes the stored bytes to `/task/received/<name>`, the name made safe (no path parts, no `..`, no Windows device name, no trailing dot or space, at most 255 UTF-8 bytes; a clash gets ` (2)`). On Windows the folder gets one inherited deny-execute entry for the worker's account when it is made (files only: a program there cannot be started; it can still be read, so a script runs only when she runs it with its interpreter); on POSIX each copy is `0600`. Where the entry cannot be set the copy is still made and says `这里没法禁止执行`. The program never runs a received file. Each copy's path is kept on the row and the copy is removed with the bytes: by the sweep after they expire, at once by an erasure; a kept file's copies stay.
+- **By a stored id.** `ref` may be a stored id (`blob-…`: a picture, a task's file, a received file), read through [Own files](#own-files)' fence (`RECEIVED_FILE_NOT_FOUND`): a received file, or a task's file of a text-like or unrecognized type within 1 MiB that decodes as text, is read in pages as above (a task's file a received one became keeps its sender and marks); anything else is said for what it is (`这是一张图（PNG 图片，12.3 KB），不是文本，读不了正文。`, a text file over 1 MiB `超过 1 MiB，这里不读正文`), a picture with `看图用 read_image，ref 写这个 id。`, and how to copy it.
+- **List.** `do=list` lists this conversation's own stored files and pictures (not stickers), newest first, at most 20: `id`, `kind` (`图`, `文件`, `别人发来的文件`), `name` (or `type` when it has none), `size`, `at` (her clock) and `bytes` (`还在`, `到期删了`, `隐私清除删掉了`); `只列了最新的 20 个，更早的没列出。` when there are more, `这里没有存着的文件和图。` when there are none. With `place`, a group by its name as her review names it (`People.scene_title`, `places.group_named`: `GROUP_UNKNOWN` with the names there are, `GROUP_AMBIGUOUS`), with that name as `place`, where the origin may use `list_files`; elsewhere a `place` is refused by the table (`ACCESS_DENIED_LIST_FILES`), whatever it names. Her `place` field is shown at home only.
+- **Copy (the action brain).** `do=copy` writes the stored bytes to `/task/received/<name>` (by a stored id, of any of the three kinds, to `/task/stored/<name>`, a picture named `<id>.<png|jpg|gif|webp>`), the name made safe (no path parts, no `..`, no Windows device name, no trailing dot or space, at most 255 UTF-8 bytes; a clash gets ` (2)`). On Windows the folder gets one inherited deny-execute entry for the worker's account when it is made (files only: a program there cannot be started; it can still be read, so a script runs only when she runs it with its interpreter); on POSIX each copy is `0600`. Where the entry cannot be set the copy is still made and says `这里没法禁止执行`. The program never runs a received file. Each copy's path is kept on the row and the copy is removed with the bytes: by the sweep after they expire, at once by an erasure; a kept file's copies stay.
 - **Forwarding.** A file a task registers with `offer_file` whose bytes equal a received file in the task's fence keeps `received_from` (its ref and sender), by content, so a renamed copy keeps it; the offer says `这是<sender>发来的文件；发出去时它的来路跟着`.
 - **Erasure.** An erased file answers with the [Erased media](#erased-media) sentence and `从原消息的链接重新拉的那条路也一起关了。`; it is never fetched again.
 

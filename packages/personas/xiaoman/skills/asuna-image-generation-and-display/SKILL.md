@@ -838,7 +838,7 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
 正本是仓库文件 `packages/personas/xiaoman/xiaoman-official-ref-v2.png`（1,208,778 字节，sha256 `49d9a923` 开头）。三个入口：
 
 1. **artifact id `blob-ea31313ccb834208b3014e1cb86badee`**：已在池里（sha 与字节数跟正本一致，tEXt 文字块原样没剥），直接喂 `generate_image` 的 `source_image`，**群线首选**；
-2. **仓库相对路径**（任何检出都在，人格包也随身带）：但按路径喂图只在家里能用（现场那句「盘上的路径只在家里能读。」），**群线用不了；「外面托、家里办」那一拍连同它回来的那一拍也用不了**；
+2. **仓库相对路径**（任何检出都在，人格包也随身带）：按路径喂图只限当前这一拍是**外面**那一栏时——**群线用不了**，现场那句是「盘上的路径只在家里能读。」；**「外面托、家里办」那一拍连同它回来的那一拍不在这一限里：它那一拍现场给的是「这件是外面的人托的事：…」那句，按路径读图不在它被拒的东西里面**（文件能读、能用所有对话的；发只发给托事的那个对话）；
 3. **家里绝对路径**＝本机仓库主检出根下的 `packages/personas/xiaoman/xiaoman-official-ref-v2.png`（主检出根在家里拍用 `git rev-parse --show-toplevel` 现取）。
 
 **画自己的单子优先级：① ＞ ②/③。**

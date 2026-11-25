@@ -4,9 +4,11 @@ Status: **Closed** 2026-11-25 by the owner, nothing built: G1, G2 and G3 dropped
 the close (big sis, her messages store, outbound rows with an `attachment`, by `delivery_state`): before 2026-11-10,
 65 of 494 image sends `UNKNOWN` (54 of the 494 were 2 MB or more); from 2026-11-10 to 2026-11-25, 0 of 136, 11 of them
 2 MB or more, where the earlier rate at that size (about 35%) gives about 4. Sizes changed little (median 648 KB
-before, 483 KB after), which points to the platform's side; the cause is not known. 159 sends with no time on record
-(157 delivered, 2 cancelled) are left out. **Not done:** G1 (nothing to shrink for; her skill may still shrink a
-picture), G2 (no `UNKNOWN` send to settle), G3 (a counting aid only). An `UNKNOWN` image send seen again is a new
+before, 483 KB after). The drop began on 2026-11-10, before her send route changed (ADR-129 D8-D12, 2026-11-13 19:19):
+29 sends on the old route from 11-10 to 11-13, 4 of them 2 MB or more, all delivered (her 0666 asked for the two to be
+told apart). So the route change is not the cause; what changed on 11-10 is not known. 159 sends with no time on
+record (157 delivered, 2 cancelled) are left out. **Not done:** G1 (nothing to shrink for; her skill may still shrink
+a picture), G2 (no `UNKNOWN` send to settle), G3 (a counting aid only). An `UNKNOWN` image send seen again is a new
 page. Laid down 2026-11-11; the owner asked her about pictures that seemed lost (her home line, 2026-11-10); big sis
 read the adapter's journals (structure, states and codes only), and her readings (agent line 0333, 0334) corrected two
 points. Her answer to the owner: a picture may have arrived even though the record cannot show it.

@@ -164,10 +164,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.access.resource': '能用什么', 'settings.access.home': '家里', 'settings.access.home_from_outside': '外面托、家里办',
       'settings.access.outside': '外面', 'settings.access.changed': '改过', 'settings.access.wider': '比默认宽',
       'settings.access.notAvailable': '这一格不能开', 'settings.access.cell': '{resource}：{origin}',
-      'settings.access.row.own_files': '这个对话自己的文件：读、存进去（网上下载的也算）、列出来',
-      'settings.access.row.all_files': '所有对话的文件，按 id 取；字节还在就行，不看范围和时间',
-      'settings.access.row.list_files': '列出或搜索别的对话的文件',
-      'settings.access.row.disk': '电脑上她数据之外的文件（给 read_image、read_file 一个盘上的路径）',
+      'settings.access.row.disk': '电脑上她数据之外的文件（给 read_image 一个盘上的路径）',
       'settings.access.row.commands': 'sandbox_run（用你自己的系统账户，带你的 ssh 和 git 钥匙）',
       'settings.access.row.credentials': '命令可以带上的凭据',
       'settings.access.row.local_network': 'web_fetch 和命令连到你自己的网络（范围 any）',
@@ -175,9 +172,6 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.access.row.integrations': '你的集成工具，按挣到的档位',
       'settings.access.row.development': '自我开发工具，在挣到的地方',
       'settings.access.row.drawing': 'generate_image、render_svg、她的私密名单',
-      'settings.access.row.send_any': '把存着的任何文件或图发到她能说话的任何对话',
-      'settings.access.row.send_to_asker': '把存着的任何文件或图发到这件事为之做的那个对话',
-      'settings.access.row.send_own': '把这个对话自己的文件发回这里',
       'settings.access.level.home': '只在家里', 'settings.access.level.home_from_outside': '家里和外面托、家里办',
       'settings.access.level.everywhere': '所有地方', 'settings.access.level.none': '哪里都不行',
       'settings.accessWider': '访问权限有比默认宽的：{list}', 'settings.access.widerItem': '{resource}（{level}）',
@@ -362,10 +356,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.access.resource': 'Resource', 'settings.access.home': 'Home', 'settings.access.home_from_outside': 'Home from outside',
       'settings.access.outside': 'Outside', 'settings.access.changed': 'Changed', 'settings.access.wider': 'Wider',
       'settings.access.notAvailable': 'Not available', 'settings.access.cell': '{resource}: {origin}',
-      'settings.access.row.own_files': "This conversation's files: read, save into them (web downloads included), list",
-      'settings.access.row.all_files': "Every conversation's files by id, with no scope or age check while the bytes exist",
-      'settings.access.row.list_files': "List or search other conversations' files",
-      'settings.access.row.disk': 'Files on the computer outside her data (a disk path to read_image, read_file)',
+      'settings.access.row.disk': 'Files on the computer outside her data (a disk path to read_image)',
       'settings.access.row.commands': 'sandbox_run (your own user, with your ssh and git keys)',
       'settings.access.row.credentials': 'The credentials a command may carry',
       'settings.access.row.local_network': 'web_fetch and commands reaching your own network (scope any)',
@@ -373,9 +364,6 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.access.row.integrations': 'Your integration tools, by the profile earned',
       'settings.access.row.development': 'Self-development tools, where earned',
       'settings.access.row.drawing': 'generate_image, render_svg, her private-words list',
-      'settings.access.row.send_any': 'Send any stored file or picture to any conversation she may speak in',
-      'settings.access.row.send_to_asker': 'Send any stored file or picture to the conversation the work is for',
-      'settings.access.row.send_own': "Send this conversation's own files there",
       'settings.access.level.home': 'home only', 'settings.access.level.home_from_outside': 'home and home from outside',
       'settings.access.level.everywhere': 'everywhere', 'settings.access.level.none': 'nowhere',
       'settings.accessWider': 'Access set wider than its default: {list}', 'settings.access.widerItem': '{resource} ({level})',
@@ -444,13 +432,11 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
   const word = (t, prefix, value) => { const key = prefix + value, text = t(key); return text && text !== key ? text : String(value); };
   const deploymentLabel = key => DEPLOYMENT_KEYS.has(key) ? { key: 'settings.deployment.' + key } : key;
 
-  // The access table (deployment.access): each resource with its default level, as the worker's access.py has them
-  // (tests/test_access.py compares the two). Columns are the origins from home outwards; a level is how many of them
+  // The access table (deployment.access): each row in effect with its default level, as the worker's access.py has
+  // them (IN_EFFECT, RESOURCES; tests/test_access.py compares the two). Columns are the origins from home outwards; a level is how many of them
   // it allows. `integrations` and `development` take only home or none.
-  const ACCESS_ROWS = [['own_files', 'everywhere'], ['all_files', 'home_from_outside'], ['list_files', 'home_from_outside'],
-    ['disk', 'home'], ['commands', 'home'], ['credentials', 'home'], ['local_network', 'home'], ['internet', 'everywhere'],
-    ['integrations', 'home'], ['development', 'home'], ['drawing', 'everywhere'], ['send_any', 'home'],
-    ['send_to_asker', 'home_from_outside'], ['send_own', 'everywhere']];
+  const ACCESS_ROWS = [['disk', 'home'], ['commands', 'home'], ['credentials', 'home'], ['local_network', 'home'],
+    ['internet', 'everywhere'], ['integrations', 'home'], ['development', 'home'], ['drawing', 'everywhere']];
   const ACCESS_HOME_OR_NONE = ['integrations', 'development'];
   const ACCESS_ORIGINS = ['home', 'home_from_outside', 'outside'];
   const ACCESS_LEVELS = ['none', 'home', 'home_from_outside', 'everywhere'];

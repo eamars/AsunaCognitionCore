@@ -34,9 +34,9 @@ test('a tick in the access table keeps each row one level and the setting only r
   // Ticking "outside" for commands ticks the cells to its left: everywhere; unticking "home" unticks all: none.
   assert.deepEqual(accessEdit({}, 'commands', 2, true), { commands: 'everywhere' });
   assert.deepEqual(accessEdit({ commands: 'everywhere' }, 'commands', 0, false), { commands: 'none' });
-  // Unticking "home from outside" for all_files leaves home only; ticking it again is the default, and leaves the setting.
-  assert.deepEqual(accessEdit({ disk: 'none' }, 'all_files', 1, false), { disk: 'none', all_files: 'home' });
-  assert.deepEqual(accessEdit({ all_files: 'home' }, 'all_files', 1, true), null);
+  // Unticking "home from outside" for internet leaves home only; ticking it again is the default, and leaves the setting.
+  assert.deepEqual(accessEdit({ disk: 'none' }, 'internet', 1, false), { disk: 'none', internet: 'home' });
+  assert.deepEqual(accessEdit({ internet: 'home' }, 'internet', 2, true), null);
 });
 
 test('one tool row DSH refuses is skipped and named; the other rows and the page still start', () => {

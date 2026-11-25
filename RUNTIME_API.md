@@ -146,19 +146,17 @@ Who may use what, decided in one place (`src/asuna/access.py`). Every task and e
 | `home_from_outside` | a task she hands over in a home turn for someone outside (`whose.by` `outside`) |
 | `outside` | a turn in an outside conversation, a home turn a note from outside opened, and the tasks they hand over |
 
-A turn's origin is the class it acts with (`guard.authority`). A task's is written on it when it is handed over
+A turn's origin is the class it acts with (`guard.authority`); a turn about a task (it carries `task_id`: the task's
+result, its question, its time-up) is never wider than that task's. A task's is written on it when it is handed over
 (`origin`) and never widens: a continuation, and a task handed over in a turn about another task, take the narrower of
-their own and that task's. A task without `origin` gets one by the same rule from its stored rows when it is read
-(`access.origin_of_task`).
+their own and that task's. A task without `origin` gets one when it is read (`access.origin_of_task`): by the same rule
+from the turn that handed it over, or, when that turn is gone, from the class of its conversation and person.
 
 Each resource has a level, the origins it allows from home outwards: `home` (home only), `home_from_outside` (home and
-home from outside), `everywhere`, or `none`. The default table:
+home from outside), `everywhere`, or `none`. The table (`access.IN_EFFECT`, defaults in `access.RESOURCES`):
 
 | Resource | Covers | Default |
 |---|---|---|
-| `own_files` | this conversation's files: read, save into them, list | `everywhere` |
-| `all_files` | every conversation's files by id | `home_from_outside` |
-| `list_files` | list or search other conversations' files | `home_from_outside` |
 | `disk` | a disk path to `read_image`, for both brains | `home` |
 | `commands` | `sandbox_run` | `home` |
 | `credentials` | `credentials` on `sandbox_run` | `home` |
@@ -167,20 +165,15 @@ home from outside), `everywhere`, or `none`. The default table:
 | `integrations` | the integration tools, by the profile the turn earns ([Integration profile](#integration-profile)); takes `home` or `none` | `home` |
 | `development` | the development and persona-job tools, with the development grant ([Self-development](#self-development)); takes `home` or `none` | `home` |
 | `drawing` | `generate_image`, `render_svg`, `private_words` (the action brain's) | `everywhere` |
-| `send_any` | send any stored file or picture to any conversation she may speak in | `home` |
-| `send_to_asker` | send any stored file or picture to the conversation the work is for | `home_from_outside` |
-| `send_own` | send this conversation's own files there | `everywhere` |
 
-The program applies the rows `disk`, `commands`, `credentials`, `local_network`, `internet`, `integrations`,
-`development` and `drawing`. The file and send rows (`own_files`, `all_files`, `list_files`, `send_any`,
-`send_to_asker`, `send_own`) are part of the table and the setting; reading, listing and sending stored files follow
-the rules in [Media and images](#media-and-images).
+The Host's sandbox confines writes only, so `commands` also carries every network address, the database address and
+the ssh and git keys of the user the Host runs as ([Sandbox](#sandbox)): widening `commands` widens those with it.
 
 - **The setting** `deployment.access` names only the rows that differ from the default (`commands: none`). The owner
   sets it on the settings page (the section 「访问权限」 / "Access", drawn as the table: a tick box per resource and
-  origin) or in the profile's settings file. An unknown resource or level, or a level its row does not take, is
-  refused when the page saves and stops the worker at start: `INVALID_ACCESS: <the name>`
-  (`src/asuna/native_settings.py` `runtime_settings`).
+  origin) or in the profile's settings file. An unknown resource or level, a level its row does not take, or a
+  resource not in the table above, is refused when the page saves and stops the worker at start:
+  `INVALID_ACCESS: <the name>` (`src/asuna/native_settings.py` `runtime_settings`).
 - **When it applies.** The worker reads the table when it starts; a change applies from the next start (the page's
   apply), to every grant and every call, a task already running included: `Coordinator._grants` gives a task only the
   tools its origin may use, the broker refuses a call when the table no longer allows what it needs (`ToolBroker.call`,

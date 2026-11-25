@@ -21,24 +21,25 @@ PNG = bytes.fromhex('89504e470d0a1a0a0000000d4948445200000001000000010806000000'
                     '1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082')
 
 
-def test_the_default_table_is_the_agreed_one_and_the_page_draws_the_same():
-    assert access.RESOURCES == AGREED
+def test_the_default_table_is_the_agreed_one_and_the_page_draws_the_rows_in_effect():
+    assert access.RESOURCES == AGREED and set(access.IN_EFFECT) < set(AGREED)
     client = (ROOT / 'packages/cognition-core/src/client.js').read_text(encoding='utf-8')
     rows = re.search(r'const ACCESS_ROWS = \[(.*?)\];', client, re.S).group(1)
-    assert dict(re.findall(r"\['(\w+)', '(\w+)'\]", rows)) == AGREED
+    assert re.findall(r"\['(\w+)', '(\w+)'\]", rows) == [(row, AGREED[row]) for row in access.IN_EFFECT]
     # A level allows its origin and every origin left of it, so a row is never "outside yes, home no".
     for level, reach in access.REACH.items():
         assert reach == access.ORIGINS[:len(reach)], level
 
 
-@pytest.mark.parametrize('setting, name', [({'printer': 'home'}, 'printer'), ({'commands': 'sometimes'}, 'sometimes'),
-                                           ({'integrations': 'everywhere'}, 'integrations'),
-                                           ({'development': 'home_from_outside'}, 'development'),
-                                           ('commands: none', 'table')])
-def test_a_bad_setting_is_refused_with_its_name(setting, name):
+@pytest.mark.parametrize('setting, words', [({'printer': 'home'}, 'printer'), ({'commands': 'sometimes'}, 'sometimes'),
+                                            ({'integrations': 'everywhere'}, 'integrations'),
+                                            ({'development': 'home_from_outside'}, 'development'),
+                                            ({'send_any': 'everywhere'}, 'send_any is not in effect yet'),
+                                            ('commands: none', 'table')])
+def test_a_bad_setting_is_refused_with_its_name(setting, words):
     with pytest.raises(ValueError) as caught:
         access.check({'access': setting})
-    assert str(caught.value).startswith('INVALID_ACCESS') and name in str(caught.value)
+    assert str(caught.value).startswith('INVALID_ACCESS') and words in str(caught.value)
 
 
 def test_the_setting_overlays_the_defaults_and_wider_rows_are_named():
@@ -85,6 +86,28 @@ def test_the_origin_of_a_task_is_written_once_and_never_widens(coordinator):
         old = store.put('tasks', {k: v for k, v in current.items() if k != 'origin'}, expected=current['revision'])
         assert access.origin_of_task(store, old) == expected, row['_id']
         assert 'origin' not in task_records.get(store, row['_id'])
+    # The result turn of work for someone outside is that work's origin, so her read_image there reads no disk path.
+    result_turn = turn(store, LOCAL, OWNER, 't5', episode={'episode_kind': 'task_feedback', 'task_id': for_outside['_id']})
+    assert access.origin_of_turn(store, result_turn) == 'home_from_outside'
+    store.config['character'] = {**(store.config.get('character') or {}), 'input_modalities': ['text', 'image']}
+    with pytest.raises(Denied) as caught:
+        coordinator.tools.tool_read_image(result_turn, 'call-r', {'ref': 'C:/no/such/picture.png'})
+    assert role_tools.words(caught.value) == access.FROM_OUTSIDE
+
+
+def test_an_old_task_is_read_by_the_turn_that_made_it_and_by_its_place_only_when_that_turn_is_gone(home):
+    store = home
+    writer = turn(store, 'g1', 'A', 'm1')
+    store.put('notes', {'_id': 'note-m', 'from_episode': writer['_id'], 'from_scene': 'g1', 'from_class': 'public',
+                        'trust': notes.UNTRUSTED, 'to_scene': LOCAL})
+    opened = turn(store, LOCAL, OWNER, 'm2', kind='note', note={'id': 'note-m'}, adapter_id='note')
+    # Made in a home turn a note from outside opened: it runs in the local chat for the owner, and is outside.
+    old = store.put('tasks', {'_id': 'task-old-note', 'request_key': 'task-old-note', 'scene_id': LOCAL,
+                              'requester_id': OWNER, 'episode_id': opened['_id'], 'state': 'RETURNED'})
+    assert access.origin_of_task(store, old) == 'outside'
+    # Its turn gone, the place it runs in decides.
+    store.collection('episodes').delete({'_id': opened['_id']})
+    assert access.origin_of_task(store, old) == 'home'
 
 
 def running(store, task):

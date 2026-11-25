@@ -76,7 +76,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 Who may use what: the access table. Three origins of work, the resources a tool needs, and one level per resource.
 
 - def `levels_of` — The levels this resource takes.
-- def `check` — Refuse a setting `access` that names an unknown resource, an unknown level, or a level its row does not take.
+- def `check` — Refuse a setting `access` that names an unknown resource, a row not in effect, an unknown level, or a level its row does not take.
 - def `table` — Every resource with its level: the defaults with the owner's rows over them.
 - def `allowed` — Whether work of this origin may use this resource.
 - def `wider` — The resources set wider than their default, with their levels.
@@ -84,9 +84,9 @@ Who may use what: the access table. Three origins of work, the resources a tool 
 - def `words` — Her words for a refusal by the table of this resource to work of this origin.
 - def `refusal` — A refusal by the table, as a tool error: its code (ACCESS_DENIED_<RESOURCE>) and her words.
 - def `require` — Raise the table's refusal when work of this origin may not use this resource.
-- def `origin_of_turn` — A turn's origin: home when it acts with home's authority, else outside.
-- def `origin_of_new_task` — The origin of a task this turn makes for `whose`: outside when the turn is outside, home from outside for work for someone outside, else home; never wider than `earlier` (the task it continues) or the task the turn is about.
-- def `origin_of_task` — A task's origin: as stored, else (a task made before origins were stored) by the same rule from its rows.
+- def `origin_of_turn` — A turn's origin: home when it acts with home's authority, else outside; a turn about a task (it carries `task_id`: the task's result, its question, its time-up) is never wider than that task.
+- def `origin_of_new_task` — The origin of a task this turn makes for `whose`: the turn's own (outside, or the task it is about), home from outside for work for someone outside, else home; never wider than `earlier` (the task it continues).
+- def `origin_of_task` — A task's origin: as stored, else (a task made before origins were stored) by the rule a new task has, from the turn that made it; when that turn is gone, from the class of its conversation and person, never wider than the task it continues.
 
 ## `action_tiers`
 

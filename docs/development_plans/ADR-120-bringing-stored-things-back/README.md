@@ -234,8 +234,9 @@ Program words she sees, in her wording where she changed them. No part of her is
 
 - A file from another conversation, asked for outside (the same answer as a missing one): 「这个对话里没有这个文件。」
 - Commands, keys, the owner's network or a disk path in work for someone outside (her 0668: the subject fixed, so it
-  is never read as an errand, which is home's; and a way on, so the work goes on with files instead of stopping):
-  「这件是外面的人托的事：跑命令、用钥匙、连家里的网、读盘上的路径，都不在这件事里；这一步换个做法，文件照样能读、能用。」
+  is never read as an errand, which is home's; her 0669: no "换个做法", which would invite retrying the refused step
+  another way, against her own rule; the sentence says which part is not done and that files still work):
+  「这件是外面的人托的事：跑命令、用钥匙、连家里的网、读盘上的路径，都不在这件事里；文件照样能读、能用。」
   Not her proposed 「要跑命令，回家里那一拍办」: a home turn of hers for the same person is home from outside again, and
   doing the outside person's command as her own home work is the step this row exists to stop.
 - A disk path, outside (her 0668: the trigger is a path in hand, not "files on the computer"): 「盘上的路径只在家里能读。」

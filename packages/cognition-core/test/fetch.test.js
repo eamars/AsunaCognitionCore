@@ -71,7 +71,7 @@ test("any other task, and a call outside any scope, keeps DSH's public-only chec
       error => error.code === 'WEB_BLOCKED_URL' && /non-public/.test(error.message) && error.message.endsWith(LAN_REFUSED));
   }
   // A task whose binding gives the access table's words (work from outside done at home) ends with those instead.
-  const words = '这件是外面的人托的事：跑命令、用钥匙、连家里的网、读盘上的路径，都不在这件事里；这一步换个做法，文件照样能读、能用。';
+  const words = '这件是外面的人托的事：跑命令、用钥匙、连家里的网、读盘上的路径，都不在这件事里；文件照样能读、能用。';
   await assert.rejects(withNetwork('public', () => new SlimFetch().fetch({ url }), words),
     error => error.code === 'WEB_BLOCKED_URL' && error.message.endsWith(words) && !error.message.includes(LAN_REFUSED));
 });

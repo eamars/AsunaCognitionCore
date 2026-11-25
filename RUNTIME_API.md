@@ -185,7 +185,7 @@ the ssh and git keys of the user the Host runs as ([Sandbox](#sandbox)): widenin
   (`Asuna: access set wider than its default: …`) and on the settings page.
 - **Refusals** (`access.refusal`): `ACCESS_DENIED_<RESOURCE>: ` and one sentence. Work from outside done at home,
   refused `commands`, `credentials`, `local_network` or `disk`:
-  「这件是外面的人托的事：跑命令、用钥匙、连家里的网、读盘上的路径，都不在这件事里；这一步换个做法，文件照样能读、能用。」
+  「这件是外面的人托的事：跑命令、用钥匙、连家里的网、读盘上的路径，都不在这件事里；文件照样能读、能用。」
   (for `local_network` it ends the fetch's `WEB_BLOCKED_URL`); an outside turn or task refused `disk`:
   「盘上的路径只在家里能读。」; any other refusal by the table: 「这一步这里用不了。」. In an outside task, a tool it
   was not given is still the guard's plain sentence.

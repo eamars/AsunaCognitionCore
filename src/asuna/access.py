@@ -47,9 +47,9 @@ IN_EFFECT = ('disk', 'commands', 'credentials', 'local_network', 'internet', 'in
 HOME_OR_NONE = ('integrations', 'development')
 STEPS_MOST = 64             # a walk through turns and tasks for an old task stops here (a broken chain, not a real one)
 
-# Her words (read and signed by her, agent line 0668).
+# Her words (read and signed by her, agent lines 0668 and 0669).
 FROM_OUTSIDE = ('这件是外面的人托的事：跑命令、用钥匙、连家里的网、读盘上的路径，都不在这件事里；'
-                '这一步换个做法，文件照样能读、能用。')
+                '文件照样能读、能用。')
 DISK_AT_HOME = '盘上的路径只在家里能读。'
 NOT_HERE = '这一步这里用不了。'
 NOT_IN_OUTSIDE_WORK = ('commands', 'credentials', 'local_network', 'disk')

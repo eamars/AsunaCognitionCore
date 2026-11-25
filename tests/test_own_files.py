@@ -1,22 +1,17 @@
 """ADR-120 landing 2, on the fixture world in memory (test_whose's home: the Web chat and an agent line at home, g1 an
 outside group, g2 a home group, dm-a someone else's chat): a conversation's own files, the reads by origin (another
 conversation's file outside answers exactly as a missing one, and is recorded), the sends by origin and target, the
-outside list and a going-out that carries a picture there, erasure, the one-off backfill, and her review of the
+outside list and a going-out that carries a picture there, erasure, and her review of the
 table's refusals."""
-import sys
-
 import pytest
 
 from asuna import access, guard, media_life, outbound_media, own_files, received_files, role_tools, vision, whose
 from asuna.blobs import BlobStore
-from asuna.config import ROOT
 from asuna.records import artifacts as artifact_records
 from asuna.records import scenes as scene_records
 from asuna.store.words import Set
 from test_whose import AGENT, LINE, LOCAL, OWNER, PERSONA, home, turn  # noqa: F401  (home: a fixture)
 
-sys.path.insert(0, str(ROOT / 'tools'))
-import adr120_shared_scopes_backfill  # noqa: E402
 
 PNG = bytes.fromhex('89504e470d0a1a0a0000000d4948445200000001000000010806000000'
                     '1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082')
@@ -216,27 +211,6 @@ def test_an_erasure_takes_its_conversation_out_of_every_shared_row(home):
     assert artifact_records.get(store, shared)['shared_scopes'] == ['scene:g2']
     BlobStore(store).erase_scope('scene:g1', 'erase-test')                 # run again after a stop: the same
     assert artifact_records.get(store, shared)['shared_scopes'] == ['scene:g2']
-
-
-def test_the_backfill_shares_what_her_lines_carried_once(home):
-    store = home
-    sent, sticker = picture(store, 'scene:' + LOCAL), BlobStore(store).put(PNG, own_files.STICKERS, 'image')
-    row = artifact_records.get(store, sent)
-    attachment = {'artifact_id': sent, 'media_type': 'image/png', 'sha256': row['sha256'], 'size': row['size']}
-    for key, scene, extra in (('l1', 'g1', {}), ('l2', 'g1', {}), ('l3', 'dm-a', {}), ('l4', LOCAL, {}),
-                              ('l5', 'g1', {'sticker': {'kind': 'custom', 'name': 'x'},
-                                            'attachment': {**attachment, 'artifact_id': sticker['artifact_id']}})):
-        store.put('messages', {'_id': key, 'scene_id': scene, 'scope_key': 'scene:' + scene, 'direction': 'outbound',
-                               'text': '', 'attachment': attachment, **extra})
-    planned = adr120_shared_scopes_backfill.run(store, dry_run=True)
-    assert 'shared_scopes' not in artifact_records.get(store, sent), 'a dry run writes nothing'
-    assert (planned['lines'], planned['stickers'], planned['pairs'], planned['own_already'], planned['to_share'],
-            planned['shared']) == (5, 1, 3, 1, 2, 0)
-    done = adr120_shared_scopes_backfill.run(store)
-    assert done['shared'] == 2 and sorted(artifact_records.get(store, sent)['shared_scopes']) == ['scene:dm-a',
-                                                                                                    'scene:g1']
-    again = adr120_shared_scopes_backfill.run(store)
-    assert (again['to_share'], again['shared'], again['shared_already']) == (0, 0, 2)
 
 
 def test_her_review_lists_a_refusal_by_the_table_with_its_row_and_column(home, tmp_path):

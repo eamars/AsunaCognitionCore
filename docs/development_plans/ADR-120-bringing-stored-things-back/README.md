@@ -7,7 +7,10 @@ from her request (agent line 0035, 2026-11-05: nine dated incidents with their i
 big sis's ask); ADR-124 (image routes, her request of 2026-11-10) merged in on 2026-11-11 at the owner's word, as §7.
 Repro material: her 2026-11-02 four-part bundle, which she has kept.
 
-Landing 1 installed 2026-11-25 18:38 (`ae4b97ae3e35`): the table, origins on tasks and turns, the eight rows of
+Landing 2 installed 2026-11-25 20:52 (`632f729aa8ed`): own files per conversation, sends by origin, all 14 rows on the
+settings table, table refusals in her review; her reading of its 16 texts (agent line 0684) and one change
+(`received_file`'s home sentence, 0685). At install 11 of 24 outside groups had drawings of their own (382 in all);
+the other 13 list none until she draws there or home carries one in. Landing 1 installed 2026-11-25 18:38 (`ae4b97ae3e35`): the table, origins on tasks and turns, the eight rows of
 `access.IN_EFFECT`, the settings table; her §9 sentence for work from outside without 「换个做法」 (agent line 0669). Her
 same-day case (0672): she reads table refusals apart from the guard's and the classifier's on the spot, but her
 refusal review (`recall` `refusals`) does not list them; landing 2 adds them.
@@ -180,9 +183,11 @@ levels go into `RUNTIME_API.md` as present behaviour.
 - **The 2026-11-24 case closes here.** A group's sendable pictures become its own files plus what home sent there; a
   picture drawn at home stands on no group's list until she sends it there (an errand or a visit that carries it),
   after which it is that group's. A picture someone sent in a group is that group's own: sendable there, not listed.
-- **Pictures and files sent before this landing** are shared by a one-off backfill run between her Host's stop and
-  the new worker's start (`tools/adr120_shared_scopes_backfill.py`: every outbound line carrying a picture or a file
-  shares it into its conversation; counts only; deleted after the install).
+- **Pictures and files sent before this landing** were shared by a one-off backfill run between her Host's stop and
+  the new worker's start, 2026-11-25 20:52 (every outbound line carrying a picture or a file shares it into its
+  conversation): 857 lines, 463 of them stickers (left out), 376 file and conversation pairs, 304 already that
+  conversation's own, 72 shared; its dry run gave the same. The tool was deleted after the install (it is in
+  `632f729aa8ed`).
 - **Lifetimes do not change** (`media_life.POLICY`: her drawings kept, pulled copies 7 days, task files and received
   files by their own days). A new source prefix (a download, a frame) adds its row there. An erasure of a conversation
   (ADR-105) erases its own rows and removes its scope from other rows' `shared_scopes`.

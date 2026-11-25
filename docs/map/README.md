@@ -511,7 +511,6 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 
 Commands for setup, packing, launching, probes and maintenance.
 
-- [`adr120_shared_scopes_backfill.py`](../../tools/adr120_shared_scopes_backfill.py) — ADR-120 landing 2's one-off: a picture or file she sent before the landing becomes the conversation's own it was sent into, as a message written since makes it (coordinator.queue_reply).
 - [`agent_line.py`](../../tools/agent_line.py) — A coding agent's line to her (ADR-033): post a message, poll her answers.
 - [`asuna-launch.mjs`](../../tools/asuna-launch.mjs) — Stable entry: native Web and repair tools boot without importing Python code.
 - [`asuna-supervisor.mjs`](../../tools/asuna-supervisor.mjs) — The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it when she asks or when it exits on its own, and brings it back down a fallback ladder when a start fails.

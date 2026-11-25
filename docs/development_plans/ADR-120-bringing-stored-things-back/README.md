@@ -7,6 +7,14 @@ from her request (agent line 0035, 2026-11-05: nine dated incidents with their i
 big sis's ask); ADR-124 (image routes, her request of 2026-11-10) merged in on 2026-11-11 at the owner's word, as §7.
 Repro material: her 2026-11-02 four-part bundle, which she has kept.
 
+Landing 3 (installed 2026-11-25, see §8) also fixes a fault found while building it: since `8685b0e09` (2026-11-10,
+ADR-119 F4) `received_files` imported `media_life._moment`, which that commit removed, so every received-file read that
+reached its answer, every `let_go`, and a `kept` list or over-quota `keep` holding a kept file raised ImportError. Her
+records: 3 `received_file` calls from 11-10 to 11-25, all failed (last 11-20); 12 before, 6 of them answered. No fault
+was reported. Fixed in `ea37a39b6e19` (`received_files` reads stored times with `clock.moment` itself); her 0693 asked
+for it to be recorded here. With the default table `offer_file` by id never meets 「这个文件不归这个对话发。」 (a file a
+task may read there is one it may send there); that sentence appears only when the owner narrows a send row.
+
 Landing 2 installed 2026-11-25 20:52 (`632f729aa8ed`): own files per conversation, sends by origin, all 14 rows on the
 settings table, table refusals in her review; her reading of its 16 texts (agent line 0684) and one change
 (`received_file`'s home sentence, 0685). At install 11 of 24 outside groups had drawings of their own (382 in all);

@@ -428,6 +428,7 @@ artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图
 | `ATTACHMENT_ARTIFACT_UNAVAILABLE` | artifact 行不存在，或不是 `state=DONE` / `storage=gridfs` |
 | `ATTACHMENT_SCOPE_DENIED` | 字节端点要的是「这条消息所在那个对话自己的」图（`outbound_media.py:serve`，`own_files.holds` 现算，不接受调用方传 scope）；被 `share`／`carry` 带进来的算它的，放行。给她的话在 `role_tools.py:turn_pictures`：「这张图不是这个对话能用的；换一张，或这次不带图。」|
 | `ATTACHMENT_NOT_AN_IMAGE` | 行上 `kind` 不是 image，或字节魔数不是 png/jpeg/webp/gif |
+| `ATTACHMENT_NOT_AN_IMAGE` | `speak` 的 `picture` 指向一张 `kind=file` 的东西（包括超上限的图）→ 回执「第 1 条 picture 这不是一张能发的图片；换一张，或这次不带图。」；判在 `outbound_media.py:accept_artifact` 的 kind 校验（`if item.get('kind') != ATTACHMENT_KIND:`，`ATTACHMENT_KIND = 'image'`） |
 | `ATTACHMENT_OVER_LIMIT` | 大小不在 `0 < size ≤ 8 MiB`（出站上限 8 MiB，与适配器同一口径） |
 | `ATTACHMENT_HASH_MISMATCH` | BlobStore 读回时按行内 sha 复核没过：字节和记录不一致 |
 
@@ -943,7 +944,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - `read_image` 看过不改变清单：speak 的 picture 引不在 `image_artifacts_from_program` 里的 id 会被退（`ATTACH_ARTIFACT_NOT_IN_CONTEXT` 只认**这一轮列出的那些 id**）。
 - 所以要发哪张，就照抄**这一轮**清单里的 `artifact_id`；「我刚才看过它」不是依据，上一轮的 id 也可能已经掉出那 6 张。
 - **报告里交出去的 `artifact_id` 不能隔拍拿去发**：同一批字节登记两次就是两行两个 id（上面 `put()` 不去重那条），隔拍只剩源文件 sha 能把两个 id 对回同一份（11-19 实测：同一张图两次登记，两个 id 不同、源文件 sha 同一枚）。所以发之前一律照抄**当拍清单**里的那串，别拿上一拍报告里写过的 id 当凭据。
-- `web_fetch` 带 `save` 存的那张：前缀 `download:`、`scope_key` 是**那个任务绑定的对话**，不算我做的；生命周期同任务文件（`media_life.POLICY['download:']` 是 `OFFERED`）。≤8 MiB 登记成 `kind=image`（当得了 picture），**超 8 MiB 降级成 `file`**——回执里类型词仍写「PNG 图片」，但 `note` 是 file 那一支（「要读就用 received_file」）：**看到 note 是 file 那一支就别当 picture 发**。（11-25 读码所得，8 MiB 那一支我今天现场量，对上再撤这句。）
+- `web_fetch` 带 `save` 存的那张：前缀 `download:`、`scope_key` 是**那个任务绑定的对话**，不算我做的；生命周期同任务文件（`media_life.POLICY['download:']` 是 `OFFERED`）。≤8 MiB 登记成 `kind=image`（当得了 picture），**超 8 MiB 降级成 `file`**——回执里类型词仍写「PNG 图片」，但 `note` 是 file 那一支（「要读就用 received_file」）：**看到 note 是 file 那一支就别当 picture 发**。（11-26 现场量过：一张 8.78 MiB 的公网 JPEG 被存成 `file`，`speak picture` 当场被退。）
 
 ### 判据：图发出去没有，账面上可能永远看不见
 - 适配器**等不到自己那声 ack** 那一支会先按 `unknown` 交回就直接 return，**不进 `settle()`**：库里那行留 `delivery_state=UNKNOWN / platform_message_id=null / delivery_basis=unknown`，**`sends.jsonl` 连这一行都不落**。NapCat 事后回的那格（`retcode 1200 / reason=platform_send_timeout`）走的是迟到回执那条：`late_acks.jsonl` 里会留下一条带 publication 与 attempt 的记录，并把库里那行的回执补成 1200，`platform_message_id` 仍然是 null。契约照旧：`unknown` 不重发、不读回。

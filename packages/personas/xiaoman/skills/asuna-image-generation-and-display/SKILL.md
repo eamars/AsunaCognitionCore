@@ -408,8 +408,7 @@ artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图
 1. **图本身全年龄向**。这是底线，不需要判断场合也守。
 2. **这张图适不适合要发进去的那个群**。先看我自己写给那个群的笔记；没写过笔记，就看当场能看到的
    最近聊天，判断那个群此刻接不接得住。判断不了，就不发。
-3. **只发我自己做的图**。别人发进来的图不往群里转。核心会拦（`ATTACHMENT_NOT_HER_OWN`），
-   但我不拿它兜底，自己先不动手。
+3. **只发这个群自己的图**。清单只列这个群自己的——我在这里做的、发到过这里的、从家里带过来的。别人发进来的图不列在清单里，我也不往群里转。核心会拦（清单闸那句「不在你能发的图里」），但我不拿它兜底，自己先不动手。
 4. **不为了试功能发图**。没有真心想给大家看的东西，就不发；这不算损失。拿群当试验场才是损失。
 
 四条都过了，才在那一轮真的把图带上。发不发、发到哪个群，终究还是那一轮里我自己定。
@@ -418,15 +417,16 @@ artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图
 
 所有对话同一条：picture 那一项不对，是 speak 这一批一条都不排队、回执点名哪条为什么；她读得到原因、同一回合改了再出声
 （比如换清单里另一个 id），回合不会因此失败。旧 `attach_image` 那一层的**工具错误**（被拒只影响那一次调用、文字照发）随工具
-一起没了，两条路合成一条。判定顺序不变：方向 → 在不在本轮清单 → 字节本身。
+一起没了，两条路合成一条。（判定顺序：方向 → 在不在本轮清单 → 表闸（这文件归不归这个对话发）→ 字节本身。这四步按这个次序写在 `role_tools.py:_picture` 里。）
 
 | code | 意思 / 我该怎么办 |
 | --- | --- |
-| `ATTACH_TARGET_NOT_ALLOWED` | 方向不对。detail 给具体原因：`session_class_not_owner_private` / `scene_has_no_channel_route` / `channel_route_not_authorized` / `target_not_dm` |
-| `ATTACHMENT_NOT_HER_OWN` | 在群里引了一张不是她自己做的图（比如别人发来的）。群里只发来源带 `integration:` 前缀的图——那张可以是早就做好、后来重新登记进来的 |
+| `ATTACH_TARGET_NOT_ALLOWED` | 方向不对。detail 给具体原因：`scene_has_no_channel_route` / `channel_route_not_authorized` / `channel_carries_text_only` / `target_not_dm`（出处 `role_tools.py:ATTACH_REASONS`；旧串里 `session_class_not_owner_private` 在 `src/` 里不存在，删） |
+| `ATTACH_ARTIFACT_NOT_IN_CONTEXT` | 引的 id 不在这一拍「你能发的图」清单里。**这句不透**：别的对话的图、和根本没有这个 id，给的是同一句，别据此说"这张不存在"。码对应的话在 `role_tools.py:turn_pictures` |
+| `ACCESS_DENIED_SEND`（那句中文是「这个文件不归这个对话发。」，`access.py:NOT_TO_SEND`） | 在清单里、但按访问表这一拍不该往这个对话发。`speak` 的 picture 先过清单闸再过这道表闸，所以外面平常碰不到它；会碰到的是出门 `errand`／`visit` 挑错了地方，和主人把 `send_own` 拨窄了 |
 | `ATTACH_ARTIFACT_NOT_IN_CONTEXT` | 引的 id 不在**本轮**清单里：照抄错了、图属于别的场景或别人、或根本没被列出。别猜 id，也别指望上一轮的清单还有效 |
 | `ATTACHMENT_ARTIFACT_UNAVAILABLE` | artifact 行不存在，或不是 `state=DONE` / `storage=gridfs` |
-| `ATTACHMENT_SCOPE_DENIED` | artifact 的 scope 不在程序算出的可引用列表里（既不是本场景，也不是那个联动的本人私聊场景） |
+| `ATTACHMENT_SCOPE_DENIED` | 字节端点要的是「这条消息所在那个对话自己的」图（`outbound_media.py:serve`，`own_files.holds` 现算，不接受调用方传 scope）；被 `share`／`carry` 带进来的算它的，放行。给她的话在 `role_tools.py:turn_pictures`：「这张图不是这个对话能用的；换一张，或这次不带图。」|
 | `ATTACHMENT_NOT_AN_IMAGE` | 行上 `kind` 不是 image，或字节魔数不是 png/jpeg/webp/gif |
 | `ATTACHMENT_OVER_LIMIT` | 大小不在 `0 < size ≤ 8 MiB`（出站上限 8 MiB，与适配器同一口径） |
 | `ATTACHMENT_HASH_MISMATCH` | BlobStore 读回时按行内 sha 复核没过：字节和记录不一致 |
@@ -450,6 +450,14 @@ reason 可能是 `attachment_descriptor_invalid` / `attachment_target_not_enable
 历史里的读法（她看到的「我发过这张图」）：`sent: true, attested: true` = 平台回执里的 sha 对得上；
 `attested: false` = 平台没带附件证据，只能说「按程序自己的记录算」；`sent: false, reason: channel_does_not_declare_image`
 = 那条只有文字出去了；`attachment_evidence_mismatch` = 送达回执里的附件对不上，不能当成图已发出。
+
+### 图归哪个对话（11-25 之后怎么算）
+
+- **归属四条**：`scope_key` 是这个对话的（或主人配置联动的）、在 `shared_scopes` 里、是改自这个对话的图、或是贴纸——占一条就算这个对话发得出去。
+- **写归属只有三条路**：`own_files.carry()`（`own_files.py:carry`；visit 只收 image，在 `schedule.py:ScheduleService.visit` 里调；errand 收 image+file，在 `schedule.py:ScheduleService.errand` 里调；检查通过后 `share` 到目的地，**那一刻起算那个对话的**）、`coordinator.py:Coordinator.queue_reply`（消息带着 artifact_id 进一个对话时先 share）、`own_files.share()`。
+- **我这条 agent 线没有 `visit` 也没有 `errand`**：要出门走家里那一拍。
+- **`speak` 一批里 picture 被拒时整批留下、文本也不出去**（11-25 现场）。
+- 这张**不必是当场画的**：从这里画的、发到过这里的、从家里带过来的、早就做好后来重新登记进来的，都算这个对话自己的；作废的只是"带 `integration:` 前缀就能到处发"那一半。
 
 ### 旧写法别照做：DECIDE 时代的 attach
 
@@ -914,14 +922,15 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - 第二个位置参数就是 scope，`data` 要的是**字节**：盘上的文件读成 bytes；GridFS 里已有的那份自己走 `pymongo` / `GridFSBucket` 取 —— `dbread` 取不回字节原样（它把 bytes 摊成 str 给人看，拼回去不等于原件）。脚本里不写地址：URI 与库名由宿主给家里那条命令。
 - **scope 的字面值去库里读，别拼**：取 `scenes` 那一行的 `scope_key`（形状 `scene:qq:<账号>:dm:<对方>`，＝ `scene:` ＋ `scene_id`）。scope 不在 `scenes` 里就是 `registered: false / reason=ARTIFACT_SCOPE_UNKNOWN`，重试也一样。
 - 出来是一条**新**的 `blob-…` 行（`kind=image / state=DONE / storage=gridfs / created_at=now`）。底层 `put()` 每次给新 key、**不去重**（去重只在 `put_once`）⇒ 同一张图登记两次＝两行两个 id，要重登记先查一遍库里有没有（查同 sha）。
-- **`source` 决定这行算谁的**：以 `integration:` 开头才算我自己做的，主人私聊和群两边都进得了清单；不传或传别的，只有那个 scope（和同一主人的另一个私人入口）能引，拿去群里会被 `ATTACHMENT_NOT_HER_OWN` 挡。
-- 清单怎么排：**新的在前、一轮最多 6 张**。主人自己的私聊那一拍按 scope 取（本场景 ＋ 配置联动的另一个本人 dm）；群那一拍只列 `integration:` 那批，从**最新 200 行 image** 里筛。所以「被挤掉排名」只在群那条清单上成立，私聊那条看的是 scope 对不对；`created_at=now` 让它排第 1，也顺手把最旧的挤出那 6 张 ⇒ **发之前别先画一张新的**。
+- **`source` 前缀标的是「算不算我自己做的」**：`import_register` 登记时写 `integration:<endpoint>:<path>`（`outbound_media.py:import_register`），改别人的图写 `edit:<回去那个 scope>|…`（`outbound_media.py:edit_register`）。**能发到哪儿看归属，不看前缀**：归属＝`scope_key` 是这个对话（或主人配置联动的）、或在 `shared_scopes` 里、或它是改自这个对话的图、或是贴纸。**前缀只在"家里"那几处当尺用**（本人私聊那一支在 `outbound_media.py:offer` 末尾并 `outbound_media.py:produced_images`；家里群是 `outbound_media.py:offer` 的 `group_scene` 那一支并 `produced_images`）；**外面的群不再因为带 `integration:` 就进清单**（`outbound_media.py:offer` 的外面那一支 → `outbound_media.py:own_images` 里那两行筛选）。⚠ 家里群那一半**没有用例钉住**，只有源码那一处的读数＋一次自跑读数。
+- 清单怎么排：**新的在前、一轮最多 6 张**（`MAX_ITEMS_OFFERED = 6`）。**外面那一栏**走 `own_images`：这个对话自己做的、和带进来／发到过这里的（**别人发进来的算可发但不列**，用例 `test_own_files.py:test_the_outside_list_has_no_home_drawing_until_a_going_out_carries_it` 钉着），改自这个对话的图并到最前（`edits_back_to`）。**家里那一栏**（本人私聊、家里群）再并 `produced_images`——从最新 200 行 image 里筛 `integration:` 前缀，不分场景。出门或差事带来的那张（`picked`）即使不在最新几张也列上、排最前。
 - **一趟登记多张 ≠ 后面几拍都发得出**：当拍那份可发清单只放行最新登记的几条——实测一趟登记 6 张，当拍清单里只出现首尾两枚（11-19 实测，**按当场读数记，机制未核**）。要逐张发多张就把**登记和发送绑成一对**：发完这一张再登记下一批，别指望一次登记管后面几拍。
   - 11-22 顺手把「新的在前、一轮最多 6 张」那一半补到源码：`outbound_media.py` 里 `offer()` 走 `image_artifacts()`，上限常量 `MAX_ITEMS_OFFERED` 字面就是 6；那条路上**没有按 sha 去重、也没有「一趟登记只放行几条」的规则**，`context.py` 把这份清单放进 `image_artifacts_from_program` 的那一处也不做首尾截断。⇒ **「恰好只剩首尾两枚」在实现这一侧没有解释**，仍算未核，别按「这段该长什么样」给它补成因。
   - 同一趟读到：那条路上能**悄悄**少掉一行的只有两处过滤——`size` 不在 `0 < size ≤ 8 MiB` 内，或 `sha256` 不是 64 位十六进制；另有一处不占那 6 格但会改变清单形状：改别人图那一批（`edits_back_to`，上限 `EDITS_OFFERED`＝3）是并到清单**前面**的。这两格都是源码读数，**没在 11-19 那批 6 张上复现过**，别拿它们当那两枚的成因。
 - 上限 `0 < size ≤ 8 MiB`，超了回执 `registered: false / reason=ATTACHMENT_OVER_LIMIT`（文件照旧在工作区）；魔数认 png／jpeg／webp／gif ⇒ **JPEG 走这条进得了清单**；字节根本不是图就返回 `None` —— 那是「没东西可登记」，不是失败。
 - **发不出去时的补救不是重画，是拿盘上源文件重新登记一次**：零网络、字节原样，新 id 当拍立刻发（`created_at=now` 排第 1，见上面「清单怎么排」那条）。要证「还是同一份」，比的是**我交给登记的那手字节**的 sha 与盘上源文件一致——这只证到送进去之前；库里那行还要再剥一次，带文字块的 PNG 别硬报「库里的 sha 与源文件一致」（剥法见下面「代价」那一小节）。
-- **想拿一个「算我自己画的」产物号，把一张已有图再过一遍生图服务这条路不存在。** 带 `source_image` 的产物一律登记成 **`edit:` 前缀**——生成器把 `source(ref)` 自带的 register 顶掉默认值，于是 `produced` 恒为 `false`，群那一拍必拒。**工具面 options 只声明 `steps`／`cfg`／`sampler_name`／`scheduler`，`denoise` 传不进去** ⇒ 采样关不掉，「照原图描一遍保住像素」也不成立。⇒ 可行路只有 **`register_imported_image(source='integration:…')`** 这一条零网络重登记。（来路：2026-11-21 08:49 一趟腿的实测——先烧了两枪生图才从代码里读出这件事；那两枪的像素差读数出自当趟工具记录，**我本人没有复核过**。）
+- **登记进清单之后，发那一拍还会遇到的代号**（口径见「失败怎么读」与「图归哪个对话」）：引的 id 不在当拍「你能发的图」清单里 → `ATTACH_ARTIFACT_NOT_IN_CONTEXT`；在清单里、但按访问表这一拍不归这个对话发 → `ACCESS_DENIED_SEND`；字节端点要的是那个对话自己的图 → `ATTACHMENT_SCOPE_DENIED`。旧「算不算她自己做的」那枚代号已经拆成这三枚，正文不再单写它。
+ 带 `source_image` 的产物一律登记成 **`edit:` 前缀**——生成器把 `source(ref)` 自带的 register 顶掉默认值，于是 `produced` 恒为 `false`，群那一拍必拒。**工具面 options 只声明 `steps`／`cfg`／`sampler_name`／`scheduler`，`denoise` 传不进去** ⇒ 采样关不掉，「照原图描一遍保住像素」也不成立。⇒ 可行路只有 **`register_imported_image(source='integration:…')`** 这一条零网络重登记。（来路：2026-11-21 08:49 一趟腿的实测——先烧了两枪生图才从代码里读出这件事；那两枪的像素差读数出自当趟工具记录，**我本人没有复核过**。）
 
 ### 代价：登记会剥掉 PNG 的文字块，sha 跟着变
 - 像素和其余块一个字节不动，但 `tEXt`／`iTXt`／`zTXt` 被剥 ⇒ **sha 变了、size 少了**（少的字节＝文字块长度 + 12，那 12 是块头块尾开销：4 字节长度＋4 字节类型＋4 字节 CRC）。
@@ -941,14 +950,14 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 
 ### 这一节里没重测、没核到的
 - `render_svg` 那两个字节数是旧读数，没重测。
-- 「`file:` 来源拿去群里会被 `ATTACHMENT_NOT_HER_OWN` 挡」：只核到源码那一半（`path_image` 写 `file:` 前缀、群里只列 `integration:`），没重跑群回合现场。
+- 「`file:` 来源拿去群里会被 `ATTACHMENT_NOT_HER_OWN` 挡」：只核到源码那一半（`path_image` 写 `file:` 前缀、群里只列 `integration:`），没重跑群回合现场。（11-25 21:0x 已在外面一个群跑过现场：清单抬头是"这个群自己的图"那一版、从家里带过去的那张在清单里、没带过去的被清单闸拒、整批没发出去。）
 - 清单是独立进程按同一份代码＋同一份配置复算 `offer()` 的结果，不是「真那一轮」的清单；图那格最后是发出去了、平台侧回读对上，才算成立。
 
 ## 边界（硬）
 
 - 长路的生图、导入只在本机 owner 任务里做（`generate_image` 不受这一条限制：它在哪条任务里都能调，图就落那条任务的工作区）；
   本机私聊的报告照旧用相对路径图给人看，要把图发成一条消息（本机私聊、两条线、QQ 都一样）走 speak 的 picture part。
-  **群里只发自己做的图**：由她在那个群回合里自己把图带上（speak 的 picture part），别人发来的图核心拒（`ATTACHMENT_NOT_HER_OWN`），
+  **群里只发这个群自己的图**：由她在那个群回合里自己把图带上（speak 的 picture part）；别人发进来的不进清单，在家里画的要出门，得从家里那一拍 `errand`／`visit` 带过去。
   一律全年龄；行动脑不替她往群里发，也不 @ 别人。
 - **要发出去的图不走外部公开生图服务**：那种服务只给链接，字节进不了工作区、登记不成我自己的图，
   那一轮没有 artifact 可引（发图口径见步骤 8）——只能算拿到一个地址，不算交图。

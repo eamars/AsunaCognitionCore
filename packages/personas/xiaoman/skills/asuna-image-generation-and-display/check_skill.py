@@ -165,7 +165,7 @@ SERVICE = [
 
 # 硬边界：这些句子必须在，否则下次容易越界
 BOUNDARIES = [
-    ("boundary_group_own_only", "群里只发自己做的图"),
+    ("boundary_group_own_only", "群里只发这个群自己的图"),
     ("boundary_no_base64_transport", "base64"),
     ("boundary_keep_qq_adapter", "QQ 适配器"),
     ("boundary_no_visual_review_claim", "未做视觉复核"),
@@ -224,7 +224,7 @@ ATTACH = [
     ("attach_endpoint_sha_mismatch", "ATTACHMENT_SHA_MISMATCH"),
     ("attach_endpoint_media_type_mismatch", "ATTACHMENT_MEDIA_TYPE_MISMATCH"),
     # 适配器侧读法与历史读法
-    ("attach_group_not_her_own", "ATTACHMENT_NOT_HER_OWN"),
+    ("attach_group_not_her_own", "ACCESS_DENIED_SEND"),
     ("attach_adapter_unknown_target", "attachment_target_not_enabled"),
     ("attach_adapter_over_limit", "attachment_over_limit"),
     ("attach_adapter_fetch_unavailable", "attachment_fetch_unavailable"),
@@ -307,7 +307,7 @@ GROUP_PRECHECK = [
     ("group_pre_recent_chat", "最近聊天"),
     ("group_pre_cant_judge_no_send", "判断不了"),
     # 3. 只发自己做的图，别人发进来的不转
-    ("group_pre_own_only", "我自己做的图"),
+    ("group_pre_own_only", "这个群自己的图"),
     ("group_pre_no_forward_others", "别人发进来的图"),
     # 4. 不为试功能发图，不发不算损失
     ("group_pre_no_feature_test", "试功能"),
@@ -623,7 +623,7 @@ REGISTER_SECTION = [
     ("reg_new_row_id", "blob-"),
     ("reg_no_dedup", "put_once"),
     ("reg_source_prefix_decides", "integration:"),
-    ("reg_group_refuses_other_source", "ATTACHMENT_NOT_HER_OWN"),
+    ("reg_group_refuses_other_source", "ATTACH_ARTIFACT_NOT_IN_CONTEXT"),
     ("reg_offer_six", "最多 6 张"),
     ("reg_group_list_200", "200 行"),
     ("reg_over_limit", "ATTACHMENT_OVER_LIMIT"),
@@ -952,8 +952,8 @@ def main():
     check("attach_sources_three", "三条，都由程序登记" in step8,
           "步骤 8「图从哪来」没写三条来源（切片 %d 字）" % len(step8))
     check("attach_fail_code_by_prefix",
-          ("群里只发来源带" in step8 and "可以是早就做好、后来重新登记进来的" in step8),
-          "步骤 8 失败码表里 ATTACHMENT_NOT_HER_OWN 那格没按机制写（来源前缀；可以是重新登记的那张）")
+          ("这个群自己的图" in step8 and "不必是当场画的" in step8),
+          "步骤 8 没写「这个群自己的图」或「不必是当场画的」（归属那格：清单只列这个群自己的，图不必是当场画的）")
     check("attribution_points_to_source_rule",
           ("来源前缀决定这行算谁的" in edit_slice
            and "本机已有那张图怎么进可发清单" in edit_slice),

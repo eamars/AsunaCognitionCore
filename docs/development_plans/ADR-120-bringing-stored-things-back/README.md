@@ -149,18 +149,34 @@ levels go into `RUNTIME_API.md` as present behaviour.
 
 ## 4. A conversation's own files
 
-- **What they are.** The stored rows whose `scope_key` is that conversation (received there, made there by her or
-  its tasks, downloaded or saved there), and those **sent there**: a row sent to another conversation gains that
-  conversation in `shared_scopes` when the message is accepted (one set-add, no copy of the bytes). Stickers stay
-  `global-safe`, everyone's as today. A task's `/task` folder (per place and person, `grants.py:47-52`) is its working
+- **What they are** (`own_files.py`, one function every fence asks). The stored rows whose `scope_key` is that
+  conversation (received there, made there by her or its tasks, downloaded or saved there), and those **sent or
+  carried there**: a row gains that conversation in `shared_scopes` (one set-add, no copy of the bytes, written outside
+  the row's revision and kept by every write of it) when an outbound message carrying it is written for that
+  conversation (`Coordinator.queue_reply`, before the row, so the byte endpoint always finds it so), and at pick time
+  when an errand or a visit picks it for that place, by the picking turn, only where that turn's origin may send it
+  there (`own_files.carry`: a visit runs as an outside turn, so without the share a picture home sent out would be
+  refused there). An edit of a picture that came from a conversation is that conversation's (it goes back there); the
+  conversations the owner linked to it (`context_links`) count as its own, as today; stickers stay `global-safe`,
+  everyone's. A turn's own conversation is where it is, and for a home turn a note from outside opened, where the note
+  came from; a task's is its binding. A task's `/task` folder (per place and person, `grants.py:47-52`) is its working
   folder inside those files: what it saves there it registers into them.
 - **Outside sees only its own.** By id or by name within its own files; an id from elsewhere gets the same answer as
   an id that does not exist (§9), so nothing tells it that a file exists elsewhere.
-- **Home sees all.** Any row by id, no scope, age or "is it hers" check while the bytes exist; listing by
-  conversation name, as `write_document`'s `group` already does from home (ADR-135 landing 9).
+- **Home sees all.** Any row or ref by id, no scope, age or "is it hers" check while the bytes exist (`all_files`,
+  home and home from outside by default); a home conversation's lists as today, other conversations' items in them
+  only where the turn's origin may use `list_files`.
+- **Sends** (`own_files.send_refused`). Into a home conversation is no crossing: whatever the work may read. Into an
+  outside one: any file with `send_any` (home), any file into the conversation the work is for with `send_to_asker`
+  (home from outside), that conversation's own with `send_own` (everywhere); else 「这个文件不归这个对话发。」
+  (`ACCESS_DENIED_SEND`). The byte endpoints serve only the message's conversation's own files. An errand takes a
+  picture or a file and a visit a picture by the same rule (it replaced "her 50 newest drawings only").
 - **The 2026-11-24 case closes here.** A group's sendable pictures become its own files plus what home sent there; a
-  picture drawn at home stands on no group's list until she sends it there (an errand, a visit that carries it, or a
-  home turn's `send_any`), after which it is that group's.
+  picture drawn at home stands on no group's list until she sends it there (an errand or a visit that carries it),
+  after which it is that group's. A picture someone sent in a group is that group's own: sendable there, not listed.
+- **Pictures and files sent before this landing** are shared by a one-off backfill run between her Host's stop and
+  the new worker's start (`tools/adr120_shared_scopes_backfill.py`: every outbound line carrying a picture or a file
+  shares it into its conversation; counts only; deleted after the install).
 - **Lifetimes do not change** (`media_life.POLICY`: her drawings kept, pulled copies 7 days, task files and received
   files by their own days). A new source prefix (a download, a frame) adds its row there. An erasure of a conversation
   (ADR-105) erases its own rows and removes its scope from other rows' `shared_scopes`.
@@ -225,11 +241,17 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
    start report of wider rows (Host log, settings page); the settings section as the table of the rows in effect.
    Behaviour changes only in the middle column (no commands, credentials, local network or disk for home from
    outside) and in the dead guard row's removal.
-2. **Own files.** `shared_scopes`, the outside fences narrowed to own files, home's checks removed, the two offer lists
-   by conversation (closes the 2026-11-24 case); the six file and send rows join `IN_EFFECT` and the settings table.
-   Her refusal review lists the table's refusals too (her 0672): each with the row it was refused by, in her words
-   for the row (盘上的路径、跑命令、凭据、家里的网、公网、主人的集成、自我开发、画图, and the file and send rows'), so a
-   row the owner narrowed is seen at home before it is met again.
+2. **Own files.** `own_files.py`; `shared_scopes` (added when the outbound message row is written, and at pick time
+   for a going-out; removed by an erasure; the backfill for what was sent before); the outside fences narrowed to own
+   files, an outside read of another conversation's file answered exactly as a missing one and recorded apart; home's
+   scope, age and "is it hers" checks removed (`all_files`); the sends by origin and target, the errand's and visit's
+   picture by the same rule; the two offer lists by conversation (closes the 2026-11-24 case). All 14 rows apply and
+   are drawn on the settings page (`IN_EFFECT` goes: no row is left out). Every refusal by the table leaves one audit
+   row `access.denied` (the plugin's two, a tool not given for the origin and a local address, through `guard.task`),
+   and her refusal review lists them (her 0672, 0681), marked 「这里不许：<row>（<column>）」 in her words for the row
+   (盘上的路径、跑命令、凭据、家里的网、公网、主人的集成、自我开发、画图、这个对话自己的文件、别的对话的文件、翻看别的
+   对话的文件) and the column (家里、外面托、家里办、外面), every send 「这里不许：把这个文件发到这里（<column>）」, so a row
+   the owner narrowed is seen at home before it is met again.
 3. **D1 and D3.** Stored ids in `received_file` and `offer_file`.
 4. **D2.** `web_fetch` `save`.
 5. **D4.** A frame at a time.

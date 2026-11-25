@@ -240,11 +240,13 @@ class BlobStore:
         """Delete every stored byte of `scope` (the blob store's blobs of the scope), then mark each of its rows whose
         bytes are gone (`gridfs`, and `removed`: an expired file must not be fetched again either) `erased`, by the
         row's own scope, so a row whose bytes were already missing is marked too. The row keeps its name, size, sender
-        and when (ADR-105). Run again after a stop, it finishes both. Returns the number of blobs deleted."""
+        and when (ADR-105); and the scope leaves every other row it was shared into (`shared_scopes`, ADR-120 §4). Run
+        again after a stop, it finishes all three. Returns the number of blobs deleted."""
         count = 0
         for blob_id in self.store.blobs.of_scope(scope):
             count += bool(delete(self.store, blob_id))
         artifact_records.erase_scope(self.store, scope, now(), deletion)
+        artifact_records.unshare_scope(self.store, scope)
         from .received_files import drop_copies
         drop_copies(self.store)          # a received file's copies in task folders go with the erased bytes
         return count

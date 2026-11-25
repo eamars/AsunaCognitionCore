@@ -981,14 +981,19 @@ class ContextBuilder:
             if media:context['media_from_program']=media
         # 本轮可随这条消息发出去的图片：程序给出的 artifact，不是文件路径；方向不对或没图就不出现。
         # A read that fails says so in the block (ADR-119 F1): never the absence of a block, which reads as no picture.
+        # What this turn lists is the access table's (ADR-120): a conversation outside home lists its own files, and so
+        # does a home turn whose origin may not list other conversations' (its own: where a note from outside came from).
+        from . import access as _access, own_files as _own_files
+        origin=_access.origin_of_input(self.store,event,session_class)
+        own=_own_files.scopes(self.store.config,self._own_place(event,scene,session_class))
         try:
             offer=outbound_media.offer(self.store,self.store.config,scene,session_class,event['person_id'],
-                                     picked=(event.get('visit') or {}).get('artifact_id'))
+                                     picked=(event.get('visit') or {}).get('artifact_id'),origin=origin,own=own)
         except Exception as exc:
             self.store.audit('scene:'+scene['_id'],'outbound.offer_unread',{'error':type(exc).__name__},scene['scope_key'])
             offer={'items':[],'note':outbound_media.OFFER_UNREAD}
         if offer:context['image_artifacts_from_program']=offer
-        elif session_class==visibility.OWNER_PRIVATE:
+        elif session_class==visibility.OWNER_PRIVATE and _own_files.reach(self.store.config,origin)=='all':
             # Looking does not wait on sending: where none of her pictures can go out (her local chat), she
             # still sees her own newest ones listed, and read_image comes with them (role_tools.her_pictures).
             from .vision import vision_capability as _vision
@@ -1000,9 +1005,18 @@ class ContextBuilder:
                 context['your_pictures_from_program']={'items':[],'note':outbound_media.OWN_UNREAD}
         # ADR-092: the files her tasks registered that this conversation may send (a group whose adapter takes files).
         from . import outbound_files
-        files=outbound_files.offer(self.store,scene)
+        files=outbound_files.offer(self.store,scene,origin=origin,own=own,picked=(event.get('visit') or {}).get('artifact_id'))
         if files:context['file_artifacts_from_program']=files
         f.context,f.people=context,people
+
+    def _own_place(self, event, scene, session_class):
+        """The conversation whose files are this turn's own: where it is, or, for a home turn a note from outside
+        opened, the conversation the note came from (RoleTools._as_place), with no files when that one is gone."""
+        if session_class!=visibility.OWNER_PRIVATE or not self._opened_from_outside(event,session_class):
+            return scene
+        from . import notes
+        note=notes.opening_for(self.store,event) or {}
+        return scene_records.get(self.store,note.get('from_scene')) if note.get('from_scene') else None
 
     def _opened_from_outside(self, event, session_class):
         """Whether this home turn was opened by a note from outside: the guard's own test (guard.from_outside), with the

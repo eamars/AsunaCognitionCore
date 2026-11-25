@@ -578,8 +578,9 @@ class ScheduleService:
 
     def visit(self, ep, place, intent, topic, artifact_id):
         """Her visit (ADR-012 §4.2): checked against the same rules her places view shows, then a public turn
-        in that group. Only the category, her short topic and an optional picture of her own cross over."""
-        from . import outbound_media, places
+        in that group. Only the category, her short topic and an optional picture cross over: one this turn may send
+        there (own_files.carry), which is that group's own from then on."""
+        from . import own_files, places
         from .persona_model import effective
         persona, model, policy = self._persona()
         if not effective(model, 'heartbeat.visits', policy):
@@ -597,12 +598,11 @@ class ScheduleService:
         can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date)
         if not can:
             raise ValueError('VISIT_NOT_NOW: %s；哪儿现在能去看能去的地方里的 can_visit，想晚点再去就用 plan 定个时间' % why)
-        if artifact_id and artifact_id not in {item['artifact_id'] for item in outbound_media.produced_images(self.store, limit=50)}:
-            raise ValueError('VISIT_PICTURE_NOT_HERS: 「%s」不是你自己做的图；照抄你自己的图里的，或不写 artifact_id'
-                             % artifact_id)
         person = places.visitor(route, channel)
         if not person:
             raise ValueError('VISIT_NOT_NOW: 这个群里没有可以接待你的成员授权（不是你的错）；重试也一样，挑能去的地方里别的群')
+        if artifact_id:
+            own_files.carry(self.store, ep, artifact_id, scene, 'visit')
         event_id = 'visit:%s:%s' % (scene['_id'], ep['source_event_id'])
         # Her own moment in the group, not a platform input: no channel envelope (that would be shown in the
         # group's session as a member's message). It wakes as a scene tick; publishing targets the group's route.
@@ -638,10 +638,10 @@ class ScheduleService:
         person = places.visitor(route, channel)
         if not person:
             raise ValueError('ERRAND_PLACE_UNKNOWN: 「%s」那边没有可以接待你的成员授权（不是你的错），这趟去不了' % place)
-        from . import outbound_media
-        if artifact_id and artifact_id not in {item['artifact_id'] for item in outbound_media.produced_images(self.store, limit=50)}:
-            raise ValueError('ERRAND_PICTURE_NOT_HERS: 「%s」不是你自己做的图；照抄你能发的图或你自己的图里的，或不带图'
-                             % artifact_id)     # outside home only her own pictures go (any of hers may)
+        if artifact_id:
+            # What this turn may send there goes, and is that conversation's own from then on (ADR-120).
+            from . import own_files
+            own_files.carry(self.store, ep, artifact_id, scene, 'errand', kinds=('image', 'file'))
         from .evidence import canonical, sha
         from .people import People
         persona, _, _ = self._persona()

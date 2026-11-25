@@ -253,8 +253,9 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `pull_bytes` — 按元数据把图片字节拉回来。返回 (bytes, media_type, via, source)。失败一律抛真实错误码。
 - def `resolve_image_file` — 路径 ref 指的是哪个文件：``/task/…`` 落在本任务自己的工作区下，绝对路径照原样拿。
 - def `read_image_for_task` — read_image 的实际执行：场景围栏 → 能力核对 → 拉字节 → 落 BlobStore → 交给插件的视觉输入载荷。
+- def `elsewhere` — Whether a ref this conversation does not hold names an attachment of another of her conversations: such a read is answered as a missing one and recorded apart (access.record).
 - def `path_image` — Read a picture from this machine's disk, where the access table allows this origin `disk`: the bytes are this call's real visual input, and the file it came from is recorded as the artifact's source (``file:<绝对路径>``).
-- def `stored_image` — Look again at a picture already stored as an image artifact: one in this scene's own scope, one she made herself (her own generator, any scene), or one this turn was offered to send.
+- def `stored_image` — Look again at a picture already stored as an image artifact: any, where this origin reads every conversation's files (own_files.reach); else one of this conversation's own (own_files.holds), or one this turn was offered to send.
 - def `local_upload_bytes` — A local-chat picture's stored bytes, re-checked against the row that records it: the row must be the program's own local input (no platform envelope), and the artifact must be in that row's scope with that input as its source — a platform m
 - def `media_source` — {'url', 'signature'} to pull an entry from: the link read back from its message, signed again with the platform's current key when the platform signs it (media_keys.sign; signature None, renewed or unavailable).
 - def `media_source_url` — The link as stored on its message.
@@ -309,17 +310,15 @@ How long stored media bytes live: every kind of stored picture has an owner or a
 - def `returns_to` — Where an edit of someone else's picture may go (owner 2026-10-15): back to the conversation the picture came from, the scope key its source id names (edit_register).
 - def `edit_register` — generate_image's registration for an edit of someone else's picture: kept in this task's scope (so the task reads it back), marked to go back to the conversation the picture came from, and not counted as hers.
 - def `edits_back_to` — Edits of other people's pictures that go back to this conversation, newest first (as produced_images).
-- def `target_allowed` — 收件方向：任何一个私聊（路由 dm），或她在的任何一个群。主人的私聊能发这一边读得到的图；群和别人的 私聊只发她自己做的图（own_only，owner 2026-10-06：家往外不担心，发什么由她判断）。她的本地私聊也收：图走本地 sink，网页画出来（ADR-129 D1）。
-- def `own_only` — Only pictures she made go here: a group, or anyone's chat that is not the owner's.
-- def `row_own_only` — own_only for a stored outbound row, recomputed from the row's own scene and route.
+- def `target_allowed` — 收件方向：任何一个私聊（路由 dm），或她在的任何一个群；发哪些图由访问表定（own_files.send_refused）。她的本地 私聊也收：图走本地 sink，网页画出来（ADR-129 D1）。
 - def `produced_images` — 她做出来的图（不分场景），新的在前；群聊回合里只列这些。
 - def `own_pictures` — Her own newest pictures, to look at where none can be sent (her local chat): ids and when, in words.
 - def `image_scopes` — 这一轮能引用哪些场景里登记的图（本场景永远排第一）。
-- def `row_is_group` — 这条消息是不是发往一个群：按行自己的场景与路由现算。
-- def `row_image_scopes` — 这条消息那一轮能引用哪些 scope：全部从行自己算（场景、路由上的人、session_class）。
+- def `row_scene` — The conversation an outbound row is in, as its scene row with the row's own scope and channel where the scene lacks them.
+- def `own_images` — A conversation's own pictures to send (`own`: its scopes, own_files.scopes), newest first: those she made there and those sent or carried there; not the pictures people sent there.
 - def `image_artifacts` — 本轮可引用的图片：这些 scope 里已存好的 image artifact（新的在前，最多 limit 条）。
 - def `offer` — 上下文里那块 ``image_artifacts_from_program``；方向不允许或没图可引用就不出现。
-- def `refuse_erased_named` — A picture she names that this turn did not offer: if an erasure deleted it and it is one she could otherwise send here, ADR-105's sentence, in the call that names it; anything else is left to the caller's own refusal.
+- def `refuse_erased_named` — A picture she names that this turn did not offer: if an erasure deleted it and it is one she could otherwise send here (`may_send`, row -> bool: the table's send fence), ADR-105's sentence, in the call that names it; anything else is left t
 - def `accept_artifact` — 程序接受一张图准备随这条消息发出去：读一次字节、认魔数、按行内 sha 复核。
 - def `kept_sticker` — This row sends a sticker, and its picture is one she keeps on her shelf, or kept when it left: a sticker row already delivered is only shown again (the page, ADR-129 D5(b)), never sent again, and what she sent stays viewable after she drops
 - def `serve` — 字节端点的围栏：只发这一条 publication 自己声明的那张图，且行内 sha 复核通过。
@@ -347,7 +346,7 @@ Files she sends to a group through the outbox (ADR-092): registered from a task'
 - def `produced` — A file one of her tasks registered.
 - def `removed`
 - def `sends_here` — Files go out here: a group (v0), whose kind lists the file part and whose adapter declares `file`.
-- def `offer` — The block `file_artifacts_from_program`: the files her tasks registered whose bytes are still stored, newest first; None when there are none or files do not go out here.
+- def `offer` — The block `file_artifacts_from_program`: the files her tasks registered whose bytes are still stored, newest first: this conversation's own (`own`, its scopes, by default the scene's), and at home, where the turn's `origin` may list other c
 - def `source_present` — Whether the task folder still holds the file it was registered from, byte for byte (its size, then its sha256, read in pieces).
 - def `expired_words` — Why a file named after its bytes went cannot go: when, and whether its original is still in the task folder (her asks: never a generic failure).
 - def `descriptor` — A row's or a claim's `file` descriptor, checked; None when its shape is wrong.
@@ -355,7 +354,7 @@ Files she sends to a group through the outbox (ADR-092): registered from a task'
 - def `part` — The planned row of a file part: her record line, the descriptor, and how the receipt names it.
 - def `claim_failure` — The fields a claimed file row fails with before anything is sent (failure, failure_detail), or None: its bytes gone, or over the limit the claiming adapter declared.
 - def `expired_source` — After a claim failed a row with FILE_BYTES_EXPIRED, outside the effects lock: whether the task folder still holds the original (it is hashed), kept on the row as source_present with the words that say so.
-- def `serve_piece` — The byte endpoint for a claimed file row: `length` bytes from `offset` (at most PIECE_MAX), of the artifact this publication declared (its attempt is checked by the caller); any file her tasks registered may go.
+- def `serve_piece` — The byte endpoint for a claimed file row: `length` bytes from `offset` (at most PIECE_MAX), of the artifact this publication declared (its attempt is checked by the caller), which is the row's conversation's own (written into it with the me
 - def `sent` — A delivered file row: its bytes are kept KEEP_DAYS from now.
 - def `failure_words` — Her words for a file row of hers that did not go: a mute as every line says it, else 没发出去 with the program's reason, the platform's own words, or the adapter's reason in words.
 
@@ -381,10 +380,10 @@ Files people send her (ADR-102): offered by ref, read when she asks, stored, kep
 - def `find_in` — The count of matches of `word` (as written, Latin letters in either case) and the first FIND_PAGES pages that hold one, each with its first match's line number and that line cut to FIND_LINE_CHARS around the match.
 - class `FetchFailed` — A fetch that brought nothing back: her words, and the platform's status when it answered one (`dead`: the link itself is refused, so trying again later does not help).
 - def `fetch` — The item's own link, https only, on the platform's file hosts (redirects too), at most MAX_BYTES read; each wait for data at most FETCH_SECONDS, the whole fetch about twice that.
-- def `reach` — The scopes a call may read received files in: this conversation and its read-only linked scenes, the same function pictures use; at home any of her conversations.
-- def `found` — (entry, row, scopes): the item a ref names among the files of the last REF_DAYS days in reach (the picture fence), and its stored row; or a kept file's own row, whose ref never ends.
+- def `reach` — The scopes a call may read received files in, by the work's origin (own_files.reach): any of her conversations where it may read every conversation's files; else this conversation and its read-only linked scenes, the same function pictures 
+- def `found` — (entry, row, scopes): the item a ref names among the files in reach (the picture fence: of the last REF_DAYS days in this conversation, of any age in every conversation where the origin reads them all), and its stored row; or a kept file's 
 - def `read` — op=read: the first read fetches the file; every read answers one page (`page`), or where a word is (`find`).
-- def `run` — The `received_file` tool, for both halves: `where` is her turn's scene or the task's binding; only the action brain, which has a task folder, copies (`task_dir`).
+- def `run` — The `received_file` tool, for both halves: `where` is her turn's place or the task's binding, `origin` the turn's or the task's (access.py), `by` the turn or task a refusal by the table is recorded under; only the action brain, which has a 
 - def `safe_name` — A received file's name made safe before it touches a disk: no path parts, no `..`, no Windows device name, no trailing dot or space, at most NAME_BYTES bytes in UTF-8 (the extension kept).
 - def `copy` — op=copy (the action brain only): the stored bytes to /task/received/<name>, with the marks.
 - def `drop_copies` — Remove the copies of every received file whose bytes are gone (expired or erased); a copy that cannot be deleted now (locked on Windows) stays listed and is tried again at the next sweep.

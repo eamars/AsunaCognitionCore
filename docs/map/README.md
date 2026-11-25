@@ -32,9 +32,10 @@ Every turn has a **class**, decided by the program from the conversation and the
   settings, `restart` and her idea notebook only at home; `errand` only in the owner's own conversations; `visit`,
   `promote_memory` and `credential` only in the local chat.
 - **What work may use follows its origin** (`access`): home, home from outside (work for someone outside she takes on
-  at home) or outside, and a level per resource (commands, credentials, the owner's network, the disk, drawing,
-  integrations, development). `access.allowed` decides when a task is given its tools (`coordinator.Coordinator`)
-  and at every call (`tasks.ToolBroker`); the owner's setting `access` changes rows.
+  at home) or outside, and a level per resource (files, commands, credentials, the owner's network, the disk, drawing,
+  integrations, development, sends). `access.allowed` decides when a task is given its tools (`coordinator.Coordinator`)
+  and at every call (`tasks.ToolBroker`); the owner's setting `access` changes rows. Every refusal by the table is
+  recorded (`access.record`) and listed in her review at home (`guard.review`).
 - **What crosses is always hers and always visible.**
   - A note she writes from one conversation to another (`notes`) arrives marked trusted when it comes from home and
     untrusted from outside. An untrusted one that opens a turn at home gives that turn the class of where it came
@@ -50,7 +51,8 @@ Every turn has a **class**, decided by the program from the conversation and the
     the groups are going (`places.places_block`, `places.elsewhere`). What others said comes home only through her
     own review: her idea notebook and her night's promotion of a memory
     (`role_tools.RoleTools.tool_promote_memory`).
-  - Pictures: in groups and other people's chats she can send only pictures she made (`outbound_media.own_only`).
+  - Files and pictures: outside, a conversation reads, lists and sends its own (`own_files`: made or received there,
+    or sent or carried there, `shared_scopes`); home reads any and sends any (`own_files.send_refused`).
   - Files go to groups only, and only those her tasks registered (`outbound_files.offer`).
 - **Her words** leave only through `speak`, every part checked before any of the call leaves
   (`role_tools.RoleTools.tool_speak`). At home, tool names are a normal topic.
@@ -383,6 +385,7 @@ The action brain's tasks, grants, schedules, sandbox, development and integratio
 
 - [`tasks`](../../src/asuna/tasks.py) — The action brain's tasks: `TaskService` claims, leases, cancels and hands each result back to her, `ToolBroker` checks and runs every tool call a task makes, and `Executor` runs one task in its workspace.
 - [`access`](../../src/asuna/access.py) — Who may use what: the access table.
+- [`own_files`](../../src/asuna/own_files.py) — A conversation's own files (ADR-120 §4), the one answer every read, list and send fence asks.
 - [`action_tiers`](../../src/asuna/action_tiers.py) — ADR-075: her action brain in two tiers, 低 and 高, told by what each can do, never by model, provider, price or how it is run.
 - [`machine_words`](../../src/asuna/machine_words.py) — What a conversation outside home reads of an action brain's report holds nothing of the machine (ADR-050, ADR-098).
 - [`local_roots`](../../src/asuna/local_roots.py) — No local root of this computer reaches her character brain (ADR-098): the root table and its two directions.
@@ -508,6 +511,7 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 
 Commands for setup, packing, launching, probes and maintenance.
 
+- [`adr120_shared_scopes_backfill.py`](../../tools/adr120_shared_scopes_backfill.py) — ADR-120 landing 2's one-off: a picture or file she sent before the landing becomes the conversation's own it was sent into, as a message written since makes it (coordinator.queue_reply).
 - [`agent_line.py`](../../tools/agent_line.py) — A coding agent's line to her (ADR-033): post a message, poll her answers.
 - [`asuna-launch.mjs`](../../tools/asuna-launch.mjs) — Stable entry: native Web and repair tools boot without importing Python code.
 - [`asuna-supervisor.mjs`](../../tools/asuna-supervisor.mjs) — The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it when she asks or when it exits on its own, and brings it back down a fallback ladder when a start fails.

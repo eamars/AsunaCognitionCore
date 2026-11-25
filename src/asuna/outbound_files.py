@@ -5,9 +5,10 @@ as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days a
   artifact in the task's own scope. The bytes stream into the blob store (`BlobStore.put_stream`); the program computes the
   sha256, the size and the type (`sniff`, from the first bytes: an unknown type is recorded as unknown and still
   goes). Her name for it passes her private words list: a hit warns, by category and entry line, and does not block.
-- **What a conversation may send** (`offer`, `file_artifacts_from_program`): a file any of her tasks registered may be
-  sent where the channel declares `file`, as her own pictures go anywhere (ADR-066: home outward is her call). Files
-  go to groups only (v0).
+- **What a conversation may send** (`offer`, `file_artifacts_from_program`): a file her tasks registered in this
+  conversation or one sent or carried here (own_files.py), where the channel declares `file`; at home every
+  conversation's, where the turn's origin may list other conversations' files (access `list_files`). Whether it may go
+  is the access table's (own_files.send_refused, asked by the turn). Files go to groups only (v0).
 - **Sending** (`check`): the part names a listed file whose bytes are still stored and whose size is within the
   limit the adapter declared (`capabilities.limit`); the program sets no size or type limit of its own. A file is its
   own message: her record line is 「[文件：名字，大小]」 (「类型没认出来」 added when its type was not recognized) and
@@ -64,8 +65,9 @@ OOXML = ((b'word/', 'application/vnd.openxmlformats-officedocument.wordprocessin
          (b'xl/', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
          (b'ppt/', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'))
 
-REGISTERED_NOTE = ('交回去后，回到对话时在能发文件的群里用 speak 的 file 发（artifact_id 照抄这个）；只发得进群。'
-                   '字节留 %d 天，从最后一次发出算，没发过就从登记算；过期了从 /task 再登记一次。' % KEEP_DAYS)
+REGISTERED_NOTE = ('交回去后，回到对话时在能发文件的群里用 speak 的 file 发（artifact_id 照抄这个）；只发得进群，'
+                   '外面的群只发它自己的文件。字节留 %d 天，从最后一次发出算，没发过就从登记算；过期了从 /task 再登记一次。'
+                   % KEEP_DAYS)
 OFFER_NOTE = ('你的任务登记过、这一次能发进这个群的文件（新的在前）。发就用 speak 的 file，artifact_id 照抄，'
               '它不是文件路径也不是文件名；一个文件单独一条消息，进群文件。没列出的发不了：要发别的，先让任务用 offer_file 登记。')
 NO_LIST = '这台机器上没有「别带出去」名单，名字没查'
@@ -308,14 +310,22 @@ def sends_here(store, scene):
             and capabilities.carries(store, scene, CAPABILITY) and outbound_media.group_scene(store.config, scene))
 
 
-def offer(store, scene, *, limit=MAX_OFFERED):
+def offer(store, scene, *, limit=MAX_OFFERED, origin='outside', own=None, picked=None):
     """The block `file_artifacts_from_program`: the files her tasks registered whose bytes are still stored, newest
-    first; None when there are none or files do not go out here."""
+    first: this conversation's own (`own`, its scopes, by default the scene's), and at home, where the turn's `origin`
+    may list other conversations' files, every conversation's; `picked`, the file an errand carried here, first. None
+    when there are none or files do not go out here."""
+    from . import access, own_files
     if not sends_here(store, scene):
         return None
-    cursor = artifact_records.of_kind(store, KIND, state='DONE', storage=artifact_records.STORED,
-                                      by='created_at').rows(newest_first=True, limit=200, fields=[
-                                          'name', 'size', 'media_type', 'created_at', 'source_ids', 'received_from'])
+    fields = ['name', 'size', 'media_type', 'created_at', 'source_ids', 'received_from']
+    home = own_files.at_home(store, scene) and access.allowed(store.config, origin, 'list_files')
+    rows = (artifact_records.of_kind(store, KIND, state='DONE', storage=artifact_records.STORED, by='created_at')
+            if home else artifact_records.own(store, KIND, own_files.scopes(store.config, scene) if own is None else own,
+                                              state='DONE', storage=artifact_records.STORED, by='created_at'))
+    cursor = rows.rows(newest_first=True, limit=200, fields=fields)
+    cursor = ([row for row in cursor if row['_id'] == picked] + [row for row in cursor if row['_id'] != picked]
+              if picked else cursor)
     items = []
     for row in cursor:
         if not produced(row):
@@ -376,7 +386,8 @@ def descriptor(raw):
 
 
 def check(store, ep, scene, artifact_id):
-    """(descriptor, None) for a file her speak part may send here, else (None, why in words)."""
+    """(descriptor, None) for a file her speak part may send here, else (None, why in words). Whether it may go here
+    by the access table is asked after (RoleTools._may_send)."""
     from . import capabilities, local_time
     from .blobs import erased, erased_words
     item = artifact_records.get(store, artifact_id, kind=KIND) if artifact_id else None
@@ -455,7 +466,8 @@ def _number(query, key):
 
 def serve_piece(store, row, query):
     """The byte endpoint for a claimed file row: `length` bytes from `offset` (at most PIECE_MAX), of the artifact
-    this publication declared (its attempt is checked by the caller); any file her tasks registered may go."""
+    this publication declared (its attempt is checked by the caller), which is the row's conversation's own (written
+    into it with the message)."""
     from .blobs import BlobStore
     meta = descriptor((row or {}).get(KIND))
     if not meta:
@@ -471,6 +483,10 @@ def serve_piece(store, row, query):
     item = artifact_records.get(store, meta['artifact_id'])
     if not item or item.get('kind') != KIND:
         raise Denied('FILE_ARTIFACT_UNAVAILABLE')
+    from . import own_files
+    from .outbound_media import row_scene
+    if not own_files.holds(item, own_files.scopes(store.config, row_scene(store, row))):
+        raise Denied('FILE_ARTIFACT_UNAVAILABLE')       # not this conversation's: no message written there carried it
     from .blobs import refuse_erased
     refuse_erased(store, item, (row or {}).get('scene_id'))
     if removed(item) or item.get('state') != 'DONE' or item.get('storage') != artifact_records.STORED:

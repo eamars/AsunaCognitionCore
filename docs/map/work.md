@@ -76,17 +76,36 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 Who may use what: the access table. Three origins of work, the resources a tool needs, and one level per resource.
 
 - def `levels_of` — The levels this resource takes.
-- def `check` — Refuse a setting `access` that names an unknown resource, a row not in effect, an unknown level, or a level its row does not take.
+- def `check` — Refuse a setting `access` that names an unknown resource, an unknown level, or a level its row does not take.
 - def `table` — Every resource with its level: the defaults with the owner's rows over them.
 - def `allowed` — Whether work of this origin may use this resource.
 - def `wider` — The resources set wider than their default, with their levels.
 - def `narrowest` — The narrowest of these origins.
 - def `words` — Her words for a refusal by the table of this resource to work of this origin.
 - def `refusal` — A refusal by the table, as a tool error: its code (ACCESS_DENIED_<RESOURCE>) and her words.
-- def `require` — Raise the table's refusal when work of this origin may not use this resource.
+- def `require` — Raise the table's refusal, recorded (`record`), when work of this origin may not use this resource (by `config`, the store's by default).
+- def `record` — One audit row (`access.denied`) for a refusal by the table: the row, the origin, the tool, the turn (`by`'s `turn`, with its `call`) or the task (`task`) it was met in, and whether it was a send.
+- def `mark` — Her review's mark for one `access.denied` row: 这里不许：<the row>（<the column>）.
 - def `origin_of_turn` — A turn's origin: home when it acts with home's authority, else outside; a turn about a task (it carries `task_id`: the task's result, its question, its time-up) is never wider than that task.
+- def `origin_of_input` — The origin of the turn an input opens, before its episode is written (the turn's context): as `origin_of_turn` reads it from the episode.
 - def `origin_of_new_task` — The origin of a task this turn makes for `whose`: the turn's own (outside, or the task it is about), home from outside for work for someone outside, else home; never wider than `earlier` (the task it continues).
 - def `origin_of_task` — A task's origin: as stored, else (a task made before origins were stored) by the rule a new task has, from the turn that made it; when that turn is gone, from the class of its conversation and person, never wider than the task it continues.
+
+## `own_files`
+
+[src/asuna/own_files.py](../../src/asuna/own_files.py)
+
+A conversation's own files (ADR-120 §4), the one answer every read, list and send fence asks.
+
+- def `scopes` — The scope keys whose rows are this conversation's own: its own first, then those the owner linked to it.
+- def `holds` — Whether a stored row is one of the conversation's own whose scopes are `own`.
+- def `share` — The row is `scope`'s own from now on; a row already its own, or a sticker, is left as it is.
+- def `reach` — How far work of this origin reads stored files: 'all' (any conversation's), 'own' (its own conversation's) or None (none).
+- def `readable` — Whether work of this origin, whose own conversation's scopes are `own`, may read this stored row.
+- def `at_home` — Whether a conversation is a home one: her local chat, a chat of the owner's, a home line or a home group.
+- def `send_refused` — The row of the table that bars work of `origin` (whose own conversation's scopes are `own`) from sending a stored `row` into `place` (a scene row), or None when it may.
+- def `refuse_send` — The send refusal, recorded: one sentence whatever row refused it (§9, her 0668).
+- def `carry` — A going-out's picture or file (a visit's or an errand's `artifact_id`; `kinds` it may be), checked and shared with the place it goes to: a stored one the picking turn may read and may send there (`send_refused`), which is that place's own f
 
 ## `action_tiers`
 

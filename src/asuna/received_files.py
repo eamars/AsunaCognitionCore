@@ -17,8 +17,9 @@
   counted, never named.
 
 Every function that takes an artifact id also takes the scopes this call may reach (the fence, computed by the caller
-as pictures' is) and checks them first, then ADR-105's mark: a row outside the fence is not found, whatever happened
-to it. A kept file stays in its conversation's fence.
+as pictures' is, by the work's origin: `reach`) and checks them first, then ADR-105's mark: a row outside the fence is
+not found, whatever happened to it, and a ref of another conversation is answered as a missing one and recorded apart
+(access.record). A kept file stays in its conversation's fence.
 """
 from __future__ import annotations
 
@@ -472,25 +473,34 @@ def _refused(status):
 
 
 # ── the fence and the row (sections 5 and 6) ────────────────────────
-def reach(store, where, config, session_class):
-    """The scopes a call may read received files in: this conversation and its read-only linked scenes, the same
-    function pictures use; at home any of her conversations. A task binds it; no argument widens it."""
-    from . import visibility
+def reach(store, where, config, origin):
+    """The scopes a call may read received files in, by the work's origin (own_files.reach): any of her conversations
+    where it may read every conversation's files; else this conversation and its read-only linked scenes, the same
+    function pictures use; none where it may read no file. A task binds it; no argument widens it."""
+    from . import own_files
     from .vision import readable_image_scenes
-    if session_class == visibility.OWNER_PRIVATE:
+    found = own_files.reach(config, origin)
+    if found == 'all':
         return {doc['scope_key'] for doc in scene_records.all(store, fields=['scope_key']) if doc.get('scope_key')}
+    if found is None:
+        return set()
     ids = [scope['scene_id'] for scope in readable_image_scenes(store, where, config)]
     return {doc['scope_key'] for doc in scene_records.many(store, ids, fields=['scope_key'])
             if doc.get('scope_key')}
 
 
-def found(store, where, config, ref, session_class):
-    """(entry, row, scopes): the item a ref names among the files of the last REF_DAYS days in reach (the picture
-    fence), and its stored row; or a kept file's own row, whose ref never ends. Neither: not found, as a ref outside
-    the fence is."""
-    from .vision import REF_DAYS, attachment_by_ref
-    entry, _ = attachment_by_ref(store, where, config, ref, session_class, entries=files_of)
-    scopes = reach(store, where, config, session_class)
+def found(store, where, config, ref, origin, by=None):
+    """(entry, row, scopes): the item a ref names among the files in reach (the picture fence: of the last REF_DAYS
+    days in this conversation, of any age in every conversation where the origin reads them all), and its stored row;
+    or a kept file's own row, whose ref never ends. Neither: not found, as a ref outside the fence is, and a ref of
+    another conversation is recorded apart. Work that may read no file is refused by the table."""
+    from . import access, own_files
+    from .vision import REF_DAYS, attachment_by_ref, elsewhere
+    if own_files.reach(config, origin) is None:
+        access.require(store, by, origin, 'own_files', TOOL_NAME, config)
+    wide = own_files.reach(config, origin) == 'all'
+    entry, _ = attachment_by_ref(store, where, config, ref, wide, entries=files_of)
+    scopes = reach(store, where, config, origin)
     row = None
     if entry:
         row = artifact_records.of_kind(store, KIND, state='DONE', scopes=sorted(scopes), source=source_of(
@@ -498,6 +508,9 @@ def found(store, where, config, ref, session_class):
     if not row:
         row = artifact_records.kept(store, KIND, state='DONE', ref=ref, scopes=sorted(scopes)).first()
     if not entry and not row:
+        if not wide and (elsewhere(store, where, config, ref, files_of)
+                         or artifact_records.kept(store, KIND, state='DONE', ref=ref).first(fields=['_id'])):
+            access.record(store, by, origin, 'all_files', TOOL_NAME)
         raise Denied(REF_NOT_FOUND % (REF_DAYS, echoed(ref)))
     return entry, row, scopes
 
@@ -513,12 +526,12 @@ def _sender(store, persona, entry):
 
 
 # ── reading (section 2) ─────────────────────────────────────────────
-def read(store, where, config, args, *, persona, session_class, moment=None):
+def read(store, where, config, args, *, persona, origin, moment=None, by=None):
     """op=read: the first read fetches the file; every read answers one page (`page`), or where a word is (`find`)."""
     from . import channel_kinds
     from .vision import media_source
     ref = str(args.get('ref') or '').strip()
-    entry, row, scopes = found(store, where, config, ref, session_class)
+    entry, row, scopes = found(store, where, config, ref, origin, by)
     scene_id = where.get('scene_id')
     moment = moment or now()
     note = None
@@ -604,24 +617,25 @@ def _life(store, row, scene_id):
     return LIFE % (gone, KEEP_DAYS, _stamp(store, (sent + timedelta(days=REF_DAYS)).isoformat(), scene_id))
 
 
-def run(store, where, config, args, *, persona, session_class, moment=None, task_dir=None, ready=None):
-    """The `received_file` tool, for both halves: `where` is her turn's scene or the task's binding; only the action
+def run(store, where, config, args, *, persona, origin, moment=None, task_dir=None, ready=None, by=None):
+    """The `received_file` tool, for both halves: `where` is her turn's place or the task's binding, `origin` the
+    turn's or the task's (access.py), `by` the turn or task a refusal by the table is recorded under; only the action
     brain, which has a task folder, copies (`task_dir`). `ready`, when given, runs before what writes (a caller's
     checkpoint, ADR-132 D2)."""
     args = args or {}
     op = args.get('op') or 'read'
     if op == 'kept':
-        return kept(store, reach(store, where, config, session_class), where.get('scene_id'))
+        return kept(store, reach(store, where, config, origin), where.get('scene_id'))
     if op == 'read':
         if ready:
             ready()
-        return read(store, where, config, args, persona=persona, session_class=session_class, moment=moment)
+        return read(store, where, config, args, persona=persona, origin=origin, moment=moment, by=by)
     if op == 'copy' and task_dir:
-        return copy(store, where, config, args, task_dir=task_dir, session_class=session_class)
+        return copy(store, where, config, args, task_dir=task_dir, origin=origin, by=by)
     if op not in ('keep', 'let_go'):
         raise Denied(BAD_OP_TASK if task_dir else BAD_OP)
     ref = str(args.get('ref') or '').strip()
-    _, row, scopes = found(store, where, config, ref, session_class)
+    _, row, scopes = found(store, where, config, ref, origin, by)
     if not row:
         raise Denied(NOT_READ_YET % echoed(op))
     if ready:
@@ -635,7 +649,7 @@ RECEIVED_FILE_TOOL = {
     'name': TOOL_NAME,
     'description': ('读别人发来的文件（文本类，1 MiB 以内）。do=read：ref 照抄文件旁标的；第一次读从平台拉下来，每次一页，'
                     'page 翻页，find 找一个词（拉丁字母不分大小写）。拉下来的 3 天后删；keep 留下（why 写为什么），let_go 放下，kept 列出留着的。'
-                    '在家里也能读你别的对话里 7 天内的文件。'),
+                    '在家里也能读你任何一个对话里的文件，不限 7 天。'),
     'parameters': {'op': {'type': 'string', 'enum': list(OPS), 'description': '默认 read'},
                    'ref': {'type': 'string', 'description': '文件旁标的 ref'},
                    'page': {'type': 'integer', 'description': '第几页'},
@@ -690,13 +704,13 @@ def _deny_execute(folder):
         return False
 
 
-def copy(store, where, config, args, *, task_dir, session_class):
+def copy(store, where, config, args, *, task_dir, origin, by=None):
     """op=copy (the action brain only): the stored bytes to /task/received/<name>, with the marks. The program never
     runs a received file; the copy cannot be started as a program, and a script runs only when she runs it herself."""
     import os
     from pathlib import Path
     ref = str(args.get('ref') or '').strip()
-    _, row, scopes = found(store, where, config, ref, session_class)
+    _, row, scopes = found(store, where, config, ref, origin, by)
     if not row:
         raise Denied(NOT_READ_YET % 'copy')
     refuse_erased(store, row, where.get('scene_id'))
@@ -758,13 +772,11 @@ FORWARDED = '这是%s发来的文件；发出去时它的来路跟着'
 def received_from(store, task, sha256):
     """{ref, sender} of a received file with these bytes in the task's fence, or None: by content, so a copy renamed
     or moved inside /task keeps where it came from."""
-    from . import visibility
+    from . import access
     if not task.get('scene_id'):
         return None
-    scene = scene_records.get(store, task['scene_id']) or {'_id': task['scene_id']}
-    cls = visibility.session_class(store.config, store, scene, task.get('requester_id'))
     try:
-        scopes = reach(store, task, store.config, cls)
+        scopes = reach(store, task, store.config, access.origin_of_task(store, task))
     except Denied:                       # the task's fence does not hold: no origin is claimed; registering goes on
         return None
     row = artifact_records.by_content(store, sha256, KIND, scopes=sorted(scopes), by='created_at',

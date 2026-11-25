@@ -375,8 +375,8 @@ CATALOG = Catalog([
         *_text('kind', 'state', 'storage', 'scope_key', 'scene_id', 'channel_id', 'task_id', 'tool', 'sha256', 'ref',
                'answer', 'claimed_at', 'kept_at', 'created_at', 'received_at', 'last_sent_at', 'last_read_at'),
         *(Field(path, 'number', nullable=True) for path in ('intent_revision', 'number')),
-        *(Field(path, 'list', of='text', nullable=True) for path in ('source_ids', 'copies'))),
-        versioned=True, counters=('last_sent_at', 'last_read_at')),
+        *(Field(path, 'list', of='text', nullable=True) for path in ('source_ids', 'copies', 'shared_scopes'))),
+        versioned=True, counters=('last_sent_at', 'last_read_at', 'shared_scopes')),
     # What a sink received, and what a model lane answered (records/receipts.py): the fields their owner names; the
     # rest is stored as written. Their times are ISO text, as the core and the Host write them.
     Collection('sink_receipts', 'records.receipts', (

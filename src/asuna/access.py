@@ -14,9 +14,10 @@ were stored gets one when it is read: by the same rule from the turn that made i
 the class of the conversation and the person it runs for.
 
 A resource's level names the origins it allows, from home outwards (home < home_from_outside < outside): `home`,
-`home_from_outside`, `everywhere` or `none`. `RESOURCES` is the default table; the rows the program applies are
-`IN_EFFECT`, and the owner's setting `deployment.access` names only rows of those that differ from the default. The
-worker reads it when it starts (`check` refuses a bad one); every grant and every call asks `allowed`.
+`home_from_outside`, `everywhere` or `none`. `RESOURCES` is the default table, and the owner's setting
+`deployment.access` names only the rows that differ from it. The worker reads it when it starts (`check` refuses a bad
+one); every grant and every call asks `allowed`. Every refusal by the table is recorded once (`record`, the audit's
+`access.denied`), and her review at home lists it with the row and the column in her words (`mark`).
 """
 from __future__ import annotations
 
@@ -41,8 +42,6 @@ RESOURCES = {
     'send_to_asker': 'home_from_outside',
     'send_own': 'everywhere',
 }
-# The rows the program applies; the others are in the table with their defaults and not yet a setting.
-IN_EFFECT = ('disk', 'commands', 'credentials', 'local_network', 'internet', 'integrations', 'development', 'drawing')
 # Outside home no rule says who earns these, so they take no wider level.
 HOME_OR_NONE = ('integrations', 'development')
 STEPS_MOST = 64             # a walk through turns and tasks for an old task stops here (a broken chain, not a real one)
@@ -53,6 +52,16 @@ FROM_OUTSIDE = ('这件是外面的人托的事：跑命令、用钥匙、连家
 DISK_AT_HOME = '盘上的路径只在家里能读。'
 NOT_HERE = '这一步这里用不了。'
 NOT_IN_OUTSIDE_WORK = ('commands', 'credentials', 'local_network', 'disk')
+NOT_TO_SEND = '这个文件不归这个对话发。'
+SEND_REFUSED = 'ACCESS_DENIED_SEND: ' + NOT_TO_SEND
+# Her review's marks (agent lines 0672, 0681): the row and the column a refusal was met in, in her words; a send is one
+# mark whatever row refused it.
+ROW_WORDS = {'disk': '盘上的路径', 'commands': '跑命令', 'credentials': '凭据', 'local_network': '家里的网',
+             'internet': '公网', 'integrations': '主人的集成', 'development': '自我开发', 'drawing': '画图',
+             'own_files': '这个对话自己的文件', 'all_files': '别的对话的文件', 'list_files': '翻看别的对话的文件'}
+SENDING = '把这个文件发到这里'
+ORIGIN_WORDS = {'home': '家里', 'home_from_outside': '外面托、家里办', 'outside': '外面'}
+MARK = '这里不许：%s（%s）'
 
 
 def levels_of(resource):
@@ -61,8 +70,7 @@ def levels_of(resource):
 
 
 def check(config):
-    """Refuse a setting `access` that names an unknown resource, a row not in effect, an unknown level, or a level its
-    row does not take."""
+    """Refuse a setting `access` that names an unknown resource, an unknown level, or a level its row does not take."""
     setting = (config or {}).get('access')
     if setting is None:
         return
@@ -71,8 +79,6 @@ def check(config):
     for resource, level in setting.items():
         if resource not in RESOURCES:
             raise ValueError('INVALID_ACCESS: unknown resource %s' % resource)
-        if resource not in IN_EFFECT:
-            raise ValueError('INVALID_ACCESS: %s is not in effect yet' % resource)
         if level not in LEVELS:
             raise ValueError('INVALID_ACCESS: %s: unknown level %s (%s)' % (resource, level, ', '.join(LEVELS)))
         if level not in levels_of(resource):
@@ -112,11 +118,32 @@ def refusal(origin, resource):
     return 'ACCESS_DENIED_%s: %s' % (resource.upper(), words(origin, resource))
 
 
-def require(config, origin, resource):
-    """Raise the table's refusal when work of this origin may not use this resource."""
-    if not allowed(config, origin, resource):
+def require(store, by, origin, resource, tool, config=None):
+    """Raise the table's refusal, recorded (`record`), when work of this origin may not use this resource (by `config`,
+    the store's by default)."""
+    if not allowed(store.config if config is None else config, origin, resource):
         from .state import Denied
+        record(store, by, origin, resource, tool)
         raise Denied(refusal(origin, resource))
+
+
+def record(store, by, origin, resource, tool, *, send=False):
+    """One audit row (`access.denied`) for a refusal by the table: the row, the origin, the tool, the turn (`by`'s
+    `turn`, with its `call`) or the task (`task`) it was met in, and whether it was a send. Never what was refused or
+    whose it is. `by` None records nothing (a caller with no turn or task)."""
+    if not by:
+        return
+    stream = by.get('task') or by.get('turn')
+    store.audit(stream, 'access.denied', {
+        'resource': resource, 'origin': origin, 'tool': tool,
+        **({'task': by['task']} if by.get('task') else {}), **({'call': by['call']} if by.get('call') else {}),
+        **({'send': True} if send else {})}, by.get('scope') or 'operator')
+
+
+def mark(said):
+    """Her review's mark for one `access.denied` row: 这里不许：<the row>（<the column>）."""
+    column = ORIGIN_WORDS.get(said.get('origin'), said.get('origin') or '')
+    return MARK % (SENDING if said.get('send') else ROW_WORDS.get(said.get('resource'), said.get('resource')), column)
 
 
 def origin_of_turn(store, ep, steps=0):
@@ -129,6 +156,25 @@ def origin_of_turn(store, ep, steps=0):
         task = task_records.get(store, ep['task_id'])
         if task:
             found = narrowest(found, origin_of_task(store, task, steps + 1))
+    return found
+
+
+def origin_of_input(store, event, cls):
+    """The origin of the turn an input opens, before its episode is written (the turn's context): as `origin_of_turn`
+    reads it from the episode. `cls` is the class of the conversation for the input's person."""
+    from . import errands, guard, notes
+    if errands.carried(store, event):
+        found = 'home'                            # an errand turn carries home's authority
+    elif cls != visibility.OWNER_PRIVATE:
+        found = 'outside'
+    else:
+        probe = {'episode_kind': event.get('episode_kind') or 'external', 'manifest': {'session_class': cls}}
+        found = 'outside' if guard.from_outside(store, probe, notes.opening_for(store, event)) is not None else 'home'
+    if event.get('task_id'):
+        from .records import tasks as task_records
+        task = task_records.get(store, event['task_id'])
+        if task:
+            found = narrowest(found, origin_of_task(store, task, 1))
     return found
 
 

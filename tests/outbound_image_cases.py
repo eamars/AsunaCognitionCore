@@ -792,19 +792,32 @@ def a_picture_part_refuses_artifact_not_offered_this_turn():
 
 
 @case
-def a_picture_part_in_a_group_sends_only_pictures_she_made():
-    """Owner, 2026-10-05: her pictures may go to any group she is in, she picks; never a picture someone sent her."""
+def a_picture_part_in_a_group_sends_only_the_groups_own_pictures():
+    """ADR-120 landing 2: a group lists and sends its own pictures (hers made there, and what was sent or carried
+    there); a picture drawn elsewhere stands on no group's list until it is carried there (2026-11-24); a picture
+    received there is its own, sendable but not listed."""
+    from asuna import access, own_files
     store, stored = world(kind='group')
-    # 群里存的别人的图不进清单；她还没做过图，这回合也就没有能发的图
-    assert outbound_media.offer(store, CONFIG, scene_row('group'), 'public') is None
-    forged = {'image_artifacts_from_program': {'items': [{'artifact_id': stored['artifact_id']}], 'note': ''}}
-    group_ep2 = turn_ep(store, kind='group', session='public', context=forged, ep_id='ep-turn-2')
-    outcome, said, why = pick(store, group_ep2, stored['artifact_id'])
-    assert outcome == 'refused' and why == 'ATTACHMENT_NOT_HER_OWN', said
-    # 她自己做出来的图（从她的生成端点导入、登记在她私聊那边）可以随话发到群里
     store.db.scenes.insert_one(scene_row('dm'))
+    # 群里存的别人的图不进清单；她在别处画的图也不进
     made = BlobStore(store).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg',
                                 source_ids=['integration:image:/made.jpg'])
+    assert outbound_media.offer(store, CONFIG, scene_row('group'), 'public') is None
+    forged = {'image_artifacts_from_program': {'items': [{'artifact_id': stored['artifact_id']},
+                                                         {'artifact_id': made['artifact_id']}], 'note': ''}}
+    group_ep2 = turn_ep(store, kind='group', session='public', context=forged, ep_id='ep-turn-2')
+    outcome, meta = pick(store, group_ep2, stored['artifact_id'])           # the group's own: it may go back there
+    assert outcome == 'ok' and meta['artifact_id'] == stored['artifact_id'], meta
+    outcome, said, why = pick(store, group_ep2, made['artifact_id'])
+    assert outcome == 'refused' and why == 'ACCESS_DENIED_SEND' and said == access.NOT_TO_SEND, said
+    elsewhere = sending_row(store, made, _id='pub-group-0', scene_id=GROUP_SCENE, scope_key=GROUP_SCOPE)
+    try:
+        outbound_media.serve(store, BlobStore(store), elsewhere, elsewhere['attachment'])
+        raise AssertionError('别处画的图没带过来就被发进了群')
+    except Denied as exc:
+        assert 'ATTACHMENT_SCOPE_DENIED' in str(exc), exc
+    # 带过来（出门、差事挑它，或一条写进这个群的消息）以后，它就是这个群的
+    own_files.share(store, made['artifact_id'], GROUP_SCOPE)
     offered = outbound_media.offer(store, CONFIG, scene_row('group'), 'public')
     assert [item['artifact_id'] for item in offered['items']] == [made['artifact_id']], offered
     assert '全年龄' in offered['note'] and 'from_linked_scene' not in offered['items'][0]
@@ -812,30 +825,26 @@ def a_picture_part_in_a_group_sends_only_pictures_she_made():
                         ep_id='ep-turn-3')
     outcome, meta = pick(store, group_ep3, made['artifact_id'])
     assert outcome == 'ok' and meta['artifact_id'] == made['artifact_id'], meta
-    # 字节端点按行自己算：发往群的那条只给她做的图
     row = sending_row(store, made, _id='pub-group', scene_id=GROUP_SCENE, scope_key=GROUP_SCOPE)
     data, media_type = outbound_media.serve(store, BlobStore(store), row, row['attachment'])
     assert data == JPEG and media_type == 'image/jpeg'
-    theirs = sending_row(store, stored, _id='pub-group-2', scene_id=GROUP_SCENE, scope_key=GROUP_SCOPE)
-    try:
-        outbound_media.serve(store, BlobStore(store), theirs, theirs['attachment'])
-        raise AssertionError('别人发的图被发进了群')
-    except Denied as exc:
-        assert 'ATTACHMENT_NOT_HER_OWN' in str(exc), exc
 
     store2, stored2 = world()
     assert outbound_media.offer(store2, CONFIG, scene_row(), 'public') is None
-    public_ep2 = turn_ep(store2, session='public', ep_id='ep-turn-2', context={
-        'image_artifacts_from_program': {'items': [{'artifact_id': stored2['artifact_id']}], 'note': ''}})
-    outcome2, said2, why2 = pick(store2, public_ep2, stored2['artifact_id'])
-    assert outcome2 == 'refused' and why2 == 'ATTACHMENT_NOT_HER_OWN', said2
-    # 别人的私聊也能发她自己做的图（owner 2026-10-06），别人的图照样不发
-    made2 = BlobStore(store2).put(JPEG, DM_SCOPE, 'image', media_type='image/jpeg',
+    store2.db.scenes.insert_one(scene_row('group'))
+    made2 = BlobStore(store2).put(JPEG, GROUP_SCOPE, 'image', media_type='image/jpeg',
                                   source_ids=['integration:image:/made2.jpg'])
+    public_ep2 = turn_ep(store2, session='public', ep_id='ep-turn-2', context={
+        'image_artifacts_from_program': {'items': [{'artifact_id': made2['artifact_id']}], 'note': ''}})
+    outcome2, said2, why2 = pick(store2, public_ep2, made2['artifact_id'])
+    assert outcome2 == 'refused' and why2 == 'ACCESS_DENIED_SEND', said2
+    # 别人的私聊里她画的图列在那里，也发得出去
+    made3 = BlobStore(store2).put(WEBP, DM_SCOPE, 'image', media_type='image/webp',
+                                  source_ids=['integration:image:/made3.webp'])
     offered2 = outbound_media.offer(store2, CONFIG, scene_row(), 'public')
-    assert [item['artifact_id'] for item in offered2['items']] == [made2['artifact_id']], offered2
+    assert [item['artifact_id'] for item in offered2['items']] == [made3['artifact_id']], offered2
     assert '别人的私聊' in offered2['note']
-    return True, '群和别人的私聊：只列、只收、只发她自己做的图（别人发的图 ATTACHMENT_NOT_HER_OWN）'
+    return True, '群和别人的私聊：只列这个对话自己的图；别处画的图没带过来不列、不发（ACCESS_DENIED_SEND、字节端点 403）'
 
 
 @case
@@ -853,7 +862,7 @@ def a_picture_part_refuses_non_image_and_oversize_bytes():
            'size': outbound_media.MAX_ATTACHMENT_BYTES + 1, 'source_ids': [], 'created_at': 'x'}
     store.db.artifacts.insert_one(big)
     try:
-        outbound_media.accept_artifact(store, BlobStore(store), 'blob-big', DM_SCOPE)
+        outbound_media.accept_artifact(store, BlobStore(store), 'blob-big')
         raise AssertionError('超过上限的图被接受了')
     except Denied as exc:
         assert 'ATTACHMENT_OVER_LIMIT' in str(exc), exc
@@ -1189,15 +1198,11 @@ def only_the_same_persons_other_owner_private_scene_is_readable():
     # public 会话与群方向：连本场景之外都不多开
     assert scopes(two_scene_world(links=linked), cls='public') == [DM_SCOPE]
     assert scopes(two_scene_world(links=linked), scene=scene_row('group')) == [GROUP_SCOPE]
-    # 没联动时 QQ 清单里没有那张图；就算清单里冒出它，speak 的 picture 也按 scope 退回
+    # 没联动时 QQ 清单里没有那张图（发进家里的对话不是越界：清单里有它，家里那一次就发得出去，ADR-120）
     store = two_scene_world()
     art = import_bytes(store, LOCAL_SCOPE, PNG, register='foreign')[0]['artifact']
     assert qq_offer(store) is None, '没联动的场景之间也列出图了'
-    ep = turn_ep(store, context={'image_artifacts_from_program': {
-        'items': [{'artifact_id': art['artifact_id']}], 'note': ''}})
-    outcome, said, why = pick(store, ep, art['artifact_id'])
-    assert outcome == 'refused' and why == 'ATTACHMENT_SCOPE_DENIED', said
-    return True, '只有同一 canonical person 的另一个 owner_private dm 场景可引用；群／别人／没联动都拒绝'
+    return True, '只有同一 canonical person 的另一个 owner_private dm 场景可引用；群／别人／没联动都不列'
 
 
 @case

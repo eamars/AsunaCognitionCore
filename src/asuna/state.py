@@ -57,8 +57,9 @@ AUDIT_INLINE_LIMIT = 16 * 1024
 COUNTER_FIELDS = {'scenes': ('sequence', 'name'), 'memory_units': ('salience',),
                   'watches': ('last_seen_at', 'appeared'),     # every line of a watched person moves these
                   'notes': ('seen_in',),                       # every turn that shows a note adds itself
-                  # a stored file's last send drives its expiry, its last read the quota's order (records.artifacts)
-                  'artifacts': ('last_sent_at', 'last_read_at')}
+                  # a stored file's last send drives its expiry, its last read the quota's order, and every message
+                  # or going-out that carries it to another conversation adds that one (records.artifacts)
+                  'artifacts': ('last_sent_at', 'last_read_at', 'shared_scopes')}
 
 
 # Fields computed from a document's own content (a memory's embedding vector): a commit leaves them out and names

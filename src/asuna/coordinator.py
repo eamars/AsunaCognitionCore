@@ -491,6 +491,12 @@ class Coordinator:
                  **({'errand':True} if ep.get('errand') else {}),**(part.get('fields') or {})}
             if paced and (index or offset):
                 row['not_before']=times[offset].isoformat()
+            carried=((part.get('fields') or {}).get('attachment') or (part.get('fields') or {}).get('file') or {}).get('artifact_id')
+            if carried and part['kind']!='sticker':
+                # What a message carries into a conversation is that conversation's own from now on (ADR-120 §4),
+                # written before the row, so a row that reaches the byte endpoint always finds it so.
+                from . import own_files
+                own_files.share(self.store,carried,ep['scope_key'])
             message_records.save(self.store, row,stream=ep_id)
             if part['kind']=='sticker':
                 stickers.sent(self.store,ep['persona'],part['name'],ep['scene_id'])

@@ -27,8 +27,8 @@ from .adapters import Ensured, Size, Updated
 from .catalog import ID
 from .errors import BlobMissing, DuplicateKey, RecordInvalid, SchemaConflict, Unavailable
 from .words import (AddToSet, And, AnyOf, Contains, Count, Each, Exists, Holds, HoldsAny, HoldsNone, Increase, IsNull,
-                    Larger, Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller, StartsWith, Unset,
-                    Without)
+                    Larger, Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Pull, Push, Range, Set, Smaller, StartsWith,
+                    Unset, Without)
 
 KIND = 'mongodb'
 SECRETS = ('mongo_uri',)
@@ -214,6 +214,8 @@ def update_of(change):
             ops.setdefault('$max' if isinstance(word, Larger) else '$min', {})[word.path] = word.value
         elif isinstance(word, AddToSet):
             ops.setdefault('$addToSet', {})[word.path] = {'$each': list(word.values)}
+        elif isinstance(word, Pull):
+            ops.setdefault('$pull', {})[word.path] = {'$in': list(word.values)}
         elif isinstance(word, Push):
             each = {'$each': list(word.values)}
             if word.keep_last is not None:

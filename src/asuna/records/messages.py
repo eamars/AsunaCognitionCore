@@ -405,6 +405,12 @@ def spoken(store, scene=_ANY, epoch=_ANY, *, author=_ANY, delivered=True, speech
     return View(store, where, by)
 
 
+def carrying(store):
+    """View: her lines that carry a stored picture or file (`attachment`, `file`), in no order."""
+    return View(store, Or({'direction': OUTBOUND, 'attachment.artifact_id': Exists(True)},
+                          {'direction': OUTBOUND, 'file.artifact_id': Exists(True)}), None)
+
+
 def outgoing(store, scene, states, *, by='scene_seq'):
     """View: her lines in a conversation in these delivery states."""
     if not _text(scene):

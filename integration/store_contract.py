@@ -21,8 +21,8 @@ from asuna.store.catalog import Catalog, Collection, Field, Index, Space
 from asuna.store.errors import (AdapterNotInstalled, BlobMissing, DuplicateKey, NotSupported, QueryInvalid,
                                 RecordInvalid, RecordTooLarge, SchemaConflict)
 from asuna.store.words import (AddToSet, And, AnyOf, Contains, Each, Exists, Holds, HoldsAny, HoldsNone, Increase, IsNull,
-                               Larger, Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller,
-                               StartsWith, Unset, Without)
+                               Larger, Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Pull, Push, Range, Set,
+                               Smaller, StartsWith, Unset, Without)
 
 __all__ = ['CATALOG', 'store', 'vectors', 'TestW', 'TestO', 'TestG', 'TestC', 'TestX', 'TestT', 'TestV', 'TestN',
            'TestB', 'TestS']
@@ -458,6 +458,17 @@ class TestC:
         assert t.get('d')['loose'] == [1, True, 'b']
         refused(QueryInvalid, lambda: t.update({'_id': 'a'}, AddToSet('name', 'q')), 'QUERY_WORD_KIND')
         refused(RecordInvalid, lambda: t.update({'_id': 'a'}, AddToSet('tags', 1)), 'RECORD_KIND')
+
+    def test_C07b_pull_removes_each_equal_element_and_creates_nothing(self, store):
+        t = things(store)
+        t.update({'_id': 'a'}, AddToSet('tags', 'z'))
+        assert t.update({'_id': 'a'}, Pull('tags', 'y', 'q')).changed == 1
+        assert t.get('a')['tags'] == ['x', 'z']
+        assert t.update({'_id': 'd'}, Pull('tags', 'x')).changed == 0 and 'tags' not in t.get('d')
+        t.update({'tags': Holds('z')}, Pull('tags', 'z', 'x'), many=True)
+        assert t.get('a')['tags'] == [] and t.get('c')['tags'] == ['y']
+        refused(QueryInvalid, lambda: t.update({'_id': 'a'}, Pull('name', 'q')), 'QUERY_WORD_KIND')
+        refused(RecordInvalid, lambda: t.update({'_id': 'a'}, Pull('tags', 1)), 'RECORD_KIND')
 
     def test_C08_push_keeps_the_last(self, store):
         t = things(store)

@@ -1460,8 +1460,18 @@ class BusinessWorker:
             task = task_records.get(self.app.store, record.get('task_id'))
             if not task:
                 raise Denied('NATIVE_OPERATION_NOT_ACTIVE')
-            rule = args.get('rule') if args.get('rule') in ('address',) else 'address'
-            return {'sentence': guard.deny_task(self.app.store, task, 'not_granted', rule, str(args.get('tool') or ''))}
+            tool = str(args.get('tool') or '')
+            if args.get('rule') in ('table', 'local_network'):
+                # A refusal by the access table the plugin made where it runs (a tool not given for the task's origin,
+                # a local address its fetch reached): recorded for her review; the call's own words stand.
+                from . import access
+                from .tasks import barred
+                origin = access.origin_of_task(self.app.store, task)
+                row = 'local_network' if args['rule'] == 'local_network' else barred(self.app.config, origin, tool)
+                if row and not access.allowed(self.app.config, origin, row):
+                    access.record(self.app.store, {'task': task['_id'], 'scope': task.get('scope_key')}, origin, row, tool)
+                return {'recorded': bool(row)}
+            return {'sentence': guard.deny_task(self.app.store, task, 'not_granted', 'address', tool)}
         if method == 'tool_specs':
             # One list: the broker's, which is also what every call is checked against.
             return self.app.broker.specs

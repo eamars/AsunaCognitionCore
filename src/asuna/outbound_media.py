@@ -9,12 +9,11 @@ HTTP 层只做路由与写响应。
 群方向确定性拒绝，不静默降级成「只发文字却报平台已送达」——那种回执会声称对方收到了一张从没
 到达的图。历史投影里的附件位同理：只有送达回执对得上的图才算「我发过这张图」。
 
-图可以来自两个地方：这个场景自己登记的（``read_image`` 看过的、``import_integration_artifact``
-导入时顺手登记的），以及**同一主人的另一个 owner_private 场景**登记的——生图和导入只在本机
-owner 任务里能做，而要说图的那一轮常在 QQ 私聊，两个入口都是主人自己的私人空间。这一条边由
-``image_scopes`` 现算自配置：canonical person、session_class、联动边三项都过才多开那个 scope；
-群、别人的场景、没联动的场景、public 会话一律不在列表里。字节端点用 ``row_image_scopes`` 从
-行自己重算同一份列表，不接受调用方传进来的 scope。
+能发哪些图看访问表（access.py）与这个对话自己的文件（own_files.py）：外面的对话（群、别人的私聊）只列它自己的图——
+她在那里做的、发到过那里的、出门或差事带去的，加上改过、要发回那里的；家里的对话照旧（主人的私聊：这个场景与同一主人
+另一个 owner_private 私聊登记的，``image_scopes`` 现算自配置；她做的图哪里的都列），但这一次的来路不许
+``list_files`` 时也只列这个对话自己的。一张图随消息写进哪个对话，就算那个对话的了（coordinator.queue_reply 写
+``shared_scopes``）；字节端点只给这条消息所在对话自己的图（serve）。
 """
 from __future__ import annotations
 
@@ -52,9 +51,12 @@ SPEAK_OFFER_NOTE = ('这些是程序已经存好、这一次可以发的图片�
 # generator (import_register), never a picture someone sent her. Any group she is in; she picks.
 PRODUCED_SOURCE = 'integration:'
 EDIT_SOURCE = 'edit:'          # an edit of someone else's picture: `edit:<scope it goes back to>|<where it was drawn>`
-GROUP_NOTE = ('这是群聊：这里只列你自己做出来的图（不是别人发给你的）。发不发、发哪张由你决定，'
-              '但一律要全年龄向，也要看这个群合不合适；拿不准就不发。')
-DM_NOTE = ('这是别人的私聊：这里只列你自己做出来的图。发不发、发哪张由你决定，看对方和聊的事合不合适。')
+GROUP_NOTE = ('这是群聊：这里只列这个群自己的图（你在这里做的、发到过这里的、带来这里的），不列别人发进来的。'
+              '发不发、发哪张由你决定，但一律要全年龄向，也要看这个群合不合适；拿不准就不发。')
+DM_NOTE = ('这是别人的私聊：这里只列这个对话自己的图（你在这里做的、发到过这里的、带来这里的），不列别人发进来的。'
+           '发不发、发哪张由你决定，看对方和聊的事合不合适。')
+HOME_GROUP_NOTE = ('这是群聊：这里只列你自己做出来的图（不是别人发给你的）。发不发、发哪张由你决定，'
+                   '但一律要全年龄向，也要看这个群合不合适；拿不准就不发。')
 PEER_NOTE = ('其中标了 from_linked_scene 的那几张不是这个场景里生成的，是你另一个只属于'
              '你自己的私聊入口里存的图，程序确认过那一边也是你本人的私人空间，可以照发。')
 EDITS_OFFERED = 3                       # edits of pictures from here, listed before her own
@@ -202,9 +204,8 @@ def edits_back_to(store, scope_key, *, limit=MAX_ITEMS_OFFERED):
 
 
 def target_allowed(config, scene, session_class):
-    """收件方向：任何一个私聊（路由 dm），或她在的任何一个群。主人的私聊能发这一边读得到的图；群和别人的
-    私聊只发她自己做的图（own_only，owner 2026-10-06：家往外不担心，发什么由她判断）。她的本地私聊也收：图走本地
-    sink，网页画出来（ADR-129 D1）。"""
+    """收件方向：任何一个私聊（路由 dm），或她在的任何一个群；发哪些图由访问表定（own_files.send_refused）。她的本地
+    私聊也收：图走本地 sink，网页画出来（ADR-129 D1）。"""
     if (scene or {}).get('_id') and scene['_id'] == (config.get('chat') or {}).get('scene_id'):
         return True, ''
     target = route_target(config, scene)
@@ -218,24 +219,6 @@ def target_allowed(config, scene, session_class):
     if target != 'dm':
         return False, 'target_not_dm'
     return True, ''
-
-
-def own_only(config, scene, session_class):
-    """Only pictures she made go here: a group, or anyone's chat that is not the owner's."""
-    return group_scene(config, scene) or session_class != OWNER_PRIVATE
-
-
-def row_own_only(store, row):
-    """own_only for a stored outbound row, recomputed from the row's own scene and route."""
-    if row_is_group(store, row):
-        return True
-    row = row or {}
-    try:
-        scene = scene_records.get(store, row.get('scene_id')) or {'_id': row.get('scene_id')}
-        person = _route_person(store.config, scene, row.get('channel_id'))
-        return not person or visibility.session_class(store.config, store, scene, person) != OWNER_PRIVATE
-    except Exception:
-        return True
 
 
 def _images(store, **scopes):
@@ -361,29 +344,51 @@ def image_scopes(store, config, scene, session_cls=None, person_id=None):
     return out
 
 
-def row_is_group(store, row):
-    """这条消息是不是发往一个群：按行自己的场景与路由现算。"""
+def row_scene(store, row):
+    """The conversation an outbound row is in, as its scene row with the row's own scope and channel where the scene
+    lacks them."""
     row = row or {}
-    try:
-        scene = scene_records.get(store, row.get('scene_id')) or {}
-    except Exception:
-        return False
+    scene = scene_records.get(store, row.get('scene_id')) or {'_id': row.get('scene_id')}
+    if not scene.get('scope_key') and row.get('scope_key'):
+        scene = dict(scene, scope_key=row['scope_key'])
     if not scene.get('channel_id') and row.get('channel_id'):
-        scene = dict(scene, channel_id=row.get('channel_id'))
-    return group_scene(store.config, scene)
+        scene = dict(scene, channel_id=row['channel_id'])
+    return scene
 
 
-def row_image_scopes(store, row):
-    """这条消息那一轮能引用哪些 scope：全部从行自己算（场景、路由上的人、session_class）。"""
-    row = row or {}
-    try:
-        scene = scene_records.get(store, row.get('scene_id')) or {}
-    except Exception:
-        scene = {}
-    if not scene.get('scope_key'):
-        scene = dict(scene, _id=row.get('scene_id'), scope_key=row.get('scope_key'))
-    return image_scopes(store, store.config, scene,
-                        person_id=_route_person(store.config, scene, row.get('channel_id')))
+def _item(row, own_scope=None):
+    """A stored picture as a list shows it, or None when it cannot go out (its size or sha256 not as stored)."""
+    size, digest = row.get('size'), str(row.get('sha256') or '').strip().lower()
+    if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= MAX_ATTACHMENT_BYTES:
+        return None
+    if not SHA256.match(digest):
+        return None
+    media_type = row.get('media_type')
+    item = {'artifact_id': row.get('_id'), 'sha256': digest, 'size': size,
+            'media_type': media_type if media_type in MEDIA_TYPES else None, 'created_at': row.get('created_at')}
+    scope = row.get('scope_key')
+    if own_scope is not None and scope != own_scope:
+        item['from_linked_scene'] = True
+        item['scene_id'] = scope[len('scene:'):] if isinstance(scope, str) and scope.startswith('scene:') else scope
+    return item
+
+
+def own_images(store, own, *, limit=MAX_ITEMS_OFFERED, picked=None):
+    """A conversation's own pictures to send (`own`: its scopes, own_files.scopes), newest first: those she made
+    there and those sent or carried there; not the pictures people sent there. `picked`, a going-out's picture, comes
+    first when it is one of them, even past the newest few."""
+    from . import own_files
+    own, count = [scope for scope in own or () if scope], max(1, int(limit or 1))
+    rows = artifact_records.own(store, ATTACHMENT_KIND, own, state='DONE', storage=artifact_records.STORED,
+                                by='created_at').rows(newest_first=True, limit=200)
+    mine = [row for row in rows if (produced(row) and row.get('scope_key') in own)
+            or set(row.get('shared_scopes') or ()) & set(own)]
+    if picked:
+        row = next((row for row in rows if row['_id'] == picked), None) or artifact_records.by_ids(
+            store, [picked], storage=artifact_records.STORED).first()
+        first = [row] if row and row.get('kind') == ATTACHMENT_KIND and own_files.holds(row, own) else []
+        mine = first + [row for row in mine if row['_id'] != picked]
+    return [item for item in (_item(row) for row in mine) if item][:count]
 
 
 def image_artifacts(store, scope_keys, *, limit=MAX_ITEMS_OFFERED, own_scope=None):
@@ -404,43 +409,42 @@ def image_artifacts(store, scope_keys, *, limit=MAX_ITEMS_OFFERED, own_scope=Non
     rows.sort(key=lambda row: str(row.get('created_at') or ''), reverse=True)
     out = []
     for row in rows:
-        size, digest = row.get('size'), str(row.get('sha256') or '').strip().lower()
-        if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= MAX_ATTACHMENT_BYTES:
+        item = _item(row, own_scope)
+        if item is None:
             continue
-        if not SHA256.match(digest):
-            continue
-        media_type = row.get('media_type')
-        item = {'artifact_id': row.get('_id'), 'sha256': digest, 'size': size,
-                'media_type': media_type if media_type in MEDIA_TYPES else None,
-                'created_at': row.get('created_at')}
-        scope = row.get('scope_key')
-        if own_scope is not None and scope != own_scope:
-            item['from_linked_scene'] = True
-            item['scene_id'] = scope[len('scene:'):] if isinstance(scope, str) and \
-                scope.startswith('scene:') else scope
         out.append(item)
         if len(out) >= max(1, int(limit or 1)):
             break
     return out
 
 
-def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEMS_OFFERED, picked=None):
+def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEMS_OFFERED, picked=None, origin='home',
+          own=None):
     """上下文里那块 ``image_artifacts_from_program``；方向不允许或没图可引用就不出现。
-    picked：出门或差事带来的那张她自己做的图，不在最新几张里也列上。"""
+    外面的对话（``session_class`` 不是 owner_private），和这一次的来路 ``origin`` 不许 ``list_files`` 的家里那一次：
+    只列这个对话自己的图（own_images；``own`` 是这一次自己那个对话的 scope，默认这个场景的）。家里照旧。
+    picked：出门或差事带来的那张图（挑的时候已经算这里的了），不在最新几张里也列上。"""
+    from . import access, own_files
     allowed, _reason = target_allowed(config, scene, session_class)
     if not allowed:
         return None
     # Edits of other people's pictures that came from here go back here, wherever they were drawn.
     edits = edits_back_to(store, (scene or {}).get('scope_key'), limit=EDITS_OFFERED)
-    if own_only(config, scene, session_class):
+    if session_class != OWNER_PRIVATE or not access.allowed(config, origin, 'list_files'):
+        items = own_images(store, own_files.scopes(config, scene) if own is None else own, limit=limit, picked=picked)
+        items = edits + [item for item in items if item['artifact_id'] not in {e['artifact_id'] for e in edits}]
+        note = ('' if session_class == OWNER_PRIVATE else GROUP_NOTE if group_scene(config, scene) else DM_NOTE)
+        return ({'items': items, 'note': SPEAK_OFFER_NOTE + note + (EDITS_NOTE if edits else '')}
+                if items else None)
+    if group_scene(config, scene):
+        # A home group: her pictures from anywhere, as every home conversation lists them.
         items = produced_images(store, limit=limit)
         if picked and picked not in {item['artifact_id'] for item in items}:
             items = [item for item in produced_images(store, limit=50) if item['artifact_id'] == picked] + items
         for item in items:
             item.pop('from_linked_scene', None); item.pop('scene_id', None)
         items = edits + [item for item in items if item['artifact_id'] not in {e['artifact_id'] for e in edits}]
-        note = GROUP_NOTE if group_scene(config, scene) else DM_NOTE
-        return ({'items': items, 'note': SPEAK_OFFER_NOTE + note + (EDITS_NOTE if edits else '')}
+        return ({'items': items, 'note': SPEAK_OFFER_NOTE + HOME_GROUP_NOTE + (EDITS_NOTE if edits else '')}
                 if items else None)
     own_scope = (scene or {}).get('scope_key')
     items = image_artifacts(store, image_scopes(store, config, scene, session_class, person_id),
@@ -460,48 +464,29 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
     return {'items': items, 'note': note}
 
 
-def _fence(item, scopes, produced_only, here):
-    """Whether a picture row may go out with this message; Denied with the reason when not."""
-    back_here = here is not None and returns_to(item) == here        # an edit of a picture that came from here
-    if produced_only:
-        if not produced(item) and not back_here:
-            raise Denied('ATTACHMENT_NOT_HER_OWN')          # a group or someone else's chat gets only pictures she made
-    elif item.get('scope_key') not in scopes and not produced(item) and not back_here:
-        raise Denied('ATTACHMENT_SCOPE_DENIED')             # the owner's chat: its private pictures, and hers from anywhere
-    if item.get('kind') != ATTACHMENT_KIND:
-        raise Denied('ATTACHMENT_NOT_AN_IMAGE')
-
-
-def _scopes(scope_keys):
-    return [scope_keys] if isinstance(scope_keys, str) else [item for item in (scope_keys or ()) if item]
-
-
-def refuse_erased_named(store, artifact_id, scope_keys, *, produced_only=False, here=None, scene_id=None):
+def refuse_erased_named(store, artifact_id, may_send, *, scene_id=None):
     """A picture she names that this turn did not offer: if an erasure deleted it and it is one she could otherwise
-    send here, ADR-105's sentence, in the call that names it; anything else is left to the caller's own refusal."""
+    send here (`may_send`, row -> bool: the table's send fence), ADR-105's sentence, in the call that names it;
+    anything else is left to the caller's own refusal."""
     from .blobs import erased, refuse_erased
     item = artifact_records.get(store, artifact_id) if artifact_id else None
-    if not erased(item):
-        return
-    try:
-        _fence(item, _scopes(scope_keys), produced_only, here)
-    except Denied:
+    if not erased(item) or item.get('kind') != ATTACHMENT_KIND or not may_send(item):
         return
     refuse_erased(store, item, scene_id)
 
 
-def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=False, here=None, scene_id=None):
+def accept_artifact(store, blobs, artifact_id, *, scene_id=None):
     """程序接受一张图准备随这条消息发出去：读一次字节、认魔数、按行内 sha 复核。
 
-    ``scope_keys`` 是程序算好的可引用 scope 列表（本场景 + 同一主人的另一个 owner_private
-    场景）；artifact 的 scope 不在列表里就是 ATTACHMENT_SCOPE_DENIED。返回行上要写的元数据；
-    任何一条不成立都抛 Denied（调用方逐条记进 rejections）。
+    它能不能发到这里由调用方先问过访问表（own_files.send_refused）；这里只看它是不是一张做好、存着、不超限、
+    字节对得上的图。返回行上要写的元数据；任何一条不成立都抛 Denied（调用方逐条记进 rejections）。
     """
     from .blobs import refuse_erased
     item = artifact_records.get(store, artifact_id)
     if not item or item.get('state') != 'DONE':
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
-    _fence(item, _scopes(scope_keys), produced_only, here)
+    if item.get('kind') != ATTACHMENT_KIND:
+        raise Denied('ATTACHMENT_NOT_AN_IMAGE')
     refuse_erased(store, item, scene_id)                    # one she may send, erased: said in this call (ADR-105)
     if item.get('storage') != artifact_records.STORED:
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
@@ -537,9 +522,9 @@ def serve(store, blobs, row, declared):
     """字节端点的围栏：只发这一条 publication 自己声明的那张图，且行内 sha 复核通过。
 
     返回 ``(data, media_type)``。``BlobStore.get`` 的 operator 谓词不放宽：这里显式以 operator
-    身份读，并且额外要求 artifact 行的 scope 与 sha 就是这条 publication 声明的那一份。
-    scope 那份列表用 ``row_image_scopes`` 从行自己重算（场景、路由上的人、session_class 都现算），
-    所以能发出去的范围与 DECIDE 当时看到的清单一致，不接受调用方传 scope。
+    身份读，并且额外要求 artifact 行的 sha 就是这条 publication 声明的那一份，且这张图是这条消息所在对话
+    自己的（own_files.holds：消息写下时已记进 ``shared_scopes``，家里的对话也一样）。对话与它联动的场景从行
+    自己现算，不接受调用方传 scope。
 
     第一道闸是「这条到底声明了没」：行上记着 ``attachment_skipped``（领取方没声明 image 能力）就
     直接拒，不看元数据——围栏在 serve 里自己判，不靠 claim 阶段与 HTTP 层替它记得。
@@ -550,15 +535,10 @@ def serve(store, blobs, row, declared):
     item = artifact_records.get(store, declared['artifact_id'])
     if not item or item.get('state') != 'DONE':
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
-    if kept_sticker(store, row, item):
-        pass                # a sticker on her shelf, sent as a sticker (ADR-016): any conversation that takes one
-    elif returns_to(item) and returns_to(item) == _row_scope(store, row):
-        pass                # an edit of someone else's picture, going back to the conversation it came from
-    elif row_own_only(store, row):
-        if not produced(item):
-            raise Denied('ATTACHMENT_NOT_HER_OWN')
-    elif item.get('scope_key') not in row_image_scopes(store, row) and not produced(item):
-        raise Denied('ATTACHMENT_SCOPE_DENIED')
+    if not kept_sticker(store, row, item):     # a sticker on her shelf goes to any conversation that takes one
+        from . import own_files
+        if not own_files.holds(item, own_files.scopes(store.config, row_scene(store, row))):
+            raise Denied('ATTACHMENT_SCOPE_DENIED')     # not this conversation's: no message written there carried it
     refuse_erased(store, item, (row or {}).get('scene_id'))       # erased after it was claimed (ADR-105)
     if item.get('storage') != artifact_records.STORED:
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')

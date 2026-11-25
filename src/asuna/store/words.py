@@ -211,6 +211,14 @@ class AddToSet(Word):
         self.path, self.values = path, values
 
 
+class Pull(Word):
+    """Removes every element equal to one of the values; a missing field stays missing."""
+    __slots__ = ('path', 'values')
+
+    def __init__(self, path, *values):
+        self.path, self.values = path, values
+
+
 class Push(Word):
     """Appends the values, then keeps the last `keep_last` elements."""
     __slots__ = ('path', 'values', 'keep_last')
@@ -669,9 +677,14 @@ def check_change(collection, change, *, create=False):
             else:
                 checked.append(AddToSet(word.path, *values))
             paths.append(word.path)
+        elif isinstance(word, Pull):
+            values = [_written(collection, value, word.path, False) for value in word.values]
+            _listed(collection, word.path, values, 'Pull')
+            checked.append(Pull(word.path, *values))
+            paths.append(word.path)
         else:
             raise QueryInvalid('QUERY_CHANGE_WORD: %s 不是改动的词；用 Set、Unset、Increase、Larger、Smaller、AddToSet、'
-                               'Push、OnCreate' % _shown(word))
+                               'Pull、Push、OnCreate' % _shown(word))
     for a in paths:
         for b in paths:
             if a is not b and (a == b or b.startswith(a + '.')):

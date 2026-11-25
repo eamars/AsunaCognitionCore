@@ -23,7 +23,7 @@ TABLES_VERSION = 1
 ACTIVITY = ((0, '没人说话'), (5, '零星有人说话'), (30, '有人在聊'), (None, '很热闹'))
 # Different people who spoke over the last hour.
 VOICES = ((0, '没人说话'), (1, '有一个人说话'), (3, '有两三个人说话'), (None, '有好几个人说话'))
-INTENTS = {'errand': '家里有人托你办的事', 'start_topic': '起个话头', 'share_picture': '分享一张你自己做的图',
+INTENTS = {'errand': '家里有人托你办的事', 'start_topic': '起个话头', 'share_picture': '分享一张图',
            'check_in': '露个面、打个招呼', 'write_notes': '只是看看，把看到的写进群笔记',
            'note': '你自己的一张便条叫你来的',
            'condense': '这个群的对话过了你同意的长度线，压之前来看看，把要紧的写进群笔记'}
@@ -380,7 +380,7 @@ def visit_text(intent, topic):
     if intent == 'condense':
         return CONDENSE_VISIT_TEXT
     return ('这是你自己从家里决定出门来这个群看看，不是有人叫你，也不是新的授权。你出门时的打算：%s%s。'
-            '先看看最近的聊天、这里的现场和你写的群笔记，再决定：说一句、发一张你自己做的图、'
+            '先看看最近的聊天、这里的现场和你写的群笔记，再决定：说一句、发一张图、'
             '只把看到的写进群笔记，或者什么都不说。没有合适的话就别硬说。'
             % (INTENTS[intent], '；你想聊的话头：' + topic if topic else ''))
 
@@ -413,10 +413,15 @@ def visit_block(store, scene, visit, moment):
     if visit.get('topic'):
         block['topic'] = visit['topic']
     if visit.get('artifact_id'):
-        block['picture'] = {'artifact_id': visit['artifact_id'],
-                            'note': ('这是托你一起带过去的那张图，用 speak 的 picture 发；看了现场觉得不合适也可以不发。'
-                                     if visit.get('intent') == 'errand' else
-                                     '这是你出门时想分享的那张图；发不发、配什么话，看了现场再定。')}
+        from .records import artifacts as artifact_records
+        if (artifact_records.get(store, visit['artifact_id'], fields=['kind']) or {}).get('kind') == 'file':
+            block['file'] = {'artifact_id': visit['artifact_id'],
+                             'note': '这是托你一起带过去的那个文件，用 speak 的 file 发；看了现场觉得不合适也可以不发。'}
+        else:
+            block['picture'] = {'artifact_id': visit['artifact_id'],
+                                'note': ('这是托你一起带过去的那张图，用 speak 的 picture 发；看了现场觉得不合适也可以不发。'
+                                         if visit.get('intent') == 'errand' else
+                                         '这是你出门时想分享的那张图；发不发、配什么话，看了现场再定。')}
     return block
 
 

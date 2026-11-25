@@ -12,7 +12,7 @@ async function door(state, lane, exec, run, replies = {}) {
   const { CognitionCore } = await import('../src/index.js');
   const asked = [];
   const plugin = { state: () => state, exposed: () => new Set(['speak']), roleAliases: {},
-    outside: CognitionCore.prototype.outside, deny: CognitionCore.prototype.deny,
+    outside: CognitionCore.prototype.outside, deny: CognitionCore.prototype.deny, barred: CognitionCore.prototype.barred,
     worker: { call: async (method, args) => { asked.push([method, args.tool]); return replies[method] ?? {}; } } };
   const result = await CognitionCore.prototype.door.call(plugin, lane, { agent: { session: { id: 's' } }, ...exec }, run);
   return { result, asked };
@@ -44,6 +44,16 @@ test('a denial its body raised and an outside task\'s local address come back as
     { 'guard.task': { sentence: SENTENCE } });
   assert.deepEqual(lan.result, only(SENTENCE));
   assert.deepEqual(lan.asked, [['guard.task', 'speak']]);
+});
+
+test('work from outside done at home keeps its fetch words, and the refusal by the table is recorded', async () => {
+  const words = '这件是外面的人托的事：跑命令、用钥匙、连家里的网、读盘上的路径，都不在这件事里；文件照样能读、能用。';
+  const refused = { isError: true, content: [{ type: 'text', text: 'Error: blocked ' + words }] };
+  const fetched = await door({ outside: false, networkRefused: words, current: { token: 't' } }, 'executor',
+    { name: 'web_fetch', callId: 'c6' }, async () => refused);
+  assert.equal(fetched.result, refused);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(fetched.asked, [['guard.task', 'web_fetch']]);
 });
 
 test('at home the call runs as before and nothing is asked', async () => {

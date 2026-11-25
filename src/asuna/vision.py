@@ -11,6 +11,10 @@
 ref 也可以是一个本机文件路径（绝对路径，或行动任务自己工作区的 ``/task/…``）：按路径读盘上的图看访问表的
 ``disk`` 一行（access.py），按这一次或这个任务的来路（``origin`` 参数，两个入口各自算好传进来）。裸文件名 +
 ``vision.image_dirs`` 的老路一个字没改。
+
+哪些图读得到看同一个来路（own_files.py）：来路许 ``all_files`` 的（默认家里与外面托、家里办），任何对话的 ref
+（不限天数）与存好的图（不问是谁的、在哪个对话）都读得到，字节还在就行；只许 ``own_files`` 的（默认外面），只读
+这个对话自己的（含联动的）。别的对话的图和没有的图回同一句话，另记一笔（access.record）。
 """
 from __future__ import annotations
 import base64
@@ -21,7 +25,7 @@ import urllib.request
 from urllib.parse import urlsplit
 
 from . import clock
-from . import animated, channel_kinds, media_children, visibility
+from . import animated, channel_kinds, media_children
 from .config import echoed
 from .faults import NO_CAUSE
 from .evidence import canonical, sha
@@ -392,32 +396,32 @@ def scene_attachments(store, task, config, *, limit=LISTING_ITEMS, scan=SCENE_SC
             'vision': vision_capability(config)}
 
 
-def attachment_by_ref(store, task, config, ref, session_class=visibility.PUBLIC, entries=None):
+def attachment_by_ref(store, task, config, ref, wide=False, entries=None):
     """(entry, listing): the attachment a ref names among the pictures of the last REF_DAYS days in this conversation
     and its linked scenes (the same fence as scene_attachments), or (None, listing). The newest few come first.
 
-    At home (owner_private, owner 2026-10-11) the fence does not hold her back: a ref from any of her conversations
-    is found, marked `home_reach`. Elsewhere it holds, so nothing at home is read from outside."""
+    `wide` (work whose origin may read every conversation's files, own_files.reach): a ref from any of her
+    conversations, of any age, is found, marked `wide_reach`."""
     entries = entries or attachments_of
     listing = scene_attachments(store, task, config, entries=entries)
     entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
     if entry:
         return entry, listing
     from datetime import timedelta
-    cutoff = (clock.now() - timedelta(days=REF_DAYS)).isoformat()
+    window = {} if wide else {'since': (clock.now() - timedelta(days=REF_DAYS)).isoformat()}
     scopes = [{**scope, 'policy_epoch': task['policy_epoch']} for scope in readable_image_scenes(store, task, config)]
-    if session_class == visibility.OWNER_PRIVATE:
+    if wide:
         fenced = {scope['scene_id'] for scope in scopes}
-        scopes += [{'scene_id': doc['_id'], 'linked': True, 'home_reach': True, 'policy_epoch': doc.get('policy_epoch')}
+        scopes += [{'scene_id': doc['_id'], 'linked': True, 'wide_reach': True, 'policy_epoch': doc.get('policy_epoch')}
                    for doc in scene_records.all(store, fields=['_id', 'policy_epoch']) if doc['_id'] not in fenced]
     for scope in scopes:
-        rows = message_records.inbound(store, scope['scene_id'], scope['policy_epoch'], since=cutoff,
+        rows = message_records.inbound(store, scope['scene_id'], scope['policy_epoch'], **window,
                                        media=True).rows(newest_first=True, fields=SCANNED_FIELDS)
         for row in rows:
             for found in entries(row, config=config):
                 if found['ref'] == ref:
                     found.update(scene_seq=row.get('scene_seq'), scene_id=row.get('scene_id'),
-                                 linked_scene=bool(scope['linked']), **({'home_reach': True} if scope.get('home_reach') else {}))
+                                 linked_scene=bool(scope['linked']), **({'wide_reach': True} if scope.get('wide_reach') else {}))
                     return found, listing
     return None, listing
 
@@ -603,16 +607,17 @@ def resolve_image_file(ref, form, *, task_dir=None):
 ARTIFACT_REF = re.compile(r'blob-[0-9a-f]{16,64}')
 
 
-def read_image_for_task(store, blobs, task, config, args, *, route='executor', offered=(),
-                        session_class=visibility.PUBLIC, task_dir=None, look=True, origin='outside'):
+def read_image_for_task(store, blobs, task, config, args, *, route='executor', offered=(), task_dir=None, look=True,
+                        origin='outside', by=None, tool=READ_IMAGE_TOOL_NAME):
     """read_image 的实际执行：场景围栏 → 能力核对 → 拉字节 → 落 BlobStore → 交给插件的视觉输入载荷。
 
     两个脑共用这一个工具：行动脑按任务调用，角色脑按她这回合的场景调用（role_tools.py）；`task` 只需要
     scene_id、scope_key、policy_epoch，围栏与落盘口径完全相同，route 只决定核对哪条路由能不能收图。
-    ref 也可以是一张已存好的图的 artifact_id（她画的、本场景存的、这一轮可发的 ``offered``），用来回看；
-    或是一个本机文件路径（绝对路径 / ``/task/…``）——那种只在访问表许这个来路 ``disk`` 时放行，
-    ``origin`` 由两个入口各自算好传进来（角色脑按这一次，行动脑按任务；access.py），``session_class`` 只管
-    附件读到哪些对话；``task_dir`` 是本任务自己的工作区，只有它有 ``/task/`` 这种写法。"""
+    ref 也可以是一张已存好的图的 artifact_id（这个对话自己的、这一轮可发的 ``offered``；来路许 ``all_files``
+    的任何一张），用来回看；或是一个本机文件路径（绝对路径 / ``/task/…``）——那种只在访问表许这个来路
+    ``disk`` 时放行。``origin`` 由两个入口各自算好传进来（角色脑按这一次，行动脑按任务；access.py），它也决定
+    附件与存好的图读到哪些对话（own_files.reach）；``by`` 是这一次所在的回合或任务，表拒的那一笔记在它名下
+    （access.record）；``task_dir`` 是本任务自己的工作区，只有它有 ``/task/`` 这种写法。"""
     args = args if isinstance(args, dict) else {}
     unknown = set(args) - {'ref', 'max_bytes'}
     if unknown:
@@ -632,20 +637,25 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
         raise ValueError('VISION_ROUTE_UNSUPPORTED: 这条模型路由收不了图（%s）；重试也一样%s'
                          % ('；'.join(capability['unsupported_because']),
                             '' if route == 'character' else '：不看图能做的先做，看不了的写进结果'))
+    from . import access, own_files
+    reach = own_files.reach(config, origin)
+    if reach is None:
+        access.require(store, by, origin, 'own_files', tool, config)
     if ARTIFACT_REF.fullmatch(ref):
-        return stored_image(store, blobs, task, config, ref, max_bytes, offered)
+        return stored_image(store, blobs, task, config, ref, max_bytes, offered, origin=origin, by=by, tool=tool)
     if path_form(ref):
         # 按路径读盘上的图：访问表许这个来路 disk 才放行，task_dir 决定 /task/ 指哪儿。
-        return path_image(blobs, task, config, ref, max_bytes, origin, task_dir)
-    entry, listing = attachment_by_ref(store, task, config, ref, session_class)
+        return path_image(store, blobs, task, config, ref, max_bytes, origin, task_dir, by=by, tool=tool)
+    entry, listing = attachment_by_ref(store, task, config, ref, reach == 'all')
     if not entry:
-        # 不区分「不存在」与「在围栏外的场景／别的纪元」：不借这个工具探测别人的图。只列本任务可读范围里的 ref。
+        # 不区分「不存在」与「在别的对话／别的纪元」：不借这个工具探测别人的图。只列本任务可读范围里的 ref。
         recent = [item['ref'] for item in listing['attachments']]
-        if session_class == visibility.OWNER_PRIVATE:
-            # At home the search covered all her conversations: say that, not this one's recent lines.
-            raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在你所有对话最近 %d 天的图里：超过 %d 天的图 ref 找不回，'
-                             'ref 抄错一个字也是这样；%s' % (echoed(ref), REF_DAYS, REF_DAYS,
-                                                    '这个对话最近的图是 ' + '、'.join(recent) if recent else GIVE_UP))
+        if reach == 'all':
+            # The search covered all her conversations, of any age: say that, not this one's recent lines.
+            raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在你任何一个对话的图里：ref 抄错一个字也是这样；%s'
+                             % (echoed(ref), '这个对话最近的图是 ' + '、'.join(recent) if recent else GIVE_UP))
+        if elsewhere(store, task, config, ref):
+            access.record(store, by, origin, 'all_files', tool)      # another conversation's: said as a missing one
         raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在这个对话最近 %d 天的图里；%s'
                          % (echoed(ref), REF_DAYS, '最近的是 ' + '、'.join(recent) + '，ref 照抄其中一个' if recent
                             else '最近 %d 条消息里没有图，%s' % (SCENE_SCAN_MESSAGES, GIVE_UP)))
@@ -698,7 +708,15 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
     return payload
 
 
-def path_image(blobs, task, config, ref, max_bytes=None, origin='outside', task_dir=None):
+def elsewhere(store, task, config, ref, entries=None):
+    """Whether a ref this conversation does not hold names an attachment of another of her conversations: such a read
+    is answered as a missing one and recorded apart (access.record)."""
+    entry, _ = attachment_by_ref(store, task, config, ref, True, entries)
+    return bool(entry and entry.get('wide_reach'))
+
+
+def path_image(store, blobs, task, config, ref, max_bytes=None, origin='outside', task_dir=None, *, by=None,
+               tool=READ_IMAGE_TOOL_NAME):
     """Read a picture from this machine's disk, where the access table allows this origin `disk`: the bytes are this
     call's real visual input, and the file it came from is recorded as the artifact's source (``file:<绝对路径>``).
 
@@ -706,7 +724,7 @@ def path_image(blobs, task, config, ref, max_bytes=None, origin='outside', task_
     这是定好的，不是漏了。
     """
     from . import access
-    access.require(config, origin, 'disk')
+    access.require(store, by, origin, 'disk', tool, config)
     data, media_type, via, source = pull_bytes({'ref': ref, 'pull_via': 'local_file', 'file': ref}, config,
                                                max_bytes=max_bytes, disk=True, task_dir=task_dir)
     digest = sha(data)
@@ -722,19 +740,26 @@ def path_image(blobs, task, config, ref, max_bytes=None, origin='outside', task_
                     % source['path']}
 
 
-def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offered=()):
-    """Look again at a picture already stored as an image artifact: one in this scene's own scope, one she
-    made herself (her own generator, any scene), or one this turn was offered to send. Anything else answers
-    exactly like an unknown id, so the tool cannot be used to probe other people's pictures."""
+def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offered=(), *, origin='outside', by=None,
+                 tool=READ_IMAGE_TOOL_NAME):
+    """Look again at a picture already stored as an image artifact: any, where this origin reads every conversation's
+    files (own_files.reach); else one of this conversation's own (own_files.holds), or one this turn was offered to
+    send. Anything else answers exactly like an unknown id, so the tool cannot be used to probe other people's
+    pictures; one that exists elsewhere is recorded apart (access.record)."""
+    from . import access, own_files
     from .blobs import refuse_erased
     from .outbound_media import produced
     row = artifact_records.get(store, artifact_id, kind='image', state='DONE')
-    if (not blobs or not row or not (row.get('scope_key') == task.get('scope_key') or produced(row)
-                                     or artifact_id in (offered or ()))):
-        raise ValueError(NOT_READABLE % artifact_id)
+    wide = own_files.reach(config, origin) == 'all'
+    missing = (NOT_READABLE % artifact_id) if wide else NOT_HERE
+    if not blobs or not row:
+        raise ValueError(missing)
+    if not wide and not (own_files.holds(row, own_files.scopes(config, task)) or artifact_id in (offered or ())):
+        access.record(store, by, origin, 'all_files', tool)
+        raise ValueError(missing)
     refuse_erased(store, row, task.get('scene_id'))          # in her fence: an erased picture says so (ADR-105)
     if row.get('storage') != artifact_records.STORED:
-        raise ValueError(NOT_READABLE % artifact_id)
+        raise ValueError(missing)
     data = blobs.get(artifact_id, row['scope_key'], operator=True)
     cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
     if len(data) > cap:
@@ -751,8 +776,10 @@ def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offere
             'note': '这是存好的那张图本身；看完再判断它是不是要的样子。'}
 
 
-NOT_READABLE = ('IMAGE_ARTIFACT_NOT_READABLE: %s 不是能看的图：没有这张，或它不在这个对话里、不是你画的、'
-                '也不是这一次可发的；自己画的图照抄 generate_image 回执里的 artifact.artifact_id')
+NOT_READABLE = ('IMAGE_ARTIFACT_NOT_READABLE: %s 不是能看的图：没有这张，或它的字节已经不在了；'
+                '自己画的图照抄 generate_image 回执里的 artifact.artifact_id')
+# Outside, a picture of another conversation and one that does not exist get this one answer (§9, her 0668).
+NOT_HERE = 'IMAGE_ARTIFACT_NOT_READABLE: 这个对话里没有这个文件。'
 
 
 LOCAL_NOT_IN_SCENE = 'IMAGE_ATTACHMENT_NOT_IN_SCENE: 这张图的原消息已经不在这个对话可读的范围里；' + GIVE_UP
@@ -764,9 +791,13 @@ def local_upload_bytes(store, blobs, task, config, entry, max_bytes=None):
     program's own local input (no platform envelope), and the artifact must be in that row's scope with that
     input as its source — a platform message naming an artifact id gets nothing."""
     scene_id = _clean(entry.get('scene_id'), 90) or task['scene_id']
-    if scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
+    epoch = task['policy_epoch']
+    if entry.get('wide_reach'):
+        # Found in another conversation by a read of every conversation's files: read back in its own epoch.
+        epoch = (scene_records.get(store, scene_id, fields=['policy_epoch']) or {}).get('policy_epoch')
+    elif scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
         raise ValueError(LOCAL_NOT_IN_SCENE)
-    row = message_records.get(store, entry['source_message_id'], scene=scene_id, epoch=task['policy_epoch'])
+    row = message_records.get(store, entry['source_message_id'], scene=scene_id, epoch=epoch)
     items = (media_block(row) or {}).get('items') or [] if row else []
     item = next((item for index, item in enumerate(items) if ref_of(row['_id'], index) == entry['ref']), None)
     if not local_upload_item(row, item):
@@ -804,8 +835,8 @@ def media_source_url(store, task, config, entry):
     不在本任务可读集合里就返回空。"""
     scene_id = _clean(entry.get('scene_id'), 90) or task['scene_id']
     epoch = task['policy_epoch']
-    if entry.get('home_reach'):
-        # Found from home by attachment_by_ref (owner_private only): read back in its own scene and epoch.
+    if entry.get('wide_reach'):
+        # Found in another conversation by attachment_by_ref (`wide`): read back in its own scene and epoch.
         epoch = (scene_records.get(store, scene_id, fields=['policy_epoch']) or {}).get('policy_epoch')
     elif scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
         return ''
@@ -892,21 +923,20 @@ def media_note(message, config):
 READ_IMAGE_TOOL = {
     'name': READ_IMAGE_TOOL_NAME,
     'description': ('看一张图：ref 照抄图旁标的 ref，或附件清单里的，7 天内都认；'
-                    '也可以是一张存好的图的 artifact_id（blob-…），比如你自己画的、这次能发的，画完或发之前用它看一遍。'
-                    '没调用就是没看过。家里还能看你别的对话里 7 天内的图，也能读盘上的图（ref 写绝对路径，'
+                    '也可以是一张存好的图的 artifact_id（blob-…），比如这个对话里你画的、这次能发的，画完或发之前用它看一遍。'
+                    '没调用就是没看过。家里还能看你任何一个对话里的图，不限 7 天，也能读盘上的图（ref 写绝对路径，'
                     '或行动任务工作区里的 /task/… 路径）。视频的 ref 也认：给你按时间截的一张格子图（没有声音），'
                     '视频超过 %d MB 不下载。看不了会照实说原因。' % VIDEO_MAX_MB),
     'parameters': {'ref': {'type': 'string', 'required': True}}}
 
 
-def picture_to_edit(store, blobs, task, config, ref, *, session_class=visibility.PUBLIC, task_dir=None,
-                    origin='outside'):
+def picture_to_edit(store, blobs, task, config, ref, *, task_dir=None, origin='outside', by=None):
     """A picture to edit (generate_image's source_image): read with read_image's own fence, so a turn edits only a
     picture it may look at, and said with where an edit of it may go. Her own drawing stays hers (`own`); any other
     picture's edit goes back to the conversation the picture came from (`back_to`, a scope key)."""
     from .outbound_media import produced, returns_to
-    seen = read_image_for_task(store, blobs, task, config, {'ref': ref}, session_class=session_class,
-                               task_dir=task_dir, look=False, origin=origin)
+    seen = read_image_for_task(store, blobs, task, config, {'ref': ref}, task_dir=task_dir, look=False, origin=origin,
+                               by=by, tool='generate_image')
     artifact_id = seen.get('artifact_id') or seen.get('blob_artifact')
     row = artifact_records.get(store, artifact_id) if artifact_id else None
     if not row:
@@ -935,14 +965,14 @@ class VisionService:
         from .blobs import BlobStore
         self.blobs = BlobStore(store)
 
-    def read_image(self, task, args, *, session_class=visibility.PUBLIC, task_dir=None, origin='outside'):
-        # 会话类别与来路由任务那一侧算好传进来：按路径读盘看访问表，这里不另判一次。
-        return read_image_for_task(self.store, self.blobs, task, self.store.config, args,
-                                   session_class=session_class, task_dir=task_dir, origin=origin)
+    def read_image(self, task, args, *, task_dir=None, origin='outside'):
+        # 来路由任务那一侧算好传进来：读到哪些对话、按路径读盘都看访问表，这里不另判一次。
+        return read_image_for_task(self.store, self.blobs, task, self.store.config, args, task_dir=task_dir,
+                                   origin=origin, by={'task': task['_id'], 'scope': task.get('scope_key')})
 
-    def picture_to_edit(self, task, ref, *, session_class=visibility.PUBLIC, task_dir=None, origin='outside'):
-        return picture_to_edit(self.store, self.blobs, task, self.store.config, ref,
-                               session_class=session_class, task_dir=task_dir, origin=origin)
+    def picture_to_edit(self, task, ref, *, task_dir=None, origin='outside'):
+        return picture_to_edit(self.store, self.blobs, task, self.store.config, ref, task_dir=task_dir, origin=origin,
+                               by={'task': task['_id'], 'scope': task.get('scope_key')})
 
 
 def route_filtered_tool_names(tools, config):

@@ -38,7 +38,7 @@ Where each part of Asuna runs. For anyone changing the code or writing a package
 - Every inbound input is stored before any retrieval or model call (`src/asuna/ingress.py` `persist_input`).
 - Every tool call of both brains is timed where the worker dispatches it (`src/asuna/tool_watch.py`). When it ends it leaves one audit row `tool.time` on its task's stream (the action brain) or its episode's (the character brain), in their scope: `call_id`, `tool`, `duration_s` (3 decimals) and `outcome`, `done`, `failed` (the tool's own failure: an action call closed `FAILED`, a refusal of hers) or `raised` (any other error). A `recall` row also has `parts`, the seconds (3 decimals) of each part that ran: `prepare`, `read_sections`, `own_thoughts_elsewhere`, `elsewhere`, `before`, `headings`, `recalled`, and inside `prepare` its memory search (`prepare.search`), her items (`prepare.deliver`) and the rest of it (`prepare.rest`) (`tool_watch.part`); a part's timer never fails the call. A call that builds one of her turns inside itself (the action brain's `ask_character`) has the three `prepare.` parts of that turn.
 - A tool call still running after 600 seconds, or after its own `timeout` plus 120 seconds for `sandbox_run` and `development_run`, is recorded once and goes on: the evidence record `host.tool_overrun` (`call_id`, `brain`, `tool`, `stream`, `seconds`, `limit_s`, and `stack`, the call thread's 60 innermost frames as `file:line function`), a lane fault (channel `host`, lane `tools`, stage the tool, error `overrun`) and one `ASUNA_TOOL_OVERRUN` line in the Host log. Nothing stops or restarts it.
-- Whether a call is allowed is decided once, from stored facts, before any of a tool's own checks (`src/asuna/guard.py`): `check` for a call of hers, at the worker (`RoleTools.call`) and, for a tool her conversation does not list, at the plugin's `tools/execute` door; `check_task` for a task's call, at `ToolBroker.call` and, for a tool the task was not given or a local address its fetch reached, at the same door. In an outside turn (a conversation that is not the owner's own, or a home turn a note from outside opened) or an outside task, a call that is not allowed gets the tool result 「这一步没有做。」 and nothing else, whatever else is wrong with it; at home the program's own refusal comes back. After three of these in one of her turns (`guard_sentences` on the turn), every further call but `speak` and `end_turn` gets the sentence without being evaluated. In an outside turn, a task, a note or a plan is not allowed for an ask of someone other than the owner unless she first wrote her understanding of them on an earlier day (her clock) than the stored time of the line that opened the turn; a turn nobody opened carries nobody's ask (`guard.asker`, `familiarity.known_before`). At home, `recall` with `refusals` (「今天」, a day YYYY-MM-DD, or a time YYYY-MM-DDTHH:MM on her clock) reads what was refused in her outside turns and outside tasks: when, where, what she tried, who asked, and the reason in words (`guard.review`, `REVIEW_WORDS`, version `REVIEW_VERSION`); outside, the field is not listed and a call with it gets the plain sentence. A stranger's ask that was not done (`asker_not_known`) is an expired ask: a `recall` query with a word of the ask's own text (read through `call`) returns it under `expired`, with who asked, when, what, and 「这件已经过期，你不用接着做了。」 added at display, in the conversation it was asked in and at home (`guard.expired`); one older than `EXPIRED_DAYS` (30 days) is not shown by recall, and the review still lists it for its day. Each one leaves an audit row `guard.denied`: `code` (`not_listed`, `not_now`, `asker_not_known`, `for_owner` (in an outside turn, `for` naming the owner), `outside_turn`, `no_place`, `not_granted`, `limit`), `rule`, `tool`, `option`, `class`, `authority`, `turn_kind`, `asker`, `task`, `call` (the call's own `role_tool` row), `asker_id` and `asked_in` (who asked, and in which conversation) and `sentence` for her calls; `code`, `rule`, `tool`, `task`, `outside` and `asker` for a task's.
+- Whether a call is allowed is decided once, from stored facts, before any of a tool's own checks (`src/asuna/guard.py`): `check` for a call of hers, at the worker (`RoleTools.call`) and, for a tool her conversation does not list, at the plugin's `tools/execute` door; `check_task` for a task's call, at `ToolBroker.call` and, for a tool the task was not given or a local address its fetch reached, at the same door. In an outside turn (a conversation that is not the owner's own, or a home turn a note from outside opened) or an outside task, a call that is not allowed gets the tool result 「这一步没有做。」 and nothing else, whatever else is wrong with it; at home the program's own refusal comes back. After three of these in one of her turns (`guard_sentences` on the turn), every further call but `speak` and `end_turn` gets the sentence without being evaluated. In an outside turn, a task, a note or a plan is not allowed for an ask of someone other than the owner unless she first wrote her understanding of them on an earlier day (her clock) than the stored time of the line that opened the turn; a turn nobody opened carries nobody's ask (`guard.asker`, `familiarity.known_before`). At home, `recall` with `refusals` (「今天」, a day YYYY-MM-DD, or a time YYYY-MM-DDTHH:MM on her clock) reads what was refused in her outside turns and outside tasks, and what the access table refused anywhere ([Access](#access)): when, where, what she tried, who asked, and the reason in words (`guard.review`, `REVIEW_WORDS`, version `REVIEW_VERSION`); outside, the field is not listed and a call with it gets the plain sentence. A stranger's ask that was not done (`asker_not_known`) is an expired ask: a `recall` query with a word of the ask's own text (read through `call`) returns it under `expired`, with who asked, when, what, and 「这件已经过期，你不用接着做了。」 added at display, in the conversation it was asked in and at home (`guard.expired`); one older than `EXPIRED_DAYS` (30 days) is not shown by recall, and the review still lists it for its day. Each one leaves an audit row `guard.denied`: `code` (`not_listed`, `not_now`, `asker_not_known`, `for_owner` (in an outside turn, `for` naming the owner), `outside_turn`, `no_place`, `not_granted`, `limit`), `rule`, `tool`, `option`, `class`, `authority`, `turn_kind`, `asker`, `task`, `call` (the call's own `role_tool` row), `asker_id` and `asked_in` (who asked, and in which conversation) and `sentence` for her calls; `code`, `rule`, `tool`, `task`, `outside` and `asker` for a task's.
 - From home (a home turn not opened by a note from outside, not an errand) her tools reach her other conversations (`RoleTools._home_reach`): `task` with `do` stop takes the id of a ready or running task of any conversation and cancels it as her own stop (`character_stop`); `plan` with `do` cancel takes the id of a plan of any conversation and cancels it with that plan's own conversation, person and epoch (her rhythms are refused, `PLAN_RHYTHM`); `write_document` with `doc` group_notes and `group` (the group's name as her review shows places; an unknown name is refused with the names there are, `GROUP_UNKNOWN`; a name two groups share is refused, `GROUP_AMBIGUOUS`) writes that group's notes. These words are in the tool texts at home only. In an outside turn, or a home turn a note from outside opened, such a call gets the plain sentence (guard row `HOME_REACH_ONLY`, code `not_listed`). Her review's items name the task they are about (`tried.task_id`).
 - The safety classifier (`src/asuna/classifier.py`, deployment setting `classifier`) judges one text at a time, alongside her work, never before it, and only what crosses in and out of home: into home, a note written outside and an idea written outside; out of home, a note from home to an outside conversation, an errand, and a task's result shown in an outside conversation. A brief or a plan is never judged, outside or at home. Two classifiers by direction, one per text: each question is a session of its own on the `classify` lane (the character route, at the relevance gate's effort, tool-free, its sessions retired like the gate's); the system text is the direction's policy file, `src/asuna/resources/prompts/classify_inbound.md` or `classify_outbound.md`, the same every time; the question is the kind of text and the text (at most 4,000 characters; for a result, its text only). Before the outbound one, the text is matched against the private-words list (`private_words`) and the configured secret values (the release scan's rule); a match adds one line, 「程序的提醒：这段文字里有 N 个私人名单上的词（类别）」 and/or 「N 处像凭据的写法」, categories and counts only. The answer is exactly 「有风险」 or 「无风险」 (spaces, its 「」 and a full stop around it allowed); anything else is asked again with a repair note (`answers.ask`), and an answer still off-format after the repairs counts as flagged. A flagged ask of the owner's (by account) is recorded and never stopped. Audit rows on the stream of the turn (or, for a result, the task): `classifier.asked` (`kind`, `direction`, `ref`: the note, idea or task, or the errand's text; `sha256`, `owner_asked`, `policy_version`: the policy file's sha256, 12 characters; `mode`; for outbound `dictionary`: `private_words`, counts by category or `unchecked` with no list, and `secrets`, a count), then `classifier.verdict` (`verdict` `flagged` or `clear`, `code` `flagged`, `clear` or `off_format`, `latency_s`, `ran`: a task's steps so far or whether a note was read) or `classifier.unchecked` (`why`: the error, the request's end before the model finished, or `restart` for a request the worker's restart cut, written at its next start). `shadow` records and stops nothing. `stop` holds a flagged crossing unless the owner asked for it (`classifier.stop`), by one mark (`classifier_held`) on the note, the idea (state `held`), the task, or the input row of the turn it opens: a held note is never shown where it goes and its state where she sent it is the classifier's sentence; the turn it opens does not start (`SUPPRESSED`, `ended_by` `CLASSIFIER_HELD`), or, already running, its next call, `speak` included, gets the classifier's sentence and concludes the turn (`classifier.refused`); a held idea leaves her notebook; the tasks a held turn started that are still ready or running are cancelled (reason `classifier_held`); a held result's status and, outside, its pages read the classifier's sentence. The verdict row says `stopped`, or `too_late` when the work was done before it (nothing held, nothing said) or when an outbound crossing's turn had already spoken (`ran.spoken`; the turn still ends), and `hold_failed` with the error when the hold itself failed. A verdict row is read back only by her review at home, where a flagged one is listed as 「可能对你或主人有安全或隐私风险」 with the text it judged and where it came from (inbound) or where it went, with 「从家里」 (outbound), and 「拦下了」, 「来不及拦」 or 「只记下了，没有拦下」.
 - An outside turn is told nothing in advance about what her hands can do: it carries no `action_capabilities_from_program` and no `session_class` (`src/asuna/context.py`), and its system prompt's guide leaves out the blocks only home turns carry (`block_guide.HOME_ONLY`). Her tool texts are one set of words, each tool's sentences shown where its ability is listed (`role_tools.placed_spec`).
@@ -153,10 +153,13 @@ their own and that task's. A task without `origin` gets one when it is read (`ac
 from the turn that handed it over, or, when that turn is gone, from the class of its conversation and person.
 
 Each resource has a level, the origins it allows from home outwards: `home` (home only), `home_from_outside` (home and
-home from outside), `everywhere`, or `none`. The table (`access.IN_EFFECT`, defaults in `access.RESOURCES`):
+home from outside), `everywhere`, or `none`. The table (defaults in `access.RESOURCES`):
 
 | Resource | Covers | Default |
 |---|---|---|
+| `own_files` | the conversation's own files ([Own files](#own-files)): read by id or ref, listed | `everywhere` |
+| `all_files` | every conversation's files by id or ref, with no conversation or age check while the bytes exist | `home_from_outside` |
+| `list_files` | other conversations' files in the lists of a home conversation (`image_artifacts_from_program`, `file_artifacts_from_program`) | `home_from_outside` |
 | `disk` | a disk path to `read_image`, for both brains | `home` |
 | `commands` | `sandbox_run` | `home` |
 | `credentials` | `credentials` on `sandbox_run` | `home` |
@@ -165,14 +168,17 @@ home from outside), `everywhere`, or `none`. The table (`access.IN_EFFECT`, defa
 | `integrations` | the integration tools, by the profile the turn earns ([Integration profile](#integration-profile)); takes `home` or `none` | `home` |
 | `development` | the development and persona-job tools, with the development grant ([Self-development](#self-development)); takes `home` or `none` | `home` |
 | `drawing` | `generate_image`, `render_svg`, `private_words` (the action brain's) | `everywhere` |
+| `send_any` | sending any stored file or picture into any conversation she may speak in | `home` |
+| `send_to_asker` | sending any stored file or picture into the conversation the work is for (`whose.scene_id`) | `home_from_outside` |
+| `send_own` | sending a conversation's own files there | `everywhere` |
 
 The Host's sandbox confines writes only, so `commands` also carries every network address, the database address and
 the ssh and git keys of the user the Host runs as ([Sandbox](#sandbox)): widening `commands` widens those with it.
 
 - **The setting** `deployment.access` names only the rows that differ from the default (`commands: none`). The owner
   sets it on the settings page (the section 「访问权限」 / "Access", drawn as the table: a tick box per resource and
-  origin) or in the profile's settings file. An unknown resource or level, a level its row does not take, or a
-  resource not in the table above, is refused when the page saves and stops the worker at start:
+  origin) or in the profile's settings file. An unknown resource or level, or a level its row does not take, is
+  refused when the page saves and stops the worker at start:
   `INVALID_ACCESS: <the name>` (`src/asuna/native_settings.py` `runtime_settings`).
 - **When it applies.** The worker reads the table when it starts; a change applies from the next start (the page's
   apply), to every grant and every call, a task already running included: `Coordinator._grants` gives a task only the
@@ -187,8 +193,45 @@ the ssh and git keys of the user the Host runs as ([Sandbox](#sandbox)): widenin
   refused `commands`, `credentials`, `local_network` or `disk`:
   「这件是外面的人托的事：跑命令、用钥匙、连家里的网、读盘上的路径，都不在这件事里；文件照样能读、能用。」
   (for `local_network` it ends the fetch's `WEB_BLOCKED_URL`); an outside turn or task refused `disk`:
-  「盘上的路径只在家里能读。」; any other refusal by the table: 「这一步这里用不了。」. In an outside task, a tool it
+  「盘上的路径只在家里能读。」; a send this origin may not make: `ACCESS_DENIED_SEND: ` 「这个文件不归这个对话发。」; any
+  other refusal by the table: 「这一步这里用不了。」. Work that reads only its own files is answered for another
+  conversation's file exactly as for one that does not exist (same code, same words). In an outside task, a tool it
   was not given is still the guard's plain sentence.
+- **The record.** Every refusal by the table leaves one audit row `access.denied`: `resource`, `origin`, `tool`, the
+  turn (its stream, with `call`) or the `task`, and `send` for a send; never what was refused or whose it is. A read of
+  another conversation's file by work that reads only its own is recorded so (`all_files`); a tool a task was not given
+  for its origin and a local address its fetch reached are recorded by the worker for the plugin (`guard.task`, `rule`
+  `table` or `local_network`). Her review at home (`recall` `refusals`) lists each with when, where and what she tried,
+  marked 「这里不许：<row>（<column>）」 in her words (`access.ROW_WORDS`, `access.ORIGIN_WORDS`: 家里, 外面托、家里办,
+  外面), a send 「这里不许：把这个文件发到这里（<column>）」.
+
+#### Own files
+
+A conversation's own files (`src/asuna/own_files.py`) are the stored rows (`artifacts`: `image`, `file`,
+`received_file`) whose `scope_key` is its own, or that list it in `shared_scopes`; an edit of a picture that came from
+it (it goes back there); those of the conversations the owner linked to it (`context_links`); and the stickers
+(`global-safe`). Its messages' pictures and files are found by ref in it and its linked conversations. A turn's own
+conversation is where it is, and for a home turn a note from outside opened, where the note came from; a task's is its
+binding.
+
+- **Shared.** A row gains a conversation in `shared_scopes` (one set-add, outside the row's revision, kept by every
+  write of the row) when a message carrying it is written there (`Coordinator.queue_reply`, before the row), and when
+  an errand or a visit picks it for that place (`own_files.carry`). An erasure of a conversation takes it out of every
+  row's `shared_scopes` (`BlobStore.erase_scope`).
+- **Reading.** Work whose origin may use `all_files` reads any conversation's picture, file or ref by id, of any age,
+  while its bytes exist; work that may use only `own_files` reads its own conversation's.
+- **Sending** (`own_files.send_refused`). Into a home conversation (her local chat, a chat of the owner's, a home line,
+  a home group), whatever the work may read; into another, any file where its origin may use `send_any`, any file into
+  the conversation the work is for where it may use `send_to_asker`, that conversation's own files where it may use
+  `send_own`. The byte endpoint serves only the row's conversation's own files ([Fetch attachment
+  bytes](#fetch-attachment-bytes)).
+- **Lists.** An outside conversation lists its own pictures she made there or that were sent or carried there, the
+  edits that go back there, and the one an errand or visit carried (`image_artifacts_from_program`), and its own
+  files (`file_artifacts_from_program`); a picture someone sent there is its own but not listed. A home conversation
+  lists as before (the owner's chat its own and linked pictures, her pictures from anywhere, a home group her pictures
+  from anywhere, every conversation's files) where the turn's origin may use `list_files`, else its own only.
+- **Going out.** `errand` takes a picture or a file, `visit` a picture: one the picking turn may read and may send
+  there; refused with `ACCESS_DENIED_SEND`, or `ARTIFACT_NOT_FOUND` for one that does not exist.
 
 ## Channel API
 
@@ -485,7 +528,7 @@ The answer is `{"items": [], "lane": …, "epoch": …}` or `{"items": [item], "
 
 The answer is the bytes with `Content-Type` from their file signature, re-checked against the row's `sha256`. The adapter checks the digest and signature again; only a platform receipt says the picture arrived.
 
-A file's piece is `application/octet-stream`. The host does not hash a piece: the adapter checks the whole file's `sha256` across its pieces. A piece outside the file, or longer than 8 MiB, is 400 `FILE_PIECE_INVALID`. A file's other refusals (403): `FILE_NOT_DECLARED`, `FILE_ARTIFACT_UNAVAILABLE`, `FILE_BYTES_EXPIRED` (its bytes were removed), `FILE_SHA_MISMATCH` (the stored file is not the declared one). A picture or file a privacy erasure deleted after the claim is 403 `ARTIFACT_ERASED`, followed by its sentence.
+A file's piece is `application/octet-stream`. The host does not hash a piece: the adapter checks the whole file's `sha256` across its pieces. A piece outside the file, or longer than 8 MiB, is 400 `FILE_PIECE_INVALID`. A file's other refusals (403): `FILE_NOT_DECLARED`, `FILE_ARTIFACT_UNAVAILABLE` (missing, or not that conversation's own), `FILE_BYTES_EXPIRED` (its bytes were removed), `FILE_SHA_MISMATCH` (the stored file is not the declared one). A picture or file a privacy erasure deleted after the claim is 403 `ARTIFACT_ERASED`, followed by its sentence.
 
 | Code (all 403, no partial body) | When |
 |---|---|
@@ -494,8 +537,7 @@ A file's piece is `application/octet-stream`. The host does not hash a piece: th
 | `ATTACHMENT_NOT_DECLARED` | the claim carried no picture (also after `attachment_skipped`) |
 | `ATTACHMENT_ARTIFACT_DENIED` | `artifact_id` is not the declared one |
 | `ATTACHMENT_ARTIFACT_UNAVAILABLE` | the stored picture is missing |
-| `ATTACHMENT_NOT_HER_OWN` | a picture she did not make, where only her own may go |
-| `ATTACHMENT_SCOPE_DENIED` | outside what that conversation may send |
+| `ATTACHMENT_SCOPE_DENIED` | not that conversation's own picture ([Own files](#own-files)) |
 | `ATTACHMENT_HASH_MISMATCH`, `ATTACHMENT_SHA_MISMATCH` | stored bytes differ from their digest |
 | `ATTACHMENT_OVER_LIMIT` | over 8 MiB |
 | `ATTACHMENT_NOT_AN_IMAGE`, `ATTACHMENT_MEDIA_TYPE_MISMATCH` | not a PNG, JPEG, WebP or GIF, or not the declared type |
@@ -1061,7 +1103,7 @@ does not declare `voice_in` keeps its placeholder.
 
 ### Reading images
 
-`read_image` (both brains) takes a reference, a stored image's `artifact_id`, or a file path where the turn's or the task's origin may use `disk` ([Access](#access); home by default). It is offered only where the brain's route declares image input and `vision.image_hosts` is not empty.
+`read_image` (both brains) takes a reference, a stored image's `artifact_id`, or a file path where the turn's or the task's origin may use `disk` ([Access](#access); home by default). Which references and pictures it reads is the origin's too ([Own files](#own-files)): any conversation's, of any age, where it may use `all_files`; else its own conversation's (references of its last 7 days), and the pictures this turn may send. It is offered only where the brain's route declares image input and `vision.image_hosts` is not empty.
 
 | `vision` setting | Default | Effect |
 |---|---|---|
@@ -1077,8 +1119,8 @@ does not declare `voice_in` keeps its placeholder.
 
 | Code | When |
 |---|---|
-| `IMAGE_NOT_PULLABLE`, `IMAGE_ATTACHMENT_NOT_IN_SCENE` | the reference cannot be read, or is not in this conversation's last 7 days |
-| `IMAGE_ARTIFACT_NOT_READABLE` | an `artifact_id` this turn may not read |
+| `IMAGE_NOT_PULLABLE`, `IMAGE_ATTACHMENT_NOT_IN_SCENE` | the reference cannot be read, or is not in this conversation's last 7 days (where the origin reads every conversation's: in none of them) |
+| `IMAGE_ARTIFACT_NOT_READABLE` | an `artifact_id` this turn may not read, or none: 「这个对话里没有这个文件。」 where it reads only its own conversation's |
 | `ACCESS_DENIED_DISK`, `IMAGE_TASK_DIR_UNAVAILABLE`, `IMAGE_FILE_NAME_DENIED`, `IMAGE_FILE_NOT_AVAILABLE` | a file read refused or missing |
 | `IMAGE_URL_MISSING`, `IMAGE_SOURCE_UNAVAILABLE` | no link or file to read from |
 | `IMAGE_INSECURE_URL_DENIED`, `IMAGE_REDIRECT_HOST_DENIED` | not https, or a redirect to a host not allowed |
@@ -1095,7 +1137,7 @@ A picture leaves as a `speak` picture part, its own message carrying an `attachm
 - Her local Web chat takes pictures too: a part there is delivered to the local sink and drawn on the page.
 
 - Pictures go to a conversation whose route targets a `dm`, or a group, on a kind that is not `TEXT_ONLY` (`outbound_media.target_allowed`).
-- In a group and in anyone's private chat but the owner's, only pictures she made go out (`outbound_media.own_only`): source `integration:` (drawn, imported or rendered), and her edits of pictures that came from that conversation. A sticker on her shelf goes wherever stickers go. Anything else is refused with `ATTACHMENT_NOT_HER_OWN`.
+- Which pictures go where is the access table's ([Own files](#own-files)); one this turn may not send there is refused with `ACCESS_DENIED_SEND`. A sticker on her shelf goes wherever stickers go.
 - A picture is at most 8 MiB; the registered copy of a PNG has its text chunks removed.
 
 ### Sending files
@@ -1103,7 +1145,7 @@ A picture leaves as a `speak` picture part, its own message carrying an `attachm
 A file goes to a group as its own message: speak's `file` part names a file a task registered ([Claim public output](#claim-public-output), [Fetch attachment bytes](#fetch-attachment-bytes)). Code: `src/asuna/outbound_files.py`.
 
 - **Registration.** The action brain's `offer_file` (`path` inside `/task`, `name` the file name people see, default the file's own) stores the file in the task's own scope as a `file` artifact (source `task-file:<task>:<path>`), streamed into the blob store (`BlobStore.put_stream`). The program computes the sha256, the size and the type from the first bytes (`outbound_files.sniff`); an unrecognized type is recorded as `类型没认出来` and still goes. A name containing a word on her private words list is warned about by category and entry line, never the word, and not refused. The row keeps the task folder and path it came from (`source`).
-- **Offer.** A file any of her tasks registered may be sent where the channel declares `file`, as her own pictures go anywhere. `file_artifacts_from_program` lists them, newest first and at most 8, each with `artifact_id`, `name`, a readable `size`, `type` and `registered_at`; it appears in a group whose kind lists `file` in `REPLY_PARTS` and whose adapter declares `file`.
+- **Offer.** A file her tasks registered may be sent where the channel declares `file` and the access table allows it ([Own files](#own-files)): in an outside group, its own files; in a home group, every conversation's where the turn may use `list_files`. `file_artifacts_from_program` lists them, newest first and at most 8, each with `artifact_id`, `name`, a readable `size`, `type` and `registered_at`; it appears in a group whose kind lists `file` in `REPLY_PARTS` and whose adapter declares `file`.
 - **Sending.** The part is refused in words when the file is not listed, its bytes are gone, or its size is over the limit the adapter declared; the program has no size or type limit of its own. Her record line is `[文件：名字，大小]`, with `，类型没认出来` when its type was not recognized.
 - **Bytes kept.** A file's bytes are removed 7 days after it was last delivered, or 7 days after registration if never delivered, and kept while a message on its way names it (`media_life.sweep`, daily). The artifact row stays, with `storage` `removed` and `bytes_removed_at`. A part or claim naming it then says when the bytes expired and whether the task folder still holds the original unchanged.
 
@@ -1111,7 +1153,7 @@ A file goes to a group as its own message: speak's `file` part names a file a ta
 
 A file someone sends her is offered by ref and read only when she asks: `received_file`, one tool for both halves (her turn's scene, or the task's binding). Code: `src/asuna/received_files.py`.
 
-- **Offer.** A file on a platform line gets a note under the line: `（文件 ref：att-…，45.0 KB）`, or why it is not read: no link, a platform that declares no `FILE_HOSTS`, a name the first version does not open (archives, PDF, Office, media, programs: `received_files.NOT_OPENED`), a declared size over 1 MiB, a link off the platform's file hosts. A ref is found among the newest 8 files and pictures of the last 50 messages others sent in each conversation in reach, or among all of those of its last 7 days (there the listing's 8 and 50 do not apply, the cap of 8 items in one message still does), the same fence and window as pictures; at home, in any of her conversations.
+- **Offer.** A file on a platform line gets a note under the line: `（文件 ref：att-…，45.0 KB）`, or why it is not read: no link, a platform that declares no `FILE_HOSTS`, a name the first version does not open (archives, PDF, Office, media, programs: `received_files.NOT_OPENED`), a declared size over 1 MiB, a link off the platform's file hosts. A ref is found among the newest 8 files and pictures of the last 50 messages others sent in each conversation in reach, or among all of those of its last 7 days (there the listing's 8 and 50 do not apply, the cap of 8 items in one message still does), the same fence and window as pictures; where the origin may use `all_files`, in any of her conversations, of any age.
 - **Fetching.** Only on `do=read`, only the item's own `https` link on the hosts its channel kind declares (`FILE_HOSTS`; NapCat: `.ftn.qq.com`), redirects included; at most 1,048,576 bytes counted as they are read, the bytes in memory until judged. A wait of 20 s without data ends a fetch, and after 20 s it ends at the next piece (a host that drips can hold it about 40 s). A fetch is a best attempt: a link the platform no longer serves is said once, in words.
 - **Judging.** A BOM decides the encoding; else a program or other binary is refused and never stored (`名字是 .txt，内容却是Windows 程序`); else strict UTF-8; else GB18030 with at most 1 control character per 1,000; else `编码没认出来`. Every answer carries `marks`: caution always (`这个文件是<sender>发来的…`), and runnable for a script's extension or a text starting with `#!`. The text comes after a fixed line saying it is the sender's material.
 - **Reading.** One page per call: up to 200 lines and 6,000 characters, counted on the decoded text (a line ends at `\r\n`, `\n` or `\r`); `page` goes to any page, `find` gives the count of matches (Latin letters in either case) and the first 5 pages holding one, with the line. `life` says when the bytes go and how the ref is found.

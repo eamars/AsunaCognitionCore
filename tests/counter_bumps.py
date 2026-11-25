@@ -13,6 +13,7 @@ BUMPS = {
     'watches': ({'appeared': 0, 'last_seen_at': None},                                              # watches.seen
                 [Set({'last_seen_at': NOW}), Increase('appeared')], {'appeared': 1, 'last_seen_at': NOW}),
     'notes': ({'seen_in': ['ep-1']}, AddToSet('seen_in', 'ep-2'), {'seen_in': ['ep-1', 'ep-2']}),     # notes
-    'artifacts': ({'last_sent_at': THEN, 'last_read_at': THEN},                                     # mark_sent, mark_read
-                  Set({'last_sent_at': NOW, 'last_read_at': NOW}), {'last_sent_at': NOW, 'last_read_at': NOW}),
+    'artifacts': ({'last_sent_at': THEN, 'last_read_at': THEN, 'shared_scopes': ['scene:a']},       # mark_sent, mark_read,
+                  [Set({'last_sent_at': NOW, 'last_read_at': NOW}), AddToSet('shared_scopes', 'scene:b')],  # share
+                  {'last_sent_at': NOW, 'last_read_at': NOW, 'shared_scopes': ['scene:a', 'scene:b']}),
 }

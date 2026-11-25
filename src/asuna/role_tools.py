@@ -494,7 +494,7 @@ TOOLS = {
         'parameters': {'place': _s('想去哪个群：它的 place', required=True),
                        'intent': _s('去做什么', required=True, enum=['start_topic', 'share_picture', 'check_in', 'write_notes']),
                        'topic': _s(limit=_places.TOPIC_CHARS, description='想聊的话头，可省略'),
-                       'artifact_id': _s('intent=share_picture 时想分享的那张你自己做的图（可省略，到了再挑）')},
+                       'artifact_id': _s('intent=share_picture 时想分享的那张图（可省略，到了再挑）')},
     },
     'errand': {
         'description': ('出门办事：去一个群或一处私聊，说一件你想说的事、办一件你想办的事。place 写去哪儿；'
@@ -503,7 +503,7 @@ TOOLS = {
         'parameters': {'place': _s('去哪儿：那一处的 place', required=True),
                        'request': _s(limit=500, description='想带过去的话或想办的事', required=True),
                        'exactly': {'type': 'boolean', 'description': 'yes：原样转达'},
-                       'artifact_id': _s('想一起带过去的一张你自己做的图（可省略）')},
+                       'artifact_id': _s('想一起带过去的一张图或一个文件（可省略）')},
     },
     'note': {
         'description': ('给别的对话里的你写一张便条：to 写想送到哪儿；text 写你想让那边的你知道的事。那边的你会读到；'
@@ -1264,8 +1264,9 @@ def her_pictures(store, ep):
     from .vision import scene_attachments, vision_capability
     if not vision_capability(store.config, 'character')['supported']:
         return False
-    if (ep.get('manifest') or {}).get('session_class') == visibility.OWNER_PRIVATE:
-        return True                       # at home a ref from any of her conversations is readable (owner 2026-10-11)
+    from . import access, own_files
+    if own_files.reach(store.config, access.origin_of_turn(store, ep)) == 'all':
+        return True                       # a ref from any of her conversations is readable (access all_files)
     if offered_pictures(ep) or ((ep.get('context') or {}).get('your_pictures_from_program') or {}).get('items'):
         return True                       # she can look before she sends, and at her own pictures at home
     from . import stickers
@@ -1350,9 +1351,8 @@ WORDS = {
     'PROMOTE_ONLY_IN_SETTLEMENT': '提升长期记忆只在夜间沉淀时做。',
     'PROMOTION_QUOTA': '今天提升长期记忆的配额用完了。',
     'PROMOTION_SOURCES_INSUFFICIENT': '来源不够：要来自足够多的不同时候和日期。',
-    'ATTACH_TARGET_NOT_ALLOWED': '这里不能带图：私聊和你在的群能带（群和别人的私聊只发你自己做的图）。',
+    'ATTACH_TARGET_NOT_ALLOWED': '这里不能带图：私聊和你在的群能带。',
     'ATTACH_ARTIFACT_NOT_IN_CONTEXT': '只能用你能发的图里列出的 artifact_id。',
-    'ATTACHMENT_NOT_HER_OWN': '群里和别人的私聊里只能发你自己做的图；换一张你做的，或这次不带图。',
     'ATTACHMENT_ARTIFACT_UNAVAILABLE': '这张图还没做好或已经不在了；换你能发的图里别的，或这次不带图。',
     'ATTACHMENT_SCOPE_DENIED': '这张图不是这个对话能用的；换一张，或这次不带图。',
     'ATTACHMENT_NOT_AN_IMAGE': '这不是一张能发的图片；换一张，或这次不带图。',
@@ -1364,7 +1364,6 @@ WORDS = {
     'VISIT_PLACE_UNKNOWN': '这个地方去不了。',
     'VISIT_NOT_NOW': '现在去不了那里。',
     'VISIT_OFF': '出门现在没开。',
-    'VISIT_PICTURE_NOT_HERS': '只能带你自己做的图；到了群里再挑也行。',
     'STICKER_SHELF_FULL': '表情包架子满了：先用 drop 放下一个不想要的，再收。',
     'STICKER_NAME_TAKEN': '架子上已经有这个名字了：换一个名字。',
     'STICKER_NAME_INVALID': '名字不合适。',
@@ -1394,7 +1393,6 @@ WORDS = {
     'ERRAND_PLACE_UNKNOWN': '这个地方去不了。',
     'ERRAND_LIMIT': '替人跑腿的次数用完了。',
     'ERRAND_ONLY_AT_HOME': '只有在家里（家里·私聊、主人私聊这类可信的对话）才能接差事。',
-    'ERRAND_PICTURE_NOT_HERS': '差事只能带你自己做的图。',
     'ERRAND_ONLY_WHEN_ASKED': '差事只在家里有人跟你说话、让你去办的那一次接；自己想去，用 visit。',
     'FEEDBACK_TASK_STALE': '这一步做不了。',
     'WORKSPACE_NOT_AUTHORIZED': '这个对话里不能动手做事。',
@@ -2388,7 +2386,7 @@ class RoleTools:
                     (cancels if taken.get('cancel') else planned).append(taken)
             elif kind == 'picture':
                 try:
-                    meta = self._picture(ep, scene, str(part.get('artifact_id') or ''))
+                    meta = self._picture(ep, scene, str(part.get('artifact_id') or ''), call_id)
                 except Refused as exc:
                     problem('第 %d 条 picture %s' % (index, str(exc)), exc.codes[0])
                 except Denied as exc:
@@ -2401,6 +2399,11 @@ class RoleTools:
                 meta, why = outbound_files.check(self.store, ep, scene, str(part.get('artifact_id') or ''))
                 if why:
                     problem('第 %d 条 file %s' % (index, why))
+                    continue
+                try:
+                    self._may_send(ep, call_id, scene, meta['artifact_id'])
+                except Denied as exc:
+                    problem('第 %d 条 file %s' % (index, words(exc)), code_of(exc))
                 else:
                     planned.append(outbound_files.part(meta))
         wait, quoted = args.get('wait'), None
@@ -2570,25 +2573,40 @@ class RoleTools:
         return {'kind': 'poke', 'text': '戳了戳 %s%s' % (label, ACTION_MARK), 'shown': 'poke %s' % label,
                 'fields': {'action': {'kind': 'poke', 'account': account}}}
 
-    def _picture(self, ep, scene, artifact):
+    def _send_refused(self, ep, scene, row):
+        """The row of the access table that bars this turn from sending a stored row into `scene`, or None
+        (own_files.send_refused: by the turn's origin, its own conversation and the conversation it is for)."""
+        from . import access, own_files, whose as whose_of
+        return own_files.send_refused(self.store, access.origin_of_turn(self.store, ep), row, scene,
+                                      own_files.scopes(self.store.config, self._as_place(ep)),
+                                      (whose_of.of(self.store, ep) or {}).get('scene_id'))
+
+    def _may_send(self, ep, call_id, scene, artifact_id):
+        """Raise the table's send refusal, recorded, when this turn may not send this stored row into `scene`."""
+        from . import access, own_files
+        from .records import artifacts as artifact_records
+        row = artifact_records.get(self.store, artifact_id) if artifact_id else None
+        refused = row and self._send_refused(ep, scene, row)
+        if refused:
+            raise own_files.refuse_send(self.store, {'turn': ep['_id'], 'call': call_id, 'scope': ep['scope_key']},
+                                        access.origin_of_turn(self.store, ep), refused, 'speak')
+
+    def _picture(self, ep, scene, artifact, call_id=None):
         """The attachment of a picture she may send here, or Refused in words."""
         from . import outbound_media
         from .blobs import BlobStore
-        cls = self._place(ep)                  # what may go out is the conversation's (ADR-066: her pictures go anywhere)
+        cls = self._place(ep)
         allowed, reason = outbound_media.target_allowed(self.store.config, scene, cls)
         if not allowed:
             raise Refused('发不了：%s' % ATTACH_REASONS.get(reason, reason), ['ATTACH_TARGET_NOT_ALLOWED'])
-        mine_only = outbound_media.own_only(self.store.config, scene, cls)
-        scopes = [] if mine_only else outbound_media.image_scopes(self.store, self.store.config, scene, cls,
-                                                                  ep.get('person_id'))
-        here, scene_id = (scene or {}).get('scope_key'), (scene or {}).get('_id')
+        scene_id = (scene or {}).get('_id')
         offered = (ep.get('context') or {}).get('image_artifacts_from_program') or {}
         if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
-            outbound_media.refuse_erased_named(self.store, artifact, scopes, produced_only=mine_only, here=here,
+            outbound_media.refuse_erased_named(self.store, artifact, lambda row: not self._send_refused(ep, scene, row),
                                                scene_id=scene_id)
             raise Refused('不在你能发的图里', ['ATTACH_ARTIFACT_NOT_IN_CONTEXT'])
-        return outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact, scopes,
-                                              produced_only=mine_only, here=here, scene_id=scene_id)
+        self._may_send(ep, call_id, scene, artifact)        # what may go here is the access table's (ADR-120)
+        return outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact, scene_id=scene_id)
 
     def tool_task_answer(self, ep, call_id, args):
         answer = self._toward(ep, self._text(args, 'answer', 20000))
@@ -2756,11 +2774,14 @@ class RoleTools:
         from .blobs import BlobStore
         from .vision import read_image_for_task
         from .access import origin_of_turn
-        scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
-        # 按路径读盘看访问表的 disk 一行（这一次的来路）；这一次没有任务目录。
+        # 读到哪些对话、按路径读盘都看访问表（这一次的来路）；这一次自己的对话按它代表的那一处算（便条从外面叫起的，
+        # 是便条来的那一处）；这一次没有任务目录。
+        place = self._as_place(ep)
+        scene = {k: place[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
         result = read_image_for_task(self.store, BlobStore(self.store), scene, self.store.config, args,
                                      route='character', offered=offered_pictures(self._fresh(ep)),
-                                     session_class=self._cls(ep), origin=origin_of_turn(self.store, ep))
+                                     origin=origin_of_turn(self.store, ep),
+                                     by={'turn': ep['_id'], 'call': call_id, 'scope': ep['scope_key']})
         self.checkpoint()
         ref = str((args or {}).get('ref') or '')
         if ref:                                       # what she looked at this turn (a candidate is kept only after)
@@ -2772,9 +2793,12 @@ class RoleTools:
 
     def tool_received_file(self, ep, call_id, args):
         from . import received_files
-        scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
+        from .access import origin_of_turn
+        place = self._as_place(ep)
+        scene = {k: place[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
         return received_files.run(self.store, scene, self.store.config, args, persona=ep['persona'],
-                                  session_class=self._cls(ep), ready=self.checkpoint), False
+                                  origin=origin_of_turn(self.store, ep), ready=self.checkpoint,
+                                  by={'turn': ep['_id'], 'call': call_id, 'scope': ep['scope_key']}), False
 
     def tool_sticker(self, ep, call_id, args):
         from . import stickers

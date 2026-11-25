@@ -21,11 +21,13 @@ PNG = bytes.fromhex('89504e470d0a1a0a0000000d4948445200000001000000010806000000'
                     '1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082')
 
 
-def test_the_default_table_is_the_agreed_one_and_the_page_draws_the_rows_in_effect():
-    assert access.RESOURCES == AGREED and set(access.IN_EFFECT) < set(AGREED)
+def test_the_default_table_is_the_agreed_one_and_the_page_draws_every_row():
+    assert access.RESOURCES == AGREED
     client = (ROOT / 'packages/cognition-core/src/client.js').read_text(encoding='utf-8')
     rows = re.search(r'const ACCESS_ROWS = \[(.*?)\];', client, re.S).group(1)
-    assert re.findall(r"\['(\w+)', '(\w+)'\]", rows) == [(row, AGREED[row]) for row in access.IN_EFFECT]
+    assert re.findall(r"\['(\w+)', '(\w+)'\]", rows) == list(AGREED.items())
+    # Each row has its words in both languages of the page.
+    assert [row for row in AGREED if client.count("'settings.access.row.%s'" % row) != 2] == []
     # A level allows its origin and every origin left of it, so a row is never "outside yes, home no".
     for level, reach in access.REACH.items():
         assert reach == access.ORIGINS[:len(reach)], level
@@ -34,7 +36,6 @@ def test_the_default_table_is_the_agreed_one_and_the_page_draws_the_rows_in_effe
 @pytest.mark.parametrize('setting, words', [({'printer': 'home'}, 'printer'), ({'commands': 'sometimes'}, 'sometimes'),
                                             ({'integrations': 'everywhere'}, 'integrations'),
                                             ({'development': 'home_from_outside'}, 'development'),
-                                            ({'send_any': 'everywhere'}, 'send_any is not in effect yet'),
                                             ('commands: none', 'table')])
 def test_a_bad_setting_is_refused_with_its_name(setting, words):
     with pytest.raises(ValueError) as caught:

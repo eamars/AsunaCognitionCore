@@ -21,8 +21,8 @@ from .adapters import Ensured, Size, Updated
 from .catalog import is_number, kind_of
 from .errors import BlobMissing, DuplicateKey, RecordInvalid, SchemaConflict
 from .words import (AddToSet, And, AnyOf, Contains, Count, Each, Exists, Holds, HoldsAny, HoldsNone, Increase, IsNull,
-                    Larger, Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller, StartsWith, Unset,
-                    Without, record_bytes, to_utc_ms)
+                    Larger, Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Pull, Push, Range, Set, Smaller, StartsWith,
+                    Unset, Without, record_bytes, to_utc_ms)
 
 KIND = 'memory'
 SECRETS = ()
@@ -244,6 +244,11 @@ def apply(doc, change, now, creating=False):
                 if not any(same(value, item) for item in items):
                     items.append(copy.deepcopy(value))
             _put(doc, word.path, items)
+        elif isinstance(word, Pull):
+            present, _value = _at(doc, word.path)
+            if present:
+                _put(doc, word.path, [item for item in _listed(doc, word.path)
+                                      if not any(same(value, item) for value in word.values)])
         elif isinstance(word, Push):
             items = list(_listed(doc, word.path)) + copy.deepcopy(list(word.values))
             if word.keep_last is not None:

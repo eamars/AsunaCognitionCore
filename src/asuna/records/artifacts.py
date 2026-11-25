@@ -15,7 +15,8 @@ Two names are stored in her data as the MongoDB era wrote them and stay (renamin
 whose bytes are in the blob store says `storage` `STORED` ('gridfs'), and names its blob in `BLOB_FIELD`
 ('gridfs_id').
 """
-from ..store.words import AddToSet, AnyOf, Exists, Holds, NonEmpty, Not, Range, Set, Unset
+from ..store.words import (AddToSet, And, AnyOf, Exists, Holds, HoldsAny, NonEmpty, NoneOf, Not, Or, Pull, Range,
+                           Set, Unset)
 from .view import ANY, View, fenced, is_number, is_text, pinned, redact, texts
 
 COLLECTION = 'artifacts'
@@ -119,6 +120,17 @@ def of_kind(store, kind, *, state=ANY, storage=ANY, scope=ANY, scopes=ANY, sourc
                  by)
 
 
+def own(store, kind, scopes, *, state=ANY, storage=ANY, by=()):
+    """View: the rows of a kind that are these conversations' own (their `scope_key` one of `scopes`, or `scopes` in
+    their `shared_scopes`), in this state and storage, ordered by `by`."""
+    scopes = texts(scopes) if isinstance(scopes, (list, tuple, set)) else []
+    where = pinned({}, _pins(kind, state, storage))
+    if where is None or not scopes:
+        return _view(store, None)
+    mine = Or({'scope_key': AnyOf(scopes)}, {'shared_scopes': HoldsAny(scopes)})
+    return _view(store, And(where, mine) if where else mine, by)
+
+
 def of_scene(store, kind, scene_id, *, by='received_at'):
     """View: the rows of a kind held for a conversation (notices, passed lines), by when they came."""
     return _view(store, _where({}, fences=_fences(scene=scene_id), pins=_pins(kind=kind)), by)
@@ -165,9 +177,10 @@ def count_tool(store, tool, state):
 
 # Writes.
 
-# A stored file's touches (its last send, its last read), written outside a revision by `mark_sent` and `mark_read`:
-# every revisioned write and every replace keeps them (state.COUNTER_FIELDS).
-TOUCHED = ('last_sent_at', 'last_read_at')
+# A stored file's touches (its last send, its last read, the conversations it was shared into), written outside a
+# revision by `mark_sent`, `mark_read` and `share`: every revisioned write and every replace keeps them
+# (state.COUNTER_FIELDS).
+TOUCHED = ('last_sent_at', 'last_read_at', 'shared_scopes')
 COUNTERS_KEPT = ('ARTIFACT_COUNTERS_KEPT: 一份记录的 last_sent_at、last_read_at 不能从头写（reset_counters）：那会挪动'
                  '它的到期和配额里的先后；不写 reset_counters 再存')
 
@@ -243,6 +256,23 @@ def erase_scope(store, scope, moment, deletion):
     return store.collection(COLLECTION).update(
         {'scope_key': scope, 'storage': AnyOf([STORED, REMOVED])},
         [Set({'storage': ERASED, 'erased_at': moment, 'deletion_id': deletion}), Unset(BLOB_FIELD)], many=True)
+
+
+def share(store, artifact_id, scope, *, besides=()):
+    """A stored row becomes one of `scope`'s own as well (`shared_scopes`, one set-add): unless its own scope is `scope`
+    or one of `besides`. Whether it changed."""
+    if not is_text(artifact_id) or not is_text(scope):
+        return False
+    return bool(_set(store, artifact_id, AddToSet('shared_scopes', scope),
+                     {'scope_key': NoneOf([scope, *texts(besides)])}).changed)
+
+
+def unshare_scope(store, scope):
+    """An erased conversation is no other row's any more: `scope` leaves every row's `shared_scopes` (ADR-105)."""
+    if not is_text(scope):
+        return None
+    return store.collection(COLLECTION).update({'shared_scopes': Holds(scope)}, Pull('shared_scopes', scope),
+                                               many=True)
 
 
 def set_days_from(store, artifact_id, moment, *, source=None):

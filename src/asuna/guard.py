@@ -405,8 +405,9 @@ def review_window(store, wanted, moment=None):
 
 
 def review(store, persona, since, before):
-    """What was refused in her outside turns and outside tasks between two stored times, newest first, at most
-    REVIEW_MOST: when, where, what she tried, which kind of "no" and why, in words (REVIEW_WORDS); and how many more."""
+    """What was refused in her outside turns and outside tasks, and what the access table refused anywhere, between two
+    stored times, newest first, at most REVIEW_MOST: when, where, what she tried, which kind of "no" and why, in words
+    (REVIEW_WORDS; for the table, the row and the column, access.mark); and how many more."""
     from . import audit
     from .config import excerpt
     from .people import People
@@ -417,12 +418,16 @@ def review(store, persona, since, before):
             if (row.get('payload') or {}).get('sentence') is True or (row.get('payload') or {}).get('outside') is True]
     rows += [row for row in audit.events(store, 'classifier.verdict', since=since, before=before).rows()
              if (row.get('payload') or {}).get('verdict') == 'flagged']
+    rows += audit.events(store, 'access.denied', since=since, before=before).rows()
     rows.sort(key=lambda row: row.get('occurred_at') or '', reverse=True)
     people = People(store, persona)
     items = []
     for row in rows[:REVIEW_MOST]:
         if row.get('type') == 'classifier.verdict':
             items.append(_judged(store, people, row))
+            continue
+        if row.get('type') == 'access.denied':
+            items.append(_barred(store, people, row))
             continue
         said = row['payload']
         task = task_records.get(store, said['task']) if said.get('outside') is True and said.get('task') else None
@@ -442,6 +447,29 @@ def review(store, persona, since, before):
                       'tried': tried, 'kind': REVIEW_KIND,
                       **({'why': REVIEW_WORDS[said['code']]} if REVIEW_WORDS.get(said.get('code')) else {})})
     return {'items': items, **({'more': len(rows) - REVIEW_MOST} if len(rows) > REVIEW_MOST else {})}
+
+
+def _barred(store, people, row):
+    """One refusal by the access table, as her review shows it: when, where, what she tried, and the row and the
+    column it was refused in, in her words (access.mark: 这里不许：盘上的路径（外面托、家里办）). Never whose a refused
+    file is."""
+    from . import access
+    from .config import excerpt
+    from .records import episodes as episode_records
+    from .records import scenes as scene_records
+    from .records import tasks as task_records
+    said = row.get('payload') or {}
+    if said.get('task'):
+        task = task_records.get(store, said['task']) or {}
+        scene_id = task.get('scene_id')
+        tried = {'tool': said.get('tool'), 'task_id': said['task'], 'task': task.get('title') or '',
+                 'brief': excerpt(task.get('brief') or task.get('goal') or '', TRIED_CHARS)}
+    else:
+        ep = episode_records.get(store, row['stream_id'], fields=['scene_id'])
+        scene_id, tried = (ep or {}).get('scene_id'), _tried(store, row['stream_id'], said)
+    return {'at': row.get('occurred_at'),
+            'where': people.scene_title(scene_records.get(store, scene_id)) if scene_id else '',
+            'tried': tried, 'kind': access.mark(said)}
 
 
 def _judged(store, people, row):

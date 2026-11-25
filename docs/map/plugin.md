@@ -327,6 +327,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `exposed` — The tools a stage lists: her conversation's (role_tools.toolbox; the worker refuses one the turn may not use) or the action task's grant.
   - `outside` — Whether a call in this session is an outside conversation's or an outside task's (ADR-135 D8).
   - `door` — The guard's door in the plugin (ADR-135 D8), around every call of her lane and the action lane: a call the step does not offer, in an outside conversation or task, is asked of the worker, which decides and records it; a denial the worker re
+  - `barred` — A refusal by the access table that the plugin made where it runs (a tool the task was not given for its origin, a local address its fetch reached): recorded by the worker for her review (access.record), never waited on and never a failure o
   - `deny` — A denial the worker returned for a call whose body ran: kept for the door, which returns it as it is.
   - `attachPreset`
   - `admit` — A role turn's claimed input, admitted once per step: the worker answers with the stage (its persona and its tools).

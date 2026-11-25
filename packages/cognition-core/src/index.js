@@ -1417,7 +1417,22 @@ export class CognitionCore {
         operation: state.current?.token, tool: exec.name, rule: 'address' }));
       return notDone(reply?.sentence ?? NOT_DONE);
     }
+    if (lane === 'executor' && state.outside !== true && state.networkRefused && result?.isError
+        && (result.content ?? []).some(block => block.type === 'text' && block.text.includes(state.networkRefused))) {
+      this.barred(sessionId, exec.name, 'local_network');      // the table's local_network row, in the binding's words
+    }
     return result;
+  }
+
+  /** A refusal by the access table that the plugin made where it runs (a tool the task was not given for its origin,
+   *  a local address its fetch reached): recorded by the worker for her review (access.record), never waited on and
+   *  never a failure of the call it is about. */
+  barred(sessionId, tool, rule) {
+    const state = this.state(sessionId);
+    try {
+      Promise.resolve(this.worker.call('guard.task', { session_id: sessionId, operation: state.current?.token, tool, rule }))
+        .catch(() => {});
+    } catch { /* recording never fails the call */ }
   }
 
   /** A denial the worker returned for a call whose body ran: kept for the door, which returns it as it is. */
@@ -1445,9 +1460,11 @@ export class CognitionCore {
       // this tool (ADR-053), so both layers say the same.
       if (this.outside(lane, exec.agent.session.id)) return undefined;
       const usable = [...exposed].join('、') || '（没有）';
-      return lane === 'character' ? `这个对话里没有 ${exec.name} 这个工具；有的是：${usable}。用其中一个，或者不用工具接着说。`
-        : this.state(exec.agent.session.id).refusals?.[exec.name]
-          ?? `CAPABILITY_DENIED: 这个任务没有 ${exec.name}：这件任务交的时候没给它。不是参数的问题，重试也一样：要用它就在报告里写明，回到对话时在给它的地方另交一件。`;
+      if (lane === 'character') return `这个对话里没有 ${exec.name} 这个工具；有的是：${usable}。用其中一个，或者不用工具接着说。`;
+      const refusal = this.state(exec.agent.session.id).refusals?.[exec.name];
+      if (refusal?.startsWith('ACCESS_DENIED_')) this.barred(exec.agent.session.id, exec.name, 'table');
+      return refusal
+        ?? `CAPABILITY_DENIED: 这个任务没有 ${exec.name}：这件任务交的时候没给它。不是参数的问题，重试也一样：要用它就在报告里写明，回到对话时在给它的地方另交一件。`;
     });
     scope.on('tools/pre-execute', async (exec, next) => {
       exec.signal.throwIfAborted();

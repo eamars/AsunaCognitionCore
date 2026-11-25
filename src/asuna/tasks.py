@@ -906,6 +906,7 @@ class ToolBroker:
             origin=access.origin_of_task(self.store,current)
             row=barred(self.store.config,origin,tool,args)
             if row:
+                access.record(self.store,{'task':task['_id'],'scope':task.get('scope_key')},origin,row,tool)
                 raise Denied(access.refusal(origin,row))
             if tool not in current['allowed_capabilities'] or (tool in DEVELOPMENT_NAMES and not current.get('development_grant')):
                 raise Denied(capability_refusal(self.store,current,tool))
@@ -992,20 +993,17 @@ class ToolBroker:
             elif tool==READ_IMAGE_TOOL_NAME:
                 # Pull 模式看图：场景仍由任务绑定，参数换不了范围；拉取期间不持副作用锁，
                 # 取消与租约续期不被这次网络等待挡住。字节只上本机回路一次。
-                # 按路径读盘上的图看访问表的 disk 一行（按这个任务的来路），/task/ 指向这个任务自己的工作区。
+                # 读到哪些对话、按路径读盘上的图都看访问表（按这个任务的来路），/task/ 指向这个任务自己的工作区。
                 if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
-                scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
-                result=self.vision.read_image(task,args,session_class=visibility.session_class(self.service.store.config,self.service.store,scene_row,task['requester_id']),task_dir=sandbox.task_dir,origin=origin)
+                result=self.vision.read_image(task,args,task_dir=sandbox.task_dir,origin=origin)
                 with self.service.lock:self.service.valid(task)
             elif tool==RECEIVED_FILE_TOOL_NAME:
                 # A file someone sent (ADR-102): the scene is the task's binding, as for read_image; the fetch waits
                 # without the effects lock.
                 from . import received_files
-                scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
                 result=received_files.run(self.service.store,task,self.service.store.config,args,
-                                          persona=self.service.store.config['chat']['persona'],
-                                          session_class=visibility.session_class(self.service.store.config,self.service.store,scene_row,task['requester_id']),
-                                          task_dir=sandbox.task_dir)
+                                          persona=self.service.store.config['chat']['persona'],origin=origin,
+                                          task_dir=sandbox.task_dir,by={'task':task['_id'],'scope':task.get('scope_key')})
                 with self.service.lock:self.service.valid(task)
             elif tool=='generate_image':
                 # 本机生图：任何任务都可以画，但只走 image 端点的固定流程；等待期间不持副作用锁。
@@ -1013,11 +1011,9 @@ class ToolBroker:
                 if not getattr(self,'integration',None):raise Denied('IMAGE_SERVICE_UNAVAILABLE: 本机生图服务这会儿没接上（集成运行器没启动）；'+UNAVAILABLE)
                 from .image_generation import generate
                 def source(ref):
-                    # The picture to edit: only one this task may look at (read_image's fence, this task's class).
+                    # The picture to edit: only one this task may look at (read_image's fence, this task's origin).
                     if not getattr(self,'vision',None):raise ValueError('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
-                    scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
-                    picture=self.vision.picture_to_edit(task,ref,task_dir=sandbox.task_dir,origin=origin,
-                        session_class=visibility.session_class(self.service.store.config,self.service.store,scene_row,task['requester_id']))
+                    picture=self.vision.picture_to_edit(task,ref,task_dir=sandbox.task_dir,origin=origin)
                     # Her own drawing edited stays hers; anyone else's goes back where it came from.
                     return {'data':picture['data'],'register':None if picture['own'] else
                             outbound_media.edit_register(self.store,task,picture['back_to'])}

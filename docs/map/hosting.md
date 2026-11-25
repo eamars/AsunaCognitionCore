@@ -448,6 +448,7 @@ The words the core describes records with: conditions, changes, sorts and totals
 - class `Larger` — Keeps the larger of the stored value and `value`; a missing field takes the value.
 - class `Smaller` — Keeps the smaller of the stored value and `value`; a missing field takes the value.
 - class `AddToSet` — Adds each value the list does not hold yet; a missing field becomes the list.
+- class `Pull` — Removes every element equal to one of the values; a missing field stays missing.
 - class `Push` — Appends the values, then keeps the last `keep_last` elements.
 - class `OnCreate` — Sets each path only when the write creates the record.
 - class `Without` — Every field of a record but these paths (`_id` always comes back): a read's `fields` that leaves out a large one no caller of that read uses.
@@ -673,6 +674,7 @@ The owner of `messages`: the lines of every conversation (what people wrote, her
 - def `mentions` — View: a conversation's lines that @-mention accounts, received since a time.
 - def `authors` — Values: who wrote in one conversation or several (in a direction; archived lines not deleted; among these authors or under this historical name).
 - def `spoken` — View: her lines (delivered, or every one of her speech when `delivered` is False and `speech`), in one conversation or all of them but `not_in`, by this author, with a receipt (since a time).
+- def `carrying` — View: her lines that carry a stored picture or file (`attachment`, `file`), in no order.
 - def `outgoing` — View: her lines in a conversation in these delivery states.
 - def `turn_parts` — View: the lines one turn produced: its speech (`speech`), outbound only, delivered or in a delivery state (`state`, one of `states`, none of `not_states`), its reply parts, the parts after or before a segment.
 - def `unsettled` — Count: her lines still queued for a channel or being sent.
@@ -844,6 +846,7 @@ The owner of `artifacts`: the rows of what she and the program keep apart from t
 - def `of_task` — View: the rows of a task's revision (its tool records) in this state or one of these.
 - def `of_tasks` — View: the rows of these tasks.
 - def `of_kind` — View: the rows of a kind (in this state and storage; in this scope or one of these; listing this source), ordered by `by`.
+- def `own` — View: the rows of a kind that are these conversations' own (their `scope_key` one of `scopes`, or `scopes` in their `shared_scopes`), in this state and storage, ordered by `by`.
 - def `of_scene` — View: the rows of a kind held for a conversation (notices, passed lines), by when they came.
 - def `admission` — View: a channel's rows of a kind in a state (claimed at or after `claimed_since`, an ISO time), ordered by `by`: the outbox's group actions, the one in flight and the next queued.
 - def `kept` — View: the kept rows of a kind (`stored`: whose bytes are in the blob store; in this state; of this ref; in one of these scopes).
@@ -861,6 +864,8 @@ The owner of `artifacts`: the rows of what she and the program keep apart from t
 - def `restore_bytes` — Bytes fetched again are back on a row whose bytes expired, if it is still `REMOVED`; whether it was.
 - def `bytes_removed` — A row's bytes went (expired): `storage` `REMOVED` with when, its blob no longer named.
 - def `erase_scope` — Every row of a scope whose bytes are stored or expired, marked `ERASED` by this erasure (ADR-105).
+- def `share` — A stored row becomes one of `scope`'s own as well (`shared_scopes`, one set-add): unless its own scope is `scope` or one of `besides`.
+- def `unshare_scope` — An erased conversation is no other row's any more: `scope` leaves every row's `shared_scopes` (ADR-105).
 - def `set_days_from` — A stored file's days start again from `moment` (and it lists `source` too).
 - def `set_fields` — Set these fields of a row (a kept file's `kept_at` and `kept_why`).
 - def `keep_why`

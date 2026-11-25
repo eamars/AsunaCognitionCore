@@ -49,6 +49,11 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
   - `give_up_handback` — Nothing more is tried: the result stays stored, she sees it could not be handed over, the developer is told.
   - `close_orphan` — A run whose lease expired while no one runs it (ADR-030 D2): closed as not finished, handed back as such.
 - def `capability_refusal` — The one sentence for a tool this task was not given: who gets it, where this task came from, retrying won't help.
+- def `needs` — The rows of the access table a call of this action tool needs.
+- def `network_of` — Where a task of this origin may fetch: 'any' (the owner's own network too), 'public', or None (nowhere).
+- def `barred` — The row of the access table that bars this call for a task of this origin, or None.
+- def `granted` — The tools this task may use now: those given when it was made that the table still allows its origin.
+- def `refusal` — The sentence for an action tool this task may not use: the table's where it bars the task's origin, else who is given the tool (capability_refusal).
 - def `lease_until`
 - def `given_text`
 - class `ToolBroker` — Trusted host process; no DB/publication credentials enter model or child tools.
@@ -63,6 +68,25 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
   - `run`
   - `pending_messages`
   - `delivered`
+
+## `access`
+
+[src/asuna/access.py](../../src/asuna/access.py)
+
+Who may use what: the access table. Three origins of work, the resources a tool needs, and one level per resource.
+
+- def `levels_of` — The levels this resource takes.
+- def `check` — Refuse a setting `access` that names an unknown resource, an unknown level, or a level its row does not take.
+- def `table` — Every resource with its level: the defaults with the owner's rows over them.
+- def `allowed` — Whether work of this origin may use this resource.
+- def `wider` — The resources set wider than their default, with their levels.
+- def `narrowest` — The narrowest of these origins.
+- def `words` — Her words for a refusal by the table of this resource to work of this origin.
+- def `refusal` — A refusal by the table, as a tool error: its code (ACCESS_DENIED_<RESOURCE>) and her words.
+- def `require` — Raise the table's refusal when work of this origin may not use this resource.
+- def `origin_of_turn` — A turn's origin: home when it acts with home's authority, else outside.
+- def `origin_of_new_task` — The origin of a task this turn makes for `whose`: outside when the turn is outside, home from outside for work for someone outside, else home; never wider than `earlier` (the task it continues) or the task the turn is about.
+- def `origin_of_task` — A task's origin: as stored, else (a task made before origins were stored) by the same rule from its rows.
 
 ## `action_tiers`
 
@@ -273,7 +297,7 @@ Her credentials (owner 2026-10-07): secrets a home task may use without any brai
 - def `drop` — Remove a credential; `ready` as in `keep`.
 - def `environment` — The variables of these credentials, for one sandboxed command.
 - def `scrub` — The same value with every stored credential value replaced by HIDDEN (strings, lists and dicts).
-- def `home_task` — Whether this task came from home (credentials are for home tasks only).
+- def `home_task` — Whether this task may use credentials: the access table's row `credentials` for the task's origin (access.py).
 
 ## `dbread`
 

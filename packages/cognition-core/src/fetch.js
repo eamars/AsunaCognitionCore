@@ -7,9 +7,10 @@
  * A Cloudflare human-verification page (HTTP 403 or 503 that loads Cloudflare's challenge platform) is said plainly
  * as an error: another route will not get past it. No other site or wording is recognised.
  *
- * Where a fetch may go (ADR-116): it reaches what `sandbox_run` reaches. A call made for an action task of the owner's
- * own conversations runs in the scope `any` (index.js sets it per tool call from the task's binding) and reaches
- * every address, the LAN and this machine included, through DSH's own provider, which checks none; every other call, and one outside
+ * Where a fetch may go (ADR-116): a call made for an action task whose origin the access table allows the owner's own
+ * network (the worker's access.py, home by default) runs in the scope `any` (index.js sets it per tool call from the
+ * task's binding) and reaches every address, the LAN and this machine included, through DSH's own provider, which
+ * checks none; every other call, and one outside
  * any scope, goes through the public-only provider in vendor/web-fetch-http-rc2.js: DSH's own check as DSH 0.2.1-rc.2
  * ships it, kept by Asuna since later DSH drops it (ADR-116 §7). Pinning and the same-origin redirect rule hold in
  * both. */
@@ -23,13 +24,18 @@ export const FETCH_PROVIDER_ID = 'asuna-fetch';
 export const FETCH_LIMITS = { maxResponseBytes: 5_000_000, maxBodyChars: 5_000_000, timeoutMs: 30_000, maxRedirects: 5,
   userAgent: DEFAULT_USER_AGENT };
 const NOT_CONTENT = 'script, style, svg, template';
-/** The network of the action task this call is made for: 'any' or 'public' (none: public). */
+/** The network of the action task this call is made for: { scope: 'any' or 'public', refused: words } (none: public). */
 const NETWORK = new AsyncLocalStorage();
-/** What a public-only task is told when its address is on the local network or this machine, after DSH's line. */
+/** What a public-only task is told when its address is on the local network or this machine, after DSH's line, unless
+ * its binding gives its own words (the access table's, for a task that is not an outside one). */
 export const LAN_REFUSED = '这个地址在局域网或本机上；这件任务不是在主人自己的对话里交的，只能上公网。';
 
-/** Run `fn` as a call of a task whose recorded network is `network`; anything but 'any' is public. */
-export function withNetwork(network, fn) { return NETWORK.run(network === 'any' ? 'any' : 'public', fn); }
+/** Run `fn` as a call of a task whose network is `network` (anything but 'any' is public); `refused`: the words a
+ * local address is refused with, LAN_REFUSED when none are given. */
+export function withNetwork(network, fn, refused) {
+  return NETWORK.run({ scope: network === 'any' ? 'any' : 'public',
+    refused: typeof refused === 'string' && refused ? refused : LAN_REFUSED }, fn);
+}
 
 const CHALLENGE_PLATFORM = '/cdn-cgi/challenge-platform/';
 
@@ -58,13 +64,14 @@ export class SlimFetch {
   available() { return this.inner.available(); }
 
   async fetch(request, signal) {
-    const any = NETWORK.getStore() === 'any';
+    const scope = NETWORK.getStore();
+    const any = scope?.scope === 'any';
     let result;
     try {
       result = await (any ? this.open : this.inner).fetch(request, signal);
     } catch (error) {
       if (!any && error?.code === 'WEB_BLOCKED_URL' && /non-public/.test(String(error.message)))
-        throw new WebError(`${error.message} ${LAN_REFUSED}`, 'WEB_BLOCKED_URL', { cause: error });
+        throw new WebError(`${error.message} ${scope?.refused ?? LAN_REFUSED}`, 'WEB_BLOCKED_URL', { cause: error });
       throw error;
     }
     if (result.body?.kind !== 'html') return result;

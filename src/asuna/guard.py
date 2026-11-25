@@ -73,9 +73,9 @@ def outside(store, ep):
 
 
 def task_outside(store, task):
-    """Whether a task is an outside one: given in a conversation that is not one of the owner's own."""
-    from . import credentials
-    return not credentials.home_task(store, task)
+    """Whether a task is an outside one: its origin is outside (access.py)."""
+    from . import access
+    return access.origin_of_task(store, task) == 'outside'
 
 
 # ── her calls ──
@@ -185,10 +185,6 @@ def _block_no_speaker(store, ep, name, args):
             and turn_kind(ep) != 'external')
 
 
-def _image_path(store, ep, name, args):
-    return name == 'read_image' and bool(args.get('path')) and authority(store, ep) != visibility.OWNER_PRIVATE
-
-
 def _review_away(store, ep, name, args):
     return name == 'recall' and args.get('refusals') not in (None, '') and outside(store, ep)
 
@@ -295,7 +291,6 @@ RULES = (
     ('CONDENSE_REFUSED', 'not_now', _condense_not_now),
     ('BLOCK_HOME', 'not_listed', _block_owner),
     ('BLOCK_NO_SPEAKER', 'not_now', _block_no_speaker),
-    ('IMAGE_PATH_HOME_ONLY', 'not_listed', _image_path),
     ('TASK_NOT_YOURS', 'not_granted', _others_task),
     ('HOME_REACH_ONLY', 'not_listed', _home_reach_away),
     ('FOR_OWNER', 'for_owner', _for_owner),
@@ -307,8 +302,8 @@ RULES = (
 # ── a task's calls ──
 def check_task(store, task, tool, args):
     """(code, rule) when a task's call reaches outside its grant, else None: a tool it was not given, an integration
-    tool without its profile, a credential outside a home task. The doing side's local address is decided where the
-    fetch runs (fetch.js) and recorded here with `deny_task`."""
+    tool without its profile, a credential where the access table does not allow it. The doing side's local address
+    is decided where the fetch runs (fetch.js) and recorded here with `deny_task`."""
     from .development import DEVELOPMENT_NAMES
     from .integration import INTEGRATION_TOOL_BY_PROFILE
     from .integration_import import integration_gated
@@ -317,7 +312,8 @@ def check_task(store, task, tool, args):
         return 'not_granted', 'tool'
     if integration_gated(tool) and tool not in (INTEGRATION_TOOL_BY_PROFILE.get(task.get('integration_profile')) or ()):
         return 'not_granted', 'integration'
-    if tool == 'sandbox_run' and (args or {}).get('credentials') and task_outside(store, task):
+    from . import credentials
+    if tool == 'sandbox_run' and (args or {}).get('credentials') and not credentials.home_task(store, task):
         return 'not_granted', 'credential'
     return None
 

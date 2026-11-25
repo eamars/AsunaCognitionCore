@@ -56,6 +56,8 @@ export class AsunaApi extends TypertRemoteService {
       actionHigh: core.tierStatus(),
       // ADR-098: the root table (its size, or why there is none) and her rewritten requests since this start.
       roots: (({ by_session: _, ...totals }) => totals)(core.roots.status()),
+      // The resources the running worker's access table sets wider than their default (resource: level).
+      access: { wider: core.accessWider ?? {} },
       publications: Object.values((await core.ctx.asunaFloor.selected()).projects).map(p => ({
         project: p.project, state: p.state, candidate: p.candidate, changed_files: p.changed_files,
         activated_at: p.activated_at, published_at: p.published_at,

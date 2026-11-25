@@ -424,11 +424,11 @@ The guardrail (ADR-135 D8): whether a call is allowed, decided from stored facts
 - def `opened_from_outside` — The note from outside that opened this home turn ({} when it is gone), or None (RoleTools._outside).
 - def `from_outside` — The one test of a home turn opened from outside: `first`, the note that opened it ({} when it is gone), when that note came from outside; else None.
 - def `outside` — Whether her turn is an outside one: its conversation is outside, or a note from outside opened it at home.
-- def `task_outside` — Whether a task is an outside one: given in a conversation that is not one of the owner's own.
+- def `task_outside` — Whether a task is an outside one: its origin is outside (access.py).
 - def `check` — (code, rule) when this call of hers is not allowed here and now, else None.
 - def `asker` — Whose ask a call of hers carries, as a person id, or None when it carries nobody's (a turn nobody opened, her own): the person a delegate's or a note's `for` names (whose.named_person, as the handler resolves it), else the turn's `whose`.
 - def `asked_at` — When the ask was made: the stored time of the line that opened the turn, else now.
-- def `check_task` — (code, rule) when a task's call reaches outside its grant, else None: a tool it was not given, an integration tool without its profile, a credential outside a home task.
+- def `check_task` — (code, rule) when a task's call reaches outside its grant, else None: a tool it was not given, an integration tool without its profile, a credential where the access table does not allow it.
 - def `record` — One audit event for her call that was not allowed: the reason, for us; `sentence`: whether she got the plain sentence (an outside turn) or the program's own refusal (home).
 - def `guard_task` — The doing side's door (ToolBroker.call): a call that reaches outside the task's grant is recorded, and in an outside task refused with the plain sentence (TaskGuarded); in a home task the broker's own refusal follows.
 - def `deny_task` — One audit event for a task's call that was not allowed; the sentence in an outside task, else None (the program's own refusal stands).

@@ -5,7 +5,7 @@ The interfaces of the Asuna runtime: what a channel adapter, a persona or channe
 ## Contents
 
 - [Process layout](#process-layout)
-- [Configuration](#configuration): [plugin settings](#plugin-settings), [model routes](#model-routes), [secrets](#secrets), [deployment settings](#deployment-settings)
+- [Configuration](#configuration): [plugin settings](#plugin-settings), [model routes](#model-routes), [secrets](#secrets), [deployment settings](#deployment-settings), [access](#access)
 - [Channel API](#channel-api): [server and endpoints](#server-and-endpoints), [channels and routes](#channels-and-routes), [admission](#admission), [ask what the core admits](#ask-what-the-core-admits), [the routes the core serves](#the-routes-the-core-serves), [post a departure](#post-a-departure), [route keys](#route-keys), [receive an event](#receive-an-event), [platform notices](#platform-notices), [post a notice for her home](#post-a-notice-for-her-home), [claim public output](#claim-public-output), [fetch attachment bytes](#fetch-attachment-bytes), [record a platform receipt](#record-a-platform-receipt), [post a group's member list](#post-a-groups-member-list), [post the current media-link keys](#post-the-current-media-link-keys), [post her own mute in a group](#post-her-own-mute-in-a-group), [post a voice](#post-a-voice), [HTTP outcomes](#http-outcomes)
 - [Persona packages](#persona-packages): [persona model](#persona-model), [what she carries](#what-she-carries)
 - [Channel packages](#channel-packages): [kind module](#kind-module)
@@ -132,8 +132,70 @@ Checked when the worker starts or a proposal is validated (`src/asuna/native_set
 | `vision` | — | image fetching ([Media and images](#media-and-images)) |
 | `search` | — | the web search order ([Action capabilities](#action-capabilities)) |
 | `integration` | off | the managed integration ([Integration and self-development](#integration-and-self-development)) |
+| `access` | the default table | who may use what, one `resource: level` per row that differs from the default ([Access](#access)) |
 
 A route of a channel that names no workspace gets `<data>/channels/<channel>-<route>` (a group member's: `/<sender>` below it).
+
+### Access
+
+Who may use what, decided in one place (`src/asuna/access.py`). Every task and every one of her turns has one origin:
+
+| Origin | Which work |
+|---|---|
+| `home` | a turn that acts with home's authority (an owner-private conversation: her local chat, the owner's own chat, a home group, an agent's line; an errand turn) and the tasks it hands over |
+| `home_from_outside` | a task she hands over in a home turn for someone outside (`whose.by` `outside`) |
+| `outside` | a turn in an outside conversation, a home turn a note from outside opened, and the tasks they hand over |
+
+A turn's origin is the class it acts with (`guard.authority`). A task's is written on it when it is handed over
+(`origin`) and never widens: a continuation, and a task handed over in a turn about another task, take the narrower of
+their own and that task's. A task without `origin` gets one by the same rule from its stored rows when it is read
+(`access.origin_of_task`).
+
+Each resource has a level, the origins it allows from home outwards: `home` (home only), `home_from_outside` (home and
+home from outside), `everywhere`, or `none`. The default table:
+
+| Resource | Covers | Default |
+|---|---|---|
+| `own_files` | this conversation's files: read, save into them, list | `everywhere` |
+| `all_files` | every conversation's files by id | `home_from_outside` |
+| `list_files` | list or search other conversations' files | `home_from_outside` |
+| `disk` | a disk path to `read_image`, for both brains | `home` |
+| `commands` | `sandbox_run` | `home` |
+| `credentials` | `credentials` on `sandbox_run` | `home` |
+| `local_network` | `web_fetch` to every address, this machine and the local network included (network `any`) | `home` |
+| `internet` | `web_fetch` and `web_search` on the public internet (network `public`) | `everywhere` |
+| `integrations` | the integration tools, by the profile the turn earns ([Integration profile](#integration-profile)); takes `home` or `none` | `home` |
+| `development` | the development and persona-job tools, with the development grant ([Self-development](#self-development)); takes `home` or `none` | `home` |
+| `drawing` | `generate_image`, `render_svg`, `private_words` (the action brain's) | `everywhere` |
+| `send_any` | send any stored file or picture to any conversation she may speak in | `home` |
+| `send_to_asker` | send any stored file or picture to the conversation the work is for | `home_from_outside` |
+| `send_own` | send this conversation's own files there | `everywhere` |
+
+The program applies the rows `disk`, `commands`, `credentials`, `local_network`, `internet`, `integrations`,
+`development` and `drawing`. The file and send rows (`own_files`, `all_files`, `list_files`, `send_any`,
+`send_to_asker`, `send_own`) are part of the table and the setting; reading, listing and sending stored files follow
+the rules in [Media and images](#media-and-images).
+
+- **The setting** `deployment.access` names only the rows that differ from the default (`commands: none`). The owner
+  sets it on the settings page (the section 「访问权限」 / "Access", drawn as the table: a tick box per resource and
+  origin) or in the profile's settings file. An unknown resource or level, or a level its row does not take, is
+  refused when the page saves and stops the worker at start: `INVALID_ACCESS: <the name>`
+  (`src/asuna/native_settings.py` `runtime_settings`).
+- **When it applies.** The worker reads the table when it starts; a change applies from the next start (the page's
+  apply), to every grant and every call, a task already running included: `Coordinator._grants` gives a task only the
+  tools its origin may use, the broker refuses a call when the table no longer allows what it needs (`ToolBroker.call`,
+  `tasks.py` `needs`, `barred`), and an action session's binding carries the tools and the network the table allows now
+  (`tasks.py` `granted`, `network_of`).
+- **The network.** A task's network is `any` where its origin may use `local_network`, else `public` where it may use
+  `internet`; with neither, `web_fetch` and `web_search` are not given.
+- **The start report.** Each resource set wider than its default is named once per start in the Host log
+  (`Asuna: access set wider than its default: …`) and on the settings page.
+- **Refusals** (`access.refusal`): `ACCESS_DENIED_<RESOURCE>: ` and one sentence. Work from outside done at home,
+  refused `commands`, `credentials`, `local_network` or `disk`:
+  「这件是外面的人托的事：跑命令、用钥匙、连家里的网、读盘上的路径，都不在这件事里；这一步换个做法，文件照样能读、能用。」
+  (for `local_network` it ends the fetch's `WEB_BLOCKED_URL`); an outside turn or task refused `disk`:
+  「盘上的路径只在家里能读。」; any other refusal by the table: 「这一步这里用不了。」. In an outside task, a tool it
+  was not given is still the guard's plain sentence.
 
 ## Channel API
 
@@ -803,21 +865,21 @@ What the action brain is given for a task, and the contract its commands run und
 
 ### Tools a task is given
 
-A task's tools are fixed when she hands it over (`src/asuna/coordinator.py` `Coordinator._grants`) and recorded with its grant. Each task records whose work it is (`whose`: `words` someone's words, `standing` her self-improvement, `own` her own, `outside` an outside conversation's), decided once when its turn opens and carried by its results, continuations and plans (`src/asuna/whose.py`). In an owner-private conversation `delegate` takes `for`, an outside place by its place or its name: that work runs on the Web chat for the owner, with no development or integration grant, and its result comes back there. In a public group `for` names another person whose line is in the turn: the task is theirs, with their line as its input. A note records whose ask it carries the same way (`whose`, and `line`, that person's line in the turn; `src/asuna/notes.py` `requester`): in an outside conversation `note` takes `for`, a person whose line is in the turn, and otherwise carries the turn's (her own in a turn nobody opened). From an outside conversation a note goes home only: the local chat (named 「家里」) and the owner's own chat (「主人的私聊」), never another group. The home turn a note from outside opens shows whose ask it is (`asked_by`) and that person's line by place and time (`asked_line`), and writes a note back only when the note carries the owner's ask or her own (`notes.answerable`). A tool the task was not given is refused with one sentence: `CAPABILITY_DENIED` (`src/asuna/tasks.py` `GIVEN_TO`, `capability_refusal`).
+A task's tools are fixed when she hands it over (`src/asuna/coordinator.py` `Coordinator._grants`) and recorded with its grant, each only where the [access table](#access) allows the task's origin what it needs. Each task records whose work it is (`whose`: `words` someone's words, `standing` her self-improvement, `own` her own, `outside` an outside conversation's), decided once when its turn opens and carried by its results, continuations and plans (`src/asuna/whose.py`). In an owner-private conversation `delegate` takes `for`, an outside place by its place or its name: that work runs on the Web chat for the owner, with no development or integration grant, and its result comes back there. In a public group `for` names another person whose line is in the turn: the task is theirs, with their line as its input. A note records whose ask it carries the same way (`whose`, and `line`, that person's line in the turn; `src/asuna/notes.py` `requester`): in an outside conversation `note` takes `for`, a person whose line is in the turn, and otherwise carries the turn's (her own in a turn nobody opened). From an outside conversation a note goes home only: the local chat (named 「家里」) and the owner's own chat (「主人的私聊」), never another group. The home turn a note from outside opens shows whose ask it is (`asked_by`) and that person's line by place and time (`asked_line`), and writes a note back only when the note carries the owner's ask or her own (`notes.answerable`). A tool the task was not given is refused with one sentence: `CAPABILITY_DENIED` (`src/asuna/tasks.py` `GIVEN_TO`, `capability_refusal`), or the access table's refusal where the table bars what it needs.
 
 | Group | Defined in | Given to |
 |---|---|---|
-| DSH tools `skill`, `todo_write`, `web_search`, `web_fetch` | `tasks.py` `ACTION_DSH_CAPABILITIES` | every task |
+| DSH tools `skill`, `todo_write`, `web_search`, `web_fetch` | `tasks.py` `ACTION_DSH_CAPABILITIES` | every task; `web_search` and `web_fetch` where its origin has a network ([Access](#access)) |
 | workspace: `list_files`, `read_file`, `write_file`, `offer_file` | `tasks.py` `WORKSPACE_TOOLS` (`offer_file`: `outbound_files.py` `OFFER_FILE_TOOL`) | every task |
-| `sandbox_run` | `tasks.py` `SANDBOX_TOOL` | tasks from owner-private conversations, when the Host has a sandbox |
+| `sandbox_run` | `tasks.py` `SANDBOX_TOOL` | tasks whose origin may use `commands` (home by default), when the Host has a sandbox |
 | history search, discussion digest | `history_query.py` `HISTORY_TOOL`, `discussion_digest.py` `DIGEST_TOOL` | every task |
 | `ask_character`, `report_progress`, `note_idea` | `tasks.py` `ASK_TOOL`, `PROGRESS_TOOL`, `NOTE_IDEA_TOOL` | every task |
 | `read_image` | `vision.py` `READ_IMAGE_TOOL` | when the action route takes images and `vision.image_hosts` is not empty |
-| `private_words` | `private_words.py` `PRIVATE_WORDS_TOOL` | every task |
-| `render_svg` | `svg_render.py` `RENDER_SVG_TOOL` | every task, when the Host renders SVG |
-| `generate_image` | `image_generation.py` `GENERATE_IMAGE_TOOL` | every task, when the integration is enabled, the sandbox is available and an endpoint is named `image` ([Integration](#integration-and-self-development)) |
-| integration tools, `import_integration_artifact` | `integration.py` `INTEGRATION_TOOLS`, `integration_import.py` `IMPORT_TOOL` | by integration profile ([Integration](#integration-and-self-development)) |
-| development and persona-job tools | `development.py` `DEVELOPMENT_TOOLS`, `PERSONA_JOB_TOOLS` | with the development grant ([Self-development](#self-development)) |
+| `private_words` | `private_words.py` `PRIVATE_WORDS_TOOL` | every task whose origin may use `drawing` (every task by default) |
+| `render_svg` | `svg_render.py` `RENDER_SVG_TOOL` | as `private_words`, when the Host renders SVG |
+| `generate_image` | `image_generation.py` `GENERATE_IMAGE_TOOL` | as `private_words`, when the integration is enabled, the sandbox is available and an endpoint is named `image` ([Integration](#integration-and-self-development)) |
+| integration tools, `import_integration_artifact` | `integration.py` `INTEGRATION_TOOLS`, `integration_import.py` `IMPORT_TOOL` | by integration profile ([Integration](#integration-and-self-development)), where its origin may use `integrations` |
+| development and persona-job tools | `development.py` `DEVELOPMENT_TOOLS`, `PERSONA_JOB_TOOLS` | with the development grant ([Self-development](#self-development)), where its origin may use `development` |
 
 - `ask_character` asks her for a judgment and waits for her answer; `report_progress` leaves her a note without waiting. Neither creates a public reply, a task or a grant.
 
@@ -867,7 +929,7 @@ by. Elsewhere it is refused in words (`TaskService.settle`).
 ### Web search and fetch
 
 - `web_search` is DSH's tool with 10 sources and a `detail` argument (`titles`: title, link and date only); snippets are cut to `search.snippet_chars` (default 300). Its backend is the core's `asuna-search` provider, which tries `deployment.search.order` (default `searxng`, `gemini`, `exa`, `deepseek-official`) per query (`packages/cognition-core/src/search.js`). Settings: [RUN_ASUNA.md](RUN_ASUNA.md#web-search).
-- `web_fetch` is DSH's tool over the core's `asuna-fetch` provider: at most 5,000,000 bytes, 30 seconds and 5 redirects; a Cloudflare challenge page answers `WEB_HUMAN_VERIFICATION` (`packages/cognition-core/src/fetch.js`). A task's `network` decides where it goes: `any` for a task delegated from an owner-private turn (where `sandbox_run` is given), every address, the LAN and this machine included; `public` for every other task and for a call outside a task's scope, the core's own public-only check (`packages/cognition-core/src/vendor/web-fetch-http-rc2.js`, DSH 0.2.2-alpha.3's provider kept with its check): every resolved address judged, the connection pinned to them, each redirect hop checked again; its refusal (`WEB_BLOCKED_URL`) ends with one sentence of ours. It is recorded on the task when it is handed over (`Coordinator._grants`), copied by a continuation and into the action session's binding (`network`), and set per tool call by the plugin's `tools/execute` hook (`withNetwork`), the waterfall DSH runs a tool body through; every other lane runs `public`. A continuation keeps `any` only while its own turn would give it too. Both follow same-origin redirects only; the `any` lane is DSH's own provider.
+- `web_fetch` is DSH's tool over the core's `asuna-fetch` provider: at most 5,000,000 bytes, 30 seconds and 5 redirects; a Cloudflare challenge page answers `WEB_HUMAN_VERIFICATION` (`packages/cognition-core/src/fetch.js`). A task's `network` decides where it goes ([Access](#access)): `any` where its origin may use `local_network`, every address, the LAN and this machine included; `public` for every other task and for a call outside a task's scope, the core's own public-only check (`packages/cognition-core/src/vendor/web-fetch-http-rc2.js`, DSH 0.2.2-alpha.3's provider kept with its check): every resolved address judged, the connection pinned to them, each redirect hop checked again; its refusal (`WEB_BLOCKED_URL`) ends with one sentence of ours: the access table's for a task that is not an outside one (the binding's `network_refused`), else `fetch.js` `LAN_REFUSED`. It is recorded on the task when it is handed over (`Coordinator._grants`); the action session's binding carries the one the table gives the task's origin now (`network`), set per tool call by the plugin's `tools/execute` hook (`withNetwork`), the waterfall DSH runs a tool body through; every other lane runs `public`. Both follow same-origin redirects only; the `any` lane is DSH's own provider.
 
 ### Skills
 
@@ -898,7 +960,7 @@ Every command the worker does not run itself (`sandbox_run`, `development_run`, 
 A credential is a name (`^[a-z][a-z0-9-]{1,31}$`), a note and at most 6 environment variables; its values live only in DSH's credential store, one record `asuna-cognition-core/<name>` (`src/asuna/credentials.py`).
 
 - She files and drops one with her `credential` tool in her local chat; a turn sees names, notes and variable names, never a value.
-- Only a task from home may use one: `sandbox_run` with `credentials` sets those variables for that command (`CREDENTIALS_HOME_ONLY` elsewhere).
+- Only a task whose origin may use `credentials` ([Access](#access); home by default) may use one: `sandbox_run` with `credentials` sets those variables for that command (`ACCESS_DENIED_CREDENTIALS` elsewhere).
 - A secret value (its variable's name has `pass`, `token`, `secret` or `key`) is replaced by `[凭据已隐藏]` in tool results, briefs, messages and answers to the action brain and reports; any other value (a user name, an email, a host) stays as it is.
 
 ### Local roots
@@ -1006,7 +1068,7 @@ does not declare `voice_in` keeps its placeholder.
 
 ### Reading images
 
-`read_image` (both brains) takes a reference, a stored image's `artifact_id`, or in an owner-private conversation a file path. It is offered only where the brain's route declares image input and `vision.image_hosts` is not empty.
+`read_image` (both brains) takes a reference, a stored image's `artifact_id`, or a file path where the turn's or the task's origin may use `disk` ([Access](#access); home by default). It is offered only where the brain's route declares image input and `vision.image_hosts` is not empty.
 
 | `vision` setting | Default | Effect |
 |---|---|---|
@@ -1024,7 +1086,7 @@ does not declare `voice_in` keeps its placeholder.
 |---|---|
 | `IMAGE_NOT_PULLABLE`, `IMAGE_ATTACHMENT_NOT_IN_SCENE` | the reference cannot be read, or is not in this conversation's last 7 days |
 | `IMAGE_ARTIFACT_NOT_READABLE` | an `artifact_id` this turn may not read |
-| `IMAGE_PATH_HOME_ONLY`, `IMAGE_TASK_DIR_UNAVAILABLE`, `IMAGE_FILE_NAME_DENIED`, `IMAGE_FILE_NOT_AVAILABLE` | a file read refused or missing |
+| `ACCESS_DENIED_DISK`, `IMAGE_TASK_DIR_UNAVAILABLE`, `IMAGE_FILE_NAME_DENIED`, `IMAGE_FILE_NOT_AVAILABLE` | a file read refused or missing |
 | `IMAGE_URL_MISSING`, `IMAGE_SOURCE_UNAVAILABLE` | no link or file to read from |
 | `IMAGE_INSECURE_URL_DENIED`, `IMAGE_REDIRECT_HOST_DENIED` | not https, or a redirect to a host not allowed |
 | `IMAGE_FETCH_FAILED`, `IMAGE_EMPTY` | the host refused or could not be reached; nothing came |
@@ -1169,7 +1231,7 @@ The managed integration (a channel adapter or a LAN device tool run in the sandb
 
 ### Private words
 
-`private_words` (both brains) keeps the deployment's list of words that point at real people and places: `<data>/private/personal-words.txt` (`ASUNA_PRIVATE_WORDS` names another file), one `category|word|why` per line, categories `person`, `group`, `account`, `site`, `host`, `email`, `other` (`src/asuna/private_words.py`). An all-ASCII entry needs at least 3 characters and matches as a whole word; others need 2. Outside owner-private conversations it adds and summarizes but never removes. Nothing prints a listed word. `tests/test_personal_words.py` refuses a committed file that contains one, and is skipped where there is no list.
+`private_words` (both brains) keeps the deployment's list of words that point at real people and places: `<data>/private/personal-words.txt` (`ASUNA_PRIVATE_WORDS` names another file), one `category|word|why` per line, categories `person`, `group`, `account`, `site`, `host`, `email`, `other` (`src/asuna/private_words.py`). An all-ASCII entry needs at least 3 characters and matches as a whole word; others need 2. Outside owner-private conversations, and in an outside task, it adds and summarizes but never removes. Nothing prints a listed word. `tests/test_personal_words.py` refuses a committed file that contains one, and is skipped where there is no list.
 
 ### Self-development
 

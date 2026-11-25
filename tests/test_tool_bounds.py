@@ -16,8 +16,9 @@ SRC = Path(tasks.__file__).resolve().parent
 
 def test_a_persona_job_runs_without_the_effects_lock_and_is_checked_after_it(world, tmp_path):
     task = seeded(world)
+    # A task with the development grant is a home task (access.py: development is home's only).
     task = task_records.save(
-        world, {**task, 'development_grant': True, 'allowed_capabilities': ['persona_job_run']},
+        world, {**task, 'development_grant': True, 'allowed_capabilities': ['persona_job_run'], 'origin': 'home'},
         expected=task['revision'], stream=task['_id'])
     broker = tasks.ToolBroker(tasks.TaskService(world), Recorded())
     broker.bindings['session'] = (task, type('Sandbox', (), {'task_dir': tmp_path, 'protected_paths': []})())

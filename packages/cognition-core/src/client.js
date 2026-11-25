@@ -159,6 +159,28 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.deployment.channel_port': "渠道端口", 'settings.deployment.context_links': "关联对话",
       'settings.deployment.canonical_persons': "同一个人的账号", 'settings.deployment.vision': "看图",
       'settings.deployment.search': "网页搜索", 'settings.deployment.active_groups': "常驻群（平常的数目）", 'settings.deployment.thoughts': "心里话从哪来（tool：她用 think 写；thinking：取模型自己的思考摘要）", 'settings.deployment.classifier': "安全检查（off：不检查；shadow：检查并记录，不拦；stop：有风险的拦下）",
+      'settings.deployment.access': '访问权限',
+      'settings.access.hint': '每一行是一样东西，每一列是一种来路。勾一格，它左边的也勾上；取消一格，它右边的也取消。保存后「应用已保存设置」或下次启动时生效。',
+      'settings.access.resource': '能用什么', 'settings.access.home': '家里', 'settings.access.home_from_outside': '外面托、家里办',
+      'settings.access.outside': '外面', 'settings.access.changed': '改过', 'settings.access.wider': '比默认宽',
+      'settings.access.notAvailable': '这一格不能开', 'settings.access.cell': '{resource}：{origin}',
+      'settings.access.row.own_files': '这个对话自己的文件：读、存进去（网上下载的也算）、列出来',
+      'settings.access.row.all_files': '所有对话的文件，按 id 取；字节还在就行，不看范围和时间',
+      'settings.access.row.list_files': '列出或搜索别的对话的文件',
+      'settings.access.row.disk': '电脑上她数据之外的文件（给 read_image、read_file 一个盘上的路径）',
+      'settings.access.row.commands': 'sandbox_run（用你自己的系统账户，带你的 ssh 和 git 钥匙）',
+      'settings.access.row.credentials': '命令可以带上的凭据',
+      'settings.access.row.local_network': 'web_fetch 和命令连到你自己的网络（范围 any）',
+      'settings.access.row.internet': 'web_fetch、web_search 上公网（范围 public）',
+      'settings.access.row.integrations': '你的集成工具，按挣到的档位',
+      'settings.access.row.development': '自我开发工具，在挣到的地方',
+      'settings.access.row.drawing': 'generate_image、render_svg、她的私密名单',
+      'settings.access.row.send_any': '把存着的任何文件或图发到她能说话的任何对话',
+      'settings.access.row.send_to_asker': '把存着的任何文件或图发到这件事为之做的那个对话',
+      'settings.access.row.send_own': '把这个对话自己的文件发回这里',
+      'settings.access.level.home': '只在家里', 'settings.access.level.home_from_outside': '家里和外面托、家里办',
+      'settings.access.level.everywhere': '所有地方', 'settings.access.level.none': '哪里都不行',
+      'settings.accessWider': '访问权限有比默认宽的：{list}', 'settings.access.widerItem': '{resource}（{level}）',
       'settings.state.unconfigured': "未配置", 'settings.state.inert': "未启用", 'settings.state.starting': "启动中",
       'settings.state.ready': "就绪", 'settings.state.failed': "失败", 'settings.state.preparing': "准备中",
       'settings.state.restarting': "重启中", 'settings.step.uv': "用 uv 建 Python 环境",
@@ -335,6 +357,28 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.deployment.context_links': "Linked conversations",
       'settings.deployment.canonical_persons': "One person's accounts", 'settings.deployment.vision': "Vision",
       'settings.deployment.search': "Web search", 'settings.deployment.active_groups': "Active groups (the usual number)", 'settings.deployment.thoughts': "Where her thoughts come from (tool: she writes them with think; thinking: the model's own thinking summary)", 'settings.deployment.classifier': "Safety check (off: none; shadow: checked and recorded, nothing stopped; stop: a flagged crossing is held)",
+      'settings.deployment.access': 'Access',
+      'settings.access.hint': 'Each row is a resource, each column where the work comes from. Ticking a cell ticks the cells to its left; unticking one unticks the cells to its right. Saved changes apply with "Apply saved settings" or at the next start.',
+      'settings.access.resource': 'Resource', 'settings.access.home': 'Home', 'settings.access.home_from_outside': 'Home from outside',
+      'settings.access.outside': 'Outside', 'settings.access.changed': 'Changed', 'settings.access.wider': 'Wider',
+      'settings.access.notAvailable': 'Not available', 'settings.access.cell': '{resource}: {origin}',
+      'settings.access.row.own_files': "This conversation's files: read, save into them (web downloads included), list",
+      'settings.access.row.all_files': "Every conversation's files by id, with no scope or age check while the bytes exist",
+      'settings.access.row.list_files': "List or search other conversations' files",
+      'settings.access.row.disk': 'Files on the computer outside her data (a disk path to read_image, read_file)',
+      'settings.access.row.commands': 'sandbox_run (your own user, with your ssh and git keys)',
+      'settings.access.row.credentials': 'The credentials a command may carry',
+      'settings.access.row.local_network': 'web_fetch and commands reaching your own network (scope any)',
+      'settings.access.row.internet': 'web_fetch, web_search on the public internet (scope public)',
+      'settings.access.row.integrations': 'Your integration tools, by the profile earned',
+      'settings.access.row.development': 'Self-development tools, where earned',
+      'settings.access.row.drawing': 'generate_image, render_svg, her private-words list',
+      'settings.access.row.send_any': 'Send any stored file or picture to any conversation she may speak in',
+      'settings.access.row.send_to_asker': 'Send any stored file or picture to the conversation the work is for',
+      'settings.access.row.send_own': "Send this conversation's own files there",
+      'settings.access.level.home': 'home only', 'settings.access.level.home_from_outside': 'home and home from outside',
+      'settings.access.level.everywhere': 'everywhere', 'settings.access.level.none': 'nowhere',
+      'settings.accessWider': 'Access set wider than its default: {list}', 'settings.access.widerItem': '{resource} ({level})',
       'settings.state.unconfigured': "not configured", 'settings.state.inert': "inactive",
       'settings.state.starting': "starting", 'settings.state.ready': "ready", 'settings.state.failed': "failed",
       'settings.state.preparing': "preparing", 'settings.state.restarting': "restarting",
@@ -396,9 +440,35 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
 
   // A program value (a state, a code) in the viewer's words; one this version has no words for is shown as it is.
   const EFFORTS = ['reasoningEffort', 'attendEffort', 'groupEffort', 'summaryEffort'];
-  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'chat', 'self_development', 'timezone', 'home_groups', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search', 'active_groups', 'thoughts', 'classifier', 'sandbox', 'character_git', 'persona_sources']);
+  const DEPLOYMENT_KEYS = new Set(['database', 'allowed_databases', 'mongo_uri', 'embedding', 'workflow_timeout_seconds', 'chat', 'self_development', 'timezone', 'home_groups', 'persona_runtime', 'integration', 'channels', 'channel_port', 'context_links', 'canonical_persons', 'vision', 'search', 'active_groups', 'thoughts', 'classifier', 'sandbox', 'character_git', 'persona_sources', 'access']);
   const word = (t, prefix, value) => { const key = prefix + value, text = t(key); return text && text !== key ? text : String(value); };
   const deploymentLabel = key => DEPLOYMENT_KEYS.has(key) ? { key: 'settings.deployment.' + key } : key;
+
+  // The access table (deployment.access): each resource with its default level, as the worker's access.py has them
+  // (tests/test_access.py compares the two). Columns are the origins from home outwards; a level is how many of them
+  // it allows. `integrations` and `development` take only home or none.
+  const ACCESS_ROWS = [['own_files', 'everywhere'], ['all_files', 'home_from_outside'], ['list_files', 'home_from_outside'],
+    ['disk', 'home'], ['commands', 'home'], ['credentials', 'home'], ['local_network', 'home'], ['internet', 'everywhere'],
+    ['integrations', 'home'], ['development', 'home'], ['drawing', 'everywhere'], ['send_any', 'home'],
+    ['send_to_asker', 'home_from_outside'], ['send_own', 'everywhere']];
+  const ACCESS_HOME_OR_NONE = ['integrations', 'development'];
+  const ACCESS_ORIGINS = ['home', 'home_from_outside', 'outside'];
+  const ACCESS_LEVELS = ['none', 'home', 'home_from_outside', 'everywhere'];
+  /** The setting's rows as written, or {} when it is not a table. */
+  const accessValue = text => { try { const value = text ? JSON.parse(text) : {};
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; } };
+  /** A row's level in the setting, else its default. */
+  const accessLevel = (value, resource) => ACCESS_LEVELS.includes(value[resource]) ? value[resource]
+    : ACCESS_ROWS.find(([name]) => name === resource)[1];
+  /** The setting after ticking (or unticking) one cell: ticking a cell ticks the cells to its left, unticking one
+   * unticks the cells to its right, so a row is always one level. Only rows away from their default are kept; null
+   * when none is. */
+  function accessEdit(value, resource, column, ticked) {
+    const level = ACCESS_LEVELS[ticked ? column + 1 : column];
+    const next = { ...value };
+    if (level === ACCESS_ROWS.find(([name]) => name === resource)[1]) delete next[resource]; else next[resource] = level;
+    return Object.keys(next).length ? next : null;
+  }
 
   // ── which brain ─────────────────────────────────────────────────────
   const stageLabel = (t, stage) => ['character', 'executor'].includes(stage?.lane) ? t('brain.' + stage.lane) : null;
@@ -474,6 +544,12 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     body .asuna-collab-missed { color: var(--dsw-alias-status-danger, #c00);
       background: color-mix(in srgb, var(--dsw-alias-status-danger, #c00) 10%, var(--dsw-alias-bg-base)); }
     body .asuna-collab-missed-note { margin: 0; font-size: 12px; color: var(--dsw-alias-status-danger, #c00); }
+    body .asuna-access-cell { width: 16px; height: 16px; margin: 0; accent-color: var(--dsw-alias-brand-primary);
+      cursor: pointer; }
+    body .asuna-access-cell:disabled { cursor: default; }
+    body .asuna-access code { color: var(--dsw-alias-label-primary); }
+    body .asuna-access-wider { color: var(--dsw-alias-state-warn-label);
+      background: color-mix(in srgb, var(--dsw-alias-state-warn-label) 12%, var(--dsw-alias-bg-base)); }
   `;
   // Palette only (pinned DSH version's class): DSH's meter is the character-brain purple, the second
   // instance of the same meter (the action session) the action-brain blue.
@@ -827,6 +903,48 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         hint && h('p', { style: small }, hint));
     }
 
+    // The access table as one field of the native form: a row per resource, a column per origin, a tick box per cell.
+    // The form owns the staged value (only rows away from their default), its reset and its save.
+    function AccessTable({ id, label, text, disabled, overridden, onEdit, onReset, t }) {
+      const value = accessValue(text);
+      const cell = { padding: '6px 8px', textAlign: 'center', verticalAlign: 'middle',
+        borderBottom: '.5px solid var(--dsw-alias-border-l1)' };
+      const edit = (resource, column, ticked) => {
+        const next = accessEdit(value, resource, column, ticked);
+        onEdit(next ? JSON.stringify(next) : '');
+      };
+      return h('div', { id, role: 'group', 'aria-label': label, style: { display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('span', null, label), overridden && h(Pill, null, t('settings.overridden')),
+          overridden && h(Button, { size: 'sm', disabled, onClick: onReset }, t('settings.reset'))),
+        h('p', { style: { ...small, margin: 0 } }, t('settings.access.hint')),
+        h('div', { style: { overflowX: 'auto', minWidth: 0 } },
+          h('table', { className: 'asuna-access', style: { borderCollapse: 'collapse', width: '100%', fontSize: 13 } },
+            h('thead', null, h('tr', null,
+              h('th', { scope: 'col', style: { ...cell, textAlign: 'left' } }, t('settings.access.resource')),
+              ...ACCESS_ORIGINS.map(origin => h('th', { key: origin, scope: 'col', style: { ...cell, whiteSpace: 'nowrap' } },
+                t('settings.access.' + origin))),
+              h('th', { scope: 'col', style: cell }))),
+            h('tbody', null, ...ACCESS_ROWS.map(([resource, fallback]) => {
+              const level = accessLevel(value, resource);
+              const count = ACCESS_LEVELS.indexOf(level), base = ACCESS_LEVELS.indexOf(fallback);
+              return h('tr', { key: resource },
+                h('th', { scope: 'row', style: { ...cell, textAlign: 'left', fontWeight: 'normal' } },
+                  h('code', null, resource), h('div', { style: small }, t('settings.access.row.' + resource))),
+                ...ACCESS_ORIGINS.map((origin, column) => h('td', { key: origin, style: cell },
+                  ACCESS_HOME_OR_NONE.includes(resource) && column > 0
+                    ? h('span', { title: t('settings.access.notAvailable'), 'aria-label': t('settings.access.notAvailable'),
+                      style: { color: 'var(--dsw-alias-label-tertiary)' } }, '—')
+                    : h('input', { type: 'checkbox', className: 'asuna-access-cell', checked: column < count, disabled,
+                      'aria-label': t('settings.access.cell', { resource, origin: t('settings.access.' + origin) }),
+                      onChange: event => edit(resource, column, event.target.checked) }))),
+                h('td', { style: { ...cell, textAlign: 'left', whiteSpace: 'nowrap' } },
+                  h('span', { style: { display: 'inline-flex', gap: 4 } },
+                    level !== fallback && h(Pill, null, t('settings.access.changed')),
+                    count > base && h(Pill, { className: 'asuna-access-wider' }, t('settings.access.wider')))));
+            })))));
+    }
+
     // ── memory ────────────────────────────────────────────────────────
     const EVERYWHERE = ['self', 'affect', 'ideas', 'people', 'documents'];
     const categoryLabel = (t, category) => t('memory.category.' + (DICTIONARY.en['memory.category.' + category] ? category : 'other'));
@@ -962,7 +1080,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         // Business values use the shipped settings fields. Structured settings
         // retain their JSON type; no second schema editor or settings store.
         for (const [key, value] of Object.entries(initial.deployment ?? {}))
-          add(['deployment', key], deploymentLabel(key), typeof value === 'string' ? 'text' : 'json');
+          if (key !== 'access') add(['deployment', key], deploymentLabel(key), typeof value === 'string' ? 'text' : 'json');
+        // The access table is always shown, drawn as the table (AccessTable); a profile without the setting has the
+        // default table.
+        add(['deployment', 'access'], deploymentLabel('access'), 'access');
         // A new profile has no deployment yet: its required sections appear with a starting value staged
         // (the Mongo URI already pointing at a credential), so the page alone can configure it (ADR-010 M1).
         const starters = [];
@@ -1019,14 +1140,14 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
             return await store(value);
           } catch (error) { setNotice(error.message); return false; } } }));
         const model = new SettingsFormModel(scope, fields.filter(field => !field.type.startsWith('secret')).map(field => ({ field: field.field,
-          format: value => value === undefined ? '' : field.type === 'json' ? JSON.stringify(value) : String(value),
+          format: value => value === undefined ? '' : ['json', 'access'].includes(field.type) ? JSON.stringify(value) : String(value),
           parse: text => { try {
             // An empty reasoning choice explicitly uses the provider default;
             // clearing an override would instead re-inherit a previous effort.
             if (EFFORTS.includes(field.path[2])) return { kind: 'set', value: text };
             if (field.type === 'choice') return text ? { kind: 'set', value: text } : undefined;
             if (!text.trim()) return { kind: 'clear' };
-            const value = ['json', 'number'].includes(field.type) ? JSON.parse(text) : text;
+            const value = ['json', 'number', 'access'].includes(field.type) ? JSON.parse(text) : text;
             if (field.type === 'number' && (!Number.isSafeInteger(value) || value < 1)) return undefined;
             return { kind: 'set', value };
           } catch { return undefined; } } })), secrets);
@@ -1095,6 +1216,10 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         status?.lifecycle.error && h('p', { role: 'alert' }, status.lifecycle.error),
         // ADR-098: without the worker's root table her lanes are refused, said here, never left silent.
         status?.roots?.refused && h('p', { role: 'alert' }, t('settings.rootsMissing', { reason: status.roots.refused })),
+        // What the running worker's access table sets wider than its default, named once per start.
+        Object.keys(status?.access?.wider ?? {}).length > 0 && h('p', { role: 'alert' }, t('settings.accessWider', {
+          list: Object.entries(status.access.wider).map(([resource, level]) => t('settings.access.widerItem',
+            { resource, level: word(t, 'settings.access.level.', level) })).join(t('memory.separator')) })),
         // A publication that only a Host restart puts into effect is said, never left silent (ADR-021 D4).
         ...(status?.publications ?? []).filter(p => p.state === 'HOST_RESTART_REQUIRED').map(p => h('p', { key: 'restart-' + p.project,
           role: 'status' }, t('settings.restartWaiting', { project: p.project,
@@ -1110,6 +1235,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
               overriddenLabel: t('settings.overridden'), resetLabel: t('settings.reset'),
               invalidLabel: field.type === 'number' ? t('settings.invalidNumber') : t('settings.invalidJson'),
               onEdit: text => editor.actions.edit(field.field, text), onReset: () => editor.actions.resetField(field.field) };
+            if (field.type === 'access') return h(AccessTable, { ...props, t });
             if (field.type === 'choice') return h(Select, { ...props, t, value: props.text, options: choices(field),
               onChange: value => choose(field, value),
               hint: field.path[0] !== 'routes' ? undefined
@@ -1587,6 +1713,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
 
   }
   return { apply, isolatedRow, toolRow, stageDefinitions, collabDefinitions, repairDefinitions, speakDefinitions, threadOf, stageIdentity, stageLabel, subscribeInputPolicies, DICTIONARY,
+    ACCESS_ROWS, accessEdit,
     inject: ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'connection', 'remote', 'remote.settings', 'remote.credentials', 'configForms',
       'sessions', 'conversation', 'uiConversation', 'uiWorkspace'] };
 } });

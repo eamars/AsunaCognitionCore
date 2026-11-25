@@ -1410,7 +1410,6 @@ WORDS = {
     'IMAGE_SIGNATURE_UNAVAILABLE': '这张图的链接过期了，眼下换不了新签名；过几分钟再试。',
     'IMAGE_TOO_LARGE': '这张图太大，看不了。',
     'IMAGE_TYPE_UNSUPPORTED': '这不是能看的图片格式。',
-    'IMAGE_PATH_HOME_ONLY': '按路径读图只在家里（家里·私聊、主人私聊这类可信的对话）能做；这里看消息里的图，ref 照抄图旁标的那个。',
     'VISION_ROUTE_UNSUPPORTED': '你现在的模型看不了图；要看就用 delegate 动手看，把 ref 一起交代。',
 }
 
@@ -2756,10 +2755,12 @@ class RoleTools:
     def tool_read_image(self, ep, call_id, args):
         from .blobs import BlobStore
         from .vision import read_image_for_task
+        from .access import origin_of_turn
         scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
+        # 按路径读盘看访问表的 disk 一行（这一次的来路）；这一次没有任务目录。
         result = read_image_for_task(self.store, BlobStore(self.store), scene, self.store.config, args,
                                      route='character', offered=offered_pictures(self._fresh(ep)),
-                                     session_class=self._cls(ep))        # 按路径读盘只在家里放行；这一轮没有任务目录
+                                     session_class=self._cls(ep), origin=origin_of_turn(self.store, ep))
         self.checkpoint()
         ref = str((args or {}).get('ref') or '')
         if ref:                                       # what she looked at this turn (a candidate is kept only after)

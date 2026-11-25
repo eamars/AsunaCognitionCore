@@ -6,8 +6,9 @@ Host for them through ``attach``.
 
 - Filing one: at home, the character brain's ``credential`` tool, when someone hands her a password or token; or the
   owner. The value passes her model once, in that turn; she is told never to repeat it.
-- Using one: only the action brain, only in a task that came from home, only inside one sandboxed command
-  (``sandbox_run`` with ``credentials``): the variables are set for that process and nothing else. No prompt, brief
+- Using one: only the action brain, only in a task whose origin the access table allows credentials (access.py; home
+  by default), only inside one sandboxed command (``sandbox_run`` with ``credentials``): the variables are set for
+  that process and nothing else. No prompt, brief
   or report carries a secret: tool results, her briefs to the action brain and its reports are scrubbed of every
   value whose variable name says it is secret (``SECRET_WORDS``: pass, token, secret, key; ``scrub``). A user name,
   an email or a host is not a secret and stays readable.
@@ -23,7 +24,6 @@ import time
 from urllib.parse import quote, quote_plus
 
 from .state import Denied
-from .records import scenes as scene_records
 from .config import echoed
 
 NAME = re.compile(r'[a-z][a-z0-9-]{1,31}')
@@ -221,7 +221,6 @@ def scrub(value, store=None):
 
 
 def home_task(store, task):
-    """Whether this task came from home (credentials are for home tasks only)."""
-    from . import visibility
-    scene = scene_records.get(store, task['scene_id']) or {'_id': task['scene_id']}
-    return visibility.session_class(store.config, store, scene, task['requester_id']) == visibility.OWNER_PRIVATE
+    """Whether this task may use credentials: the access table's row `credentials` for the task's origin (access.py)."""
+    from . import access
+    return access.allowed(store.config, access.origin_of_task(store, task), 'credentials')

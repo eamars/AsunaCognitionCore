@@ -253,7 +253,7 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `pull_bytes` — 按元数据把图片字节拉回来。返回 (bytes, media_type, via, source)。失败一律抛真实错误码。
 - def `resolve_image_file` — 路径 ref 指的是哪个文件：``/task/…`` 落在本任务自己的工作区下，绝对路径照原样拿。
 - def `read_image_for_task` — read_image 的实际执行：场景围栏 → 能力核对 → 拉字节 → 落 BlobStore → 交给插件的视觉输入载荷。
-- def `path_image` — Read a picture from this machine's disk (home conversations only): the bytes are this call's real visual input, and the file it came from is recorded as the artifact's source (``file:<绝对路径>``).
+- def `path_image` — Read a picture from this machine's disk, where the access table allows this origin `disk`: the bytes are this call's real visual input, and the file it came from is recorded as the artifact's source (``file:<绝对路径>``).
 - def `stored_image` — Look again at a picture already stored as an image artifact: one in this scene's own scope, one she made herself (her own generator, any scene), or one this turn was offered to send.
 - def `local_upload_bytes` — A local-chat picture's stored bytes, re-checked against the row that records it: the row must be the program's own local input (no platform envelope), and the artifact must be in that row's scope with that input as its source — a platform m
 - def `media_source` — {'url', 'signature'} to pull an entry from: the link read back from its message, signed again with the platform's current key when the platform signs it (media_keys.sign; signature None, renewed or unavailable).

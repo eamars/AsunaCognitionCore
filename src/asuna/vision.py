@@ -8,10 +8,9 @@
 （``context_links`` / 路由级 ``read_scenes``，现算自配置，不是工具参数）。放宽的只有**读**——
 字节仍按本任务的 scope_key 落盘，写、出站、场景成员资格都不因此放宽；删掉配置键就回到只扫本场景。
 
-ref 也可以是一个本机文件路径（绝对路径，或行动任务自己工作区的 ``/task/…``）：按路径读盘上的图只给
-owner_private 的会话（本机、主人私聊、可信 home 通道）与从它们派出的任务。判据用 ``visibility.session_class``，
-由两个入口各自算好后传进来（``session_class`` 参数），这里不另造一套判断。裸文件名 + ``vision.image_dirs``
-的老路一个字没改。
+ref 也可以是一个本机文件路径（绝对路径，或行动任务自己工作区的 ``/task/…``）：按路径读盘上的图看访问表的
+``disk`` 一行（access.py），按这一次或这个任务的来路（``origin`` 参数，两个入口各自算好传进来）。裸文件名 +
+``vision.image_dirs`` 的老路一个字没改。
 """
 from __future__ import annotations
 import base64
@@ -168,7 +167,7 @@ def sniff_video_type(data):
 
 
 # ref 也可以指本机盘上的一张图。只有这两种形状算路径，别的字符串照旧是附件 ref（att-…）或存好的图的 artifact_id（blob-…）。
-# 读盘只给家里的会话：会话类别由入口算好传进来（visibility.session_class），这个模块不自己判。
+# 读盘看访问表的 disk 一行：来路由入口算好传进来（access.py），这个模块不自己判。
 PATH_CHARS = 500                       # 路径要放得下：80 字是文件名的上限，不是路径的
 FILE_NAME_CHARS = 120                  # 不变：消息元数据里一个裸文件名允许多长
 ABSOLUTE_PATH = re.compile(r'^([A-Za-z]:[\\/]|/)')
@@ -313,7 +312,7 @@ def attachments_of(message, *, config=None, limit=MAX_ITEMS_PER_MESSAGE):
         reason = None
         scheme_ok = bool(parsed and parsed.scheme in ('https', 'http') and not parsed.username and not parsed.password)
         # 裸文件名 + 配置的本机图片目录（老行为，一个字没改），或消息直接给了一个路径形态；
-        # 路径真能不能读由拉取那一侧按会话类别决定（群里调它吃 IMAGE_PATH_HOME_ONLY）。
+        # 路径真能不能读由拉取那一侧按访问表的 disk 一行决定（path_image）。
         local_ok = bool(name and ((bool(vision['image_dirs']) and '/' not in name and '\\' not in name)
                                   or path_form(name)))
         declared = int(_clean(item.get('size'), 16)) if _clean(item.get('size'), 16).isdigit() else 0
@@ -492,15 +491,14 @@ def download(url, allow_hosts, cap, timeout, agent=USER_AGENT, deadline=None):
     return b''.join(chunks), final_host, content_type
 
 
-def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=visibility.PUBLIC, task_dir=None,
-               video=False):
+def pull_bytes(entry, config, *, max_bytes=None, timeout=None, disk=False, task_dir=None, video=False):
     """按元数据把图片字节拉回来。返回 (bytes, media_type, via, source)。失败一律抛真实错误码。
 
     只用标准库：这条路径要能在没有第三方 HTTP 库的离线自检里真跑一次真实 socket，
     不能只对着替身断言。
 
     local_file 有两种：裸文件名在 ``vision.image_dirs`` 里找（老行为，没改），或一个路径形态
-    （绝对路径 / ``/task/…``）就读那一个文件——路径只在 owner_private 的会话放行，判在 read_image_for_task。
+    （绝对路径 / ``/task/…``）就读那一个文件——只在 ``disk`` 为真时（path_image 先问过访问表）。
     """
     vision = vision_capability(config)
     cap = VIDEO_MAX_BYTES if video else min(int(max_bytes or vision['max_bytes']), HARD_MAX_BYTES)
@@ -532,9 +530,9 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=vis
                              f'{timeout or vision["timeout_seconds"]:g} 秒）；{TRY_LATER}') from exc
     elif entry.get('pull_via') == 'local_file':
         given = entry.get('file')
-        form = path_form(given) if session_class == visibility.OWNER_PRIVATE else None
+        form = path_form(given) if disk else None
         if form:
-            # 路径形态：读那一个文件本身，不绕 image_dirs（只有家里的会话走到这一支）。
+            # 路径形态：读那一个文件本身，不绕 image_dirs（只有访问表许了 disk 才走到这一支）。
             resolved = resolve_image_file(_clean(given, PATH_CHARS), form, task_dir=task_dir)
             if resolved.stat().st_size > cap:
                 raise _too_large(cap)
@@ -581,8 +579,8 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=vis
 def resolve_image_file(ref, form, *, task_dir=None):
     """路径 ref 指的是哪个文件：``/task/…`` 落在本任务自己的工作区下，绝对路径照原样拿。
 
-    不检查它落在 vision.image_dirs 里——按路径读本来就读目录之外；能不能走到这里由会话类别决定
-    （read_image_for_task 在家以外已经拒掉了）。文件不在就给 IMAGE_FILE_NOT_AVAILABLE，不去猜别的文件。
+    不检查它落在 vision.image_dirs 里——按路径读本来就读目录之外；能不能走到这里由访问表的 disk 一行决定
+    （path_image 已经问过）。文件不在就给 IMAGE_FILE_NOT_AVAILABLE，不去猜别的文件。
     """
     if form == 'task':
         if not task_dir:
@@ -606,15 +604,15 @@ ARTIFACT_REF = re.compile(r'blob-[0-9a-f]{16,64}')
 
 
 def read_image_for_task(store, blobs, task, config, args, *, route='executor', offered=(),
-                        session_class=visibility.PUBLIC, task_dir=None, look=True):
+                        session_class=visibility.PUBLIC, task_dir=None, look=True, origin='outside'):
     """read_image 的实际执行：场景围栏 → 能力核对 → 拉字节 → 落 BlobStore → 交给插件的视觉输入载荷。
 
     两个脑共用这一个工具：行动脑按任务调用，角色脑按她这回合的场景调用（role_tools.py）；`task` 只需要
     scene_id、scope_key、policy_epoch，围栏与落盘口径完全相同，route 只决定核对哪条路由能不能收图。
     ref 也可以是一张已存好的图的 artifact_id（她画的、本场景存的、这一轮可发的 ``offered``），用来回看；
-    或是一个本机文件路径（绝对路径 / ``/task/…``）——那种只在 ``session_class`` 是 owner_private 时放行，
-    类别由两个入口各自算好传进来（角色脑用这一回合 manifest 里的，行动脑按任务绑定现算），``task_dir``
-    是本任务自己的工作区，只有它有 ``/task/`` 这种写法。"""
+    或是一个本机文件路径（绝对路径 / ``/task/…``）——那种只在访问表许这个来路 ``disk`` 时放行，
+    ``origin`` 由两个入口各自算好传进来（角色脑按这一次，行动脑按任务；access.py），``session_class`` 只管
+    附件读到哪些对话；``task_dir`` 是本任务自己的工作区，只有它有 ``/task/`` 这种写法。"""
     args = args if isinstance(args, dict) else {}
     unknown = set(args) - {'ref', 'max_bytes'}
     if unknown:
@@ -637,8 +635,8 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
     if ARTIFACT_REF.fullmatch(ref):
         return stored_image(store, blobs, task, config, ref, max_bytes, offered)
     if path_form(ref):
-        # 按路径读盘上的图：只有家里的会话放行（错误码里说清该怎么做），task_dir 决定 /task/ 指哪儿。
-        return path_image(blobs, task, config, ref, max_bytes, session_class, task_dir)
+        # 按路径读盘上的图：访问表许这个来路 disk 才放行，task_dir 决定 /task/ 指哪儿。
+        return path_image(blobs, task, config, ref, max_bytes, origin, task_dir)
     entry, listing = attachment_by_ref(store, task, config, ref, session_class)
     if not entry:
         # 不区分「不存在」与「在围栏外的场景／别的纪元」：不借这个工具探测别人的图。只列本任务可读范围里的 ref。
@@ -700,19 +698,17 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
     return payload
 
 
-def path_image(blobs, task, config, ref, max_bytes=None, session_class=visibility.PUBLIC, task_dir=None):
-    """Read a picture from this machine's disk (home conversations only): the bytes are this call's real
-    visual input, and the file it came from is recorded as the artifact's source (``file:<绝对路径>``).
+def path_image(blobs, task, config, ref, max_bytes=None, origin='outside', task_dir=None):
+    """Read a picture from this machine's disk, where the access table allows this origin `disk`: the bytes are this
+    call's real visual input, and the file it came from is recorded as the artifact's source (``file:<绝对路径>``).
 
     读盘进来的图不算她自己做的图，也不进「群里可发」那份清单（outbound_media 只认 integration: 前缀）——
     这是定好的，不是漏了。
     """
-    if session_class != visibility.OWNER_PRIVATE:
-        raise Denied('IMAGE_PATH_HOME_ONLY: %s 是一个文件路径，按路径读图只在家里（本机、主人私聊这类可信的对话）允许；'
-                     '这里能看的是消息里的图：ref 照抄图旁标的那个（att-…）。盘上的图要回家里那一次看，'
-                     '或交给家里交出去的行动任务' % ref)
+    from . import access
+    access.require(config, origin, 'disk')
     data, media_type, via, source = pull_bytes({'ref': ref, 'pull_via': 'local_file', 'file': ref}, config,
-                                               max_bytes=max_bytes, session_class=session_class, task_dir=task_dir)
+                                               max_bytes=max_bytes, disk=True, task_dir=task_dir)
     digest = sha(data)
     shown, moving = animated.seen(data, media_type)
     blob = (blobs.put(data, task['scope_key'], 'image', media_type=media_type,
@@ -903,13 +899,14 @@ READ_IMAGE_TOOL = {
     'parameters': {'ref': {'type': 'string', 'required': True}}}
 
 
-def picture_to_edit(store, blobs, task, config, ref, *, session_class=visibility.PUBLIC, task_dir=None):
+def picture_to_edit(store, blobs, task, config, ref, *, session_class=visibility.PUBLIC, task_dir=None,
+                    origin='outside'):
     """A picture to edit (generate_image's source_image): read with read_image's own fence, so a turn edits only a
     picture it may look at, and said with where an edit of it may go. Her own drawing stays hers (`own`); any other
     picture's edit goes back to the conversation the picture came from (`back_to`, a scope key)."""
     from .outbound_media import produced, returns_to
     seen = read_image_for_task(store, blobs, task, config, {'ref': ref}, session_class=session_class,
-                               task_dir=task_dir, look=False)
+                               task_dir=task_dir, look=False, origin=origin)
     artifact_id = seen.get('artifact_id') or seen.get('blob_artifact')
     row = artifact_records.get(store, artifact_id) if artifact_id else None
     if not row:
@@ -938,14 +935,14 @@ class VisionService:
         from .blobs import BlobStore
         self.blobs = BlobStore(store)
 
-    def read_image(self, task, args, *, session_class=visibility.PUBLIC, task_dir=None):
-        # 会话类别由任务那一侧算好传进来：按路径读盘只在家里放行，这里不另判一次。
+    def read_image(self, task, args, *, session_class=visibility.PUBLIC, task_dir=None, origin='outside'):
+        # 会话类别与来路由任务那一侧算好传进来：按路径读盘看访问表，这里不另判一次。
         return read_image_for_task(self.store, self.blobs, task, self.store.config, args,
-                                   session_class=session_class, task_dir=task_dir)
+                                   session_class=session_class, task_dir=task_dir, origin=origin)
 
-    def picture_to_edit(self, task, ref, *, session_class=visibility.PUBLIC, task_dir=None):
+    def picture_to_edit(self, task, ref, *, session_class=visibility.PUBLIC, task_dir=None, origin='outside'):
         return picture_to_edit(self.store, self.blobs, task, self.store.config, ref,
-                               session_class=session_class, task_dir=task_dir)
+                               session_class=session_class, task_dir=task_dir, origin=origin)
 
 
 def route_filtered_tool_names(tools, config):

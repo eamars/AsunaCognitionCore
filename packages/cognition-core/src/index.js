@@ -261,6 +261,8 @@ export class CognitionCore {
     this.collab = new Collab(this);
     // The worker's root table and the counts of her rewritten requests (roots.js, ADR-098).
     this.roots = new Roots(this);
+    // The resources the access table sets wider than their default, as this start's worker read it (resource: level).
+    this.accessWider = {};
     this.lifecycle = { state: 'unconfigured', error: null, restarts: 0 };
     this.startFailures = 0;             // starts failed in a row (startAgain)
     this.workerExited = false;          // this Host's worker exited since its last start (workerFailed)
@@ -419,6 +421,10 @@ export class CognitionCore {
       if (status.folded_stop && !this.workerExited) stopInside(this.ctx.asunaFloor.dataRoot, this.warnLine);
       this.workerExited = false;
       this.roots.take(status.roots, status.roots_refused);
+      // Each resource set wider than its default, named once per start in the Host log and on the settings page.
+      this.accessWider = status.access_wider && typeof status.access_wider === 'object' ? status.access_wider : {};
+      if (Object.keys(this.accessWider).length) this.ctx.logger.warn('Asuna: access set wider than its default: '
+        + Object.entries(this.accessWider).map(([resource, level]) => resource + '=' + level).join(', '));
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
       await organizeNativeWorkspaces(this, status.navigation);
       // Her own working copy of the checkout in each home place's folder: each made once, never reset (ADR-065).
@@ -1461,7 +1467,8 @@ export class CognitionCore {
     // (dsh-tools ToolRuntime: `tools/execute` ending in dispatchToolBody), so the scope set here is the one the fetch
     // reads. The action lane: its task's recorded network; every other lane: public, never an inherited scope.
     scope.on('tools/execute', (exec, next) => this.door(lane, exec, () => withNetwork(
-      lane === 'executor' ? this.state(exec.agent.session.id).network : 'public', next)));
+      lane === 'executor' ? this.state(exec.agent.session.id).network : 'public', next,
+      lane === 'executor' ? this.state(exec.agent.session.id).networkRefused : undefined)));
     scope.systemPrompt.section({ name: PERSONA_PREFIX_SECTION,
       order: scope.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
       interpolate: false, text: ({ agent }) => agent ? this.state(agent.session.id).system : '' });
@@ -1734,8 +1741,10 @@ export class CognitionCore {
     const allowed = new Set(binding.allowed_capabilities);
     this.state(agent.session.id).allowed = allowed;
     this.state(agent.session.id).refusals = binding.capability_refusals ?? {};
-    // Where its web_fetch may go: the task's recorded network, copied into the binding (fetch.js, ADR-116).
+    // Where its web_fetch may go, and the words a local address is refused with: the binding's, by the access table
+    // for the task's origin (fetch.js; an older worker sends no words).
     this.state(agent.session.id).network = binding.network === 'any' ? 'any' : 'public';
+    this.state(agent.session.id).networkRefused = typeof binding.network_refused === 'string' ? binding.network_refused : undefined;
     this.state(agent.session.id).outside = binding.outside === true;     // ADR-135 D8: its refusals are the plain sentence
     // Restrictions filter inherited/global tools; each granted tool below is
     // registered in this action scope. Do not pass scoped names as globals.

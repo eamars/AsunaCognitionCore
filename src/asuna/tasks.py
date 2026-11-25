@@ -787,6 +787,58 @@ def capability_refusal(store, task, tool):
             '要用它就在报告里写明，回到对话时在给它的地方另交一件。' % (str(tool)[:60], given, place_words(store, task['scene_id'])))
 
 
+# The rows of the access table (access.py) each action tool needs. A web tool needs a network (network_of); a tool not
+# named here needs none of them.
+WEB_TOOLS = ('web_fetch', 'web_search')
+DRAWING_TOOLS = ('generate_image', 'render_svg', 'private_words')
+
+
+def needs(tool, args=None):
+    """The rows of the access table a call of this action tool needs."""
+    tool = str(tool)
+    if tool == 'sandbox_run':
+        return ['commands', *(['credentials'] if (args or {}).get('credentials') else [])]
+    if tool in DRAWING_TOOLS:
+        return ['drawing']
+    if tool in DEVELOPMENT_NAMES or tool.startswith('persona_job'):
+        return ['development']
+    if integration_gated(tool):
+        return ['integrations']
+    return []
+
+
+def network_of(config, origin):
+    """Where a task of this origin may fetch: 'any' (the owner's own network too), 'public', or None (nowhere)."""
+    from . import access
+    if access.allowed(config, origin, 'local_network'):
+        return 'any'
+    return 'public' if access.allowed(config, origin, 'internet') else None
+
+
+def barred(config, origin, tool, args=None):
+    """The row of the access table that bars this call for a task of this origin, or None."""
+    from . import access
+    if tool in WEB_TOOLS:
+        return None if network_of(config, origin) else 'internet'
+    return next((row for row in needs(tool, args) if not access.allowed(config, origin, row)), None)
+
+
+def granted(store, task):
+    """The tools this task may use now: those given when it was made that the table still allows its origin."""
+    from . import access
+    origin = access.origin_of_task(store, task)
+    return [tool for tool in task.get('allowed_capabilities') or () if not barred(store.config, origin, tool)]
+
+
+def refusal(store, task, tool):
+    """The sentence for an action tool this task may not use: the table's where it bars the task's origin, else who
+    is given the tool (capability_refusal)."""
+    from . import access
+    origin = access.origin_of_task(store, task)
+    row = barred(store.config, origin, tool)
+    return access.refusal(origin, row) if row else capability_refusal(store, task, tool)
+
+
 # How long a running task keeps its lease after its last step; the stored lease_expires_at is epoch seconds.
 LEASE_SECONDS = 600
 
@@ -847,8 +899,14 @@ class ToolBroker:
                              '重试也一样：停下，在报告里写做到了哪里')
             task,sandbox=self.bindings[session]
             current=self.service.valid(task)
-            from . import guard
+            from . import access, guard
             guard.guard_task(self.store,current,tool,args)       # ADR-135 D8: the doing side's door, before any check
+            # The access table as the worker read it at its start, for this task's origin: a task given a tool earlier
+            # is refused it when the table no longer allows what the tool needs.
+            origin=access.origin_of_task(self.store,current)
+            row=barred(self.store.config,origin,tool,args)
+            if row:
+                raise Denied(access.refusal(origin,row))
             if tool not in current['allowed_capabilities'] or (tool in DEVELOPMENT_NAMES and not current.get('development_grant')):
                 raise Denied(capability_refusal(self.store,current,tool))
             if integration_gated(tool):
@@ -934,11 +992,10 @@ class ToolBroker:
             elif tool==READ_IMAGE_TOOL_NAME:
                 # Pull 模式看图：场景仍由任务绑定，参数换不了范围；拉取期间不持副作用锁，
                 # 取消与租约续期不被这次网络等待挡住。字节只上本机回路一次。
-                # 按路径读盘上的图只在家里：会话类别按任务绑定现算（同 credentials.home_task 那条算法），
-                # /task/ 指向这个任务自己的工作区。
+                # 按路径读盘上的图看访问表的 disk 一行（按这个任务的来路），/task/ 指向这个任务自己的工作区。
                 if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
                 scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
-                result=self.vision.read_image(task,args,session_class=visibility.session_class(self.service.store.config,self.service.store,scene_row,task['requester_id']),task_dir=sandbox.task_dir)
+                result=self.vision.read_image(task,args,session_class=visibility.session_class(self.service.store.config,self.service.store,scene_row,task['requester_id']),task_dir=sandbox.task_dir,origin=origin)
                 with self.service.lock:self.service.valid(task)
             elif tool==RECEIVED_FILE_TOOL_NAME:
                 # A file someone sent (ADR-102): the scene is the task's binding, as for read_image; the fetch waits
@@ -959,7 +1016,7 @@ class ToolBroker:
                     # The picture to edit: only one this task may look at (read_image's fence, this task's class).
                     if not getattr(self,'vision',None):raise ValueError('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
                     scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
-                    picture=self.vision.picture_to_edit(task,ref,task_dir=sandbox.task_dir,
+                    picture=self.vision.picture_to_edit(task,ref,task_dir=sandbox.task_dir,origin=origin,
                         session_class=visibility.session_class(self.service.store.config,self.service.store,scene_row,task['requester_id']))
                     # Her own drawing edited stays hers; anyone else's goes back where it came from.
                     return {'data':picture['data'],'register':None if picture['own'] else
@@ -970,8 +1027,7 @@ class ToolBroker:
             elif tool=='private_words':
                 # Her list lives with the deployment's data, outside the task folder (private_words.py).
                 from . import private_words
-                from . import credentials
-                try:result=private_words.run(args,home=credentials.home_task(self.store,task))
+                try:result=private_words.run(args,home=origin!='outside')
                 except private_words.PrivateWordsError as exc:raise Denied('PRIVATE_WORDS_REFUSED: '+str(exc)) from exc
             elif tool=='render_svg':
                 # The Host renders; this side reads the SVG, drops links to outside pictures and keeps the PNG as hers.
@@ -996,11 +1052,8 @@ class ToolBroker:
                 with self.service.lock:self.service.valid(task)
             elif tool=='sandbox_run':
                 if args.get('credentials'):
-                    # Owner 2026-10-07: a credential's variables reach one sandboxed command of a home task, nothing else.
+                    # A credential's variables reach one sandboxed command, where the table allows credentials (above).
                     from . import credentials
-                    if not credentials.home_task(self.store,task):
-                        raise Denied('CREDENTIALS_HOME_ONLY: credentials 只能用在 owner 私聊里交代的任务，这个任务不是；'
-                                     '去掉 credentials 再跑，需要凭据的那一步写进报告')
                     result=sandbox.run(args['argv'],timeout=run_seconds(args.get('timeout')),
                                        env={**home_env(self.store),**credentials.environment(args['credentials'])})
                 else:

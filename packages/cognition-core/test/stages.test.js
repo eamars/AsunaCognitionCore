@@ -27,8 +27,17 @@ async function load(path) {
   return result;
 }
 const { ConversationNodeAssembler } = await load(require.resolve('@deepseek-ai/dsh-client-ui-conversation/client'));
-const { stageDefinitions, collabDefinitions, repairDefinitions, speakDefinitions, threadOf, subscribeInputPolicies, toolRow, DICTIONARY, isolatedRow } = await load(new URL('../src/client.js', import.meta.url));
+const { stageDefinitions, collabDefinitions, repairDefinitions, speakDefinitions, threadOf, subscribeInputPolicies, toolRow, DICTIONARY, isolatedRow, accessEdit } = await load(new URL('../src/client.js', import.meta.url));
 const words = (key, params = {}) => DICTIONARY.en[key].replace(/\{(\w+)\}/g, (_, name) => params[name]);
+
+test('a tick in the access table keeps each row one level and the setting only rows away from their default', () => {
+  // Ticking "outside" for commands ticks the cells to its left: everywhere; unticking "home" unticks all: none.
+  assert.deepEqual(accessEdit({}, 'commands', 2, true), { commands: 'everywhere' });
+  assert.deepEqual(accessEdit({ commands: 'everywhere' }, 'commands', 0, false), { commands: 'none' });
+  // Unticking "home from outside" for all_files leaves home only; ticking it again is the default, and leaves the setting.
+  assert.deepEqual(accessEdit({ disk: 'none' }, 'all_files', 1, false), { disk: 'none', all_files: 'home' });
+  assert.deepEqual(accessEdit({ all_files: 'home' }, 'all_files', 1, true), null);
+});
 
 test('one tool row DSH refuses is skipped and named; the other rows and the page still start', () => {
   // Her ask, after 2026-10-18: a row under a name DSH draws itself threw out of the plugin's start ("Failed to load

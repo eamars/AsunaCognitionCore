@@ -45,7 +45,8 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `reflection_session` — A reflection turn's own session (ADR-072): it starts empty, so its readings (her reviews) never enter the home conversation's context; what she does there lasts through her tools.
   - `errand_session` — The errand's own session (ADR-066): the Host copies the destination's conversation at its last completed turn, so the turn resumes from its cached prefix.
   - `status`
-  - `refusals_for` — For the plugin's guard (ADR-053): the broker's sentence for each action tool this task was not given.
+  - `refusals_for` — For the plugin's guard (ADR-053): the broker's sentence for each action tool this task may not use.
+  - `task_access` — What an action session of this task may use now, by the access table for the task's origin (access.py).
   - `joined_line` — The scene of a home line the owner joins (ADR-051) whose live character session this is, else None.
   - `read_only_note`
   - `bind_session`

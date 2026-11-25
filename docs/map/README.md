@@ -31,6 +31,10 @@ Every turn has a **class**, decided by the program from the conversation and the
 - **What she can do follows the place.** Each conversation lists its tools by place (`role_tools.toolbox`): her
   settings, `restart` and her idea notebook only at home; `errand` only in the owner's own conversations; `visit`,
   `promote_memory` and `credential` only in the local chat.
+- **What work may use follows its origin** (`access`): home, home from outside (work for someone outside she takes on
+  at home) or outside, and a level per resource (commands, credentials, the owner's network, the disk, drawing,
+  integrations, development). `access.allowed` decides when a task is given its tools (`coordinator.Coordinator`)
+  and at every call (`tasks.ToolBroker`); the owner's setting `access` changes rows.
 - **What crosses is always hers and always visible.**
   - A note she writes from one conversation to another (`notes`) arrives marked trusted when it comes from home and
     untrusted from outside. An untrusted one that opens a turn at home gives that turn the class of where it came
@@ -378,6 +382,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures and files
 The action brain's tasks, grants, schedules, sandbox, development and integrations.
 
 - [`tasks`](../../src/asuna/tasks.py) — The action brain's tasks: `TaskService` claims, leases, cancels and hands each result back to her, `ToolBroker` checks and runs every tool call a task makes, and `Executor` runs one task in its workspace.
+- [`access`](../../src/asuna/access.py) — Who may use what: the access table.
 - [`action_tiers`](../../src/asuna/action_tiers.py) — ADR-075: her action brain in two tiers, 低 and 高, told by what each can do, never by model, provider, price or how it is run.
 - [`machine_words`](../../src/asuna/machine_words.py) — What a conversation outside home reads of an action brain's report holds nothing of the machine (ADR-050, ADR-098).
 - [`local_roots`](../../src/asuna/local_roots.py) — No local root of this computer reaches her character brain (ADR-098): the root table and its two directions.

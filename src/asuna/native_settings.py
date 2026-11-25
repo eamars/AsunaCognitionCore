@@ -105,6 +105,8 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
         raise ValueError('INVALID_THOUGHTS: tool or thinking')
     if value.get('classifier', 'off') not in CLASSIFIER:
         raise ValueError('INVALID_CLASSIFIER: off, shadow or stop')
+    from . import access
+    access.check(value)                   # who may use what (access.py): refused here at save and at start
     value.setdefault('workflow_timeout_seconds', 1800)
     if type(value['workflow_timeout_seconds']) not in (int, float) or not 1 <= value['workflow_timeout_seconds'] <= 86400:
         raise ValueError('INVALID_TIMEOUT: workflow_timeout_seconds')

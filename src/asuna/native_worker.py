@@ -303,9 +303,9 @@ class NativeLane:
                 'parent_session_id': parent_id if self.lane != 'character' else None,
                 'broker_session': 's-' + sha(binding.encode())[:40],
                 **({'execution_binding': binding} if self.lane == 'executor' else {}),
-                # Where its web_fetch may go: the task's recorded network, copied, never computed again (ADR-116).
-                **({'network': task.get('network') or 'public'} if self.lane == 'executor' and task else {}),
-                'allowed_capabilities': task['allowed_capabilities'] if self.lane == 'executor' else [],
+                # Where its web_fetch may go and what it may use: the access table as this start read it, for the
+                # task's origin (access.py), within what the task was given.
+                **(self.worker.task_access(task) if self.lane == 'executor' else {'allowed_capabilities': []}),
                 **({'capability_refusals': self.worker.refusals_for(task)} if self.lane == 'executor' else {}),
                 # An outside task's refusals are the plain sentence (ADR-135 D8): the plugin's door asks the worker.
                 **({'outside': guard.task_outside(self.store, task)} if self.lane == 'executor' and task else {}),
@@ -652,9 +652,12 @@ class BusinessWorker:
         self.watch.start()
         threading.Thread(target=self.audit_retention, name='audit-retention', daemon=True).start()
         from .grants import home_workspaces
-        # The Host makes her working copy in each (working-copy.js, ADR-065).
+        from . import access
+        # The Host makes her working copy in each (working-copy.js, ADR-065). It names each resource the access table
+        # sets wider than its default in its log and on the settings page.
         return {**self.status(), 'navigation': self.navigation, 'home_workspaces': home_workspaces(self.app.config),
-                'roots': roots, 'roots_refused': local_roots.REFUSED, 'folded_stop': self.folded_stop}
+                'roots': roots, 'roots_refused': local_roots.REFUSED, 'folded_stop': self.folded_stop,
+                'access_wider': access.wider(self.app.config)}
 
     def prepare_navigation(self, native_sessions):
         """Bind real native conversations; the Host owns their logs and workspaces."""
@@ -1002,11 +1005,24 @@ class BusinessWorker:
                 'calls_in_flight': self.calls.holding()}
 
     def refusals_for(self, task):
-        """For the plugin's guard (ADR-053): the broker's sentence for each action tool this task was not given."""
-        from .tasks import capability_refusal, ToolBroker
-        names = [spec['name'] for spec in ToolBroker.catalogue()]
-        return {name: capability_refusal(self.app.store, task, name) for name in names
-                if name not in task['allowed_capabilities']}
+        """For the plugin's guard (ADR-053): the broker's sentence for each action tool this task may not use."""
+        from .tasks import ToolBroker, WEB_TOOLS, granted, refusal
+        usable = granted(self.app.store, task)
+        return {name: refusal(self.app.store, task, name)
+                for name in [*(spec['name'] for spec in ToolBroker.catalogue()), *WEB_TOOLS] if name not in usable}
+
+    def task_access(self, task):
+        """What an action session of this task may use now, by the access table for the task's origin (access.py).
+
+        Its tools (within those it was given), its network ('any' or 'public'), and, where it may not reach the owner's
+        own network and is not an outside task, the words a fetch of a local address ends with."""
+        from . import access
+        from .tasks import granted, network_of
+        origin = access.origin_of_task(self.app.store, task)
+        network = network_of(self.app.config, origin)
+        return {'allowed_capabilities': granted(self.app.store, task), 'network': network or 'public',
+                **({'network_refused': access.words(origin, 'local_network')}
+                   if network != 'any' and origin != 'outside' else {})}
 
     def joined_line(self, session):
         """The scene of a home line the owner joins (ADR-051) whose live character session this is, else None."""

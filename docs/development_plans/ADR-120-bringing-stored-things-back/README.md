@@ -201,9 +201,17 @@ the action brain's drawing tool.
 
 One branch each from main, staged on an isolated stub profile, the full suite per landing; installed one at a time.
 
-1. **The table.** `access.py`, the setting and its checks, the settings section, `origin` on tasks; every fence of §2
-   calls `allowed`. Behaviour changes only in the middle column (no commands, credentials, local network or disk for
-   home from outside) and in the dead guard row's removal.
+1. **The table.** `access.py` (origins, the 14 resources with their defaults, levels; `table`, `check`, `allowed`,
+   `wider`, `origin_of_turn`, `origin_of_task`); a turn's origin from `guard.authority`, a task's written once as
+   `origin` in `delegate` (a continuation, or a task made in a turn about another task, never wider than that task; a
+   row without it computed by the same rule when read). The non-file rows decide through `allowed` at grant time and
+   at call time: `commands` (`_grants`, `ToolBroker.call`), `credentials` (`credentials.home_task`, the broker),
+   `local_network`/`internet` (the task's network and the binding, from the current table), `disk` (`read_image`'s
+   path for both brains), `integrations` and `development` (today's rules and the table), `drawing`. The dead guard
+   row `_image_path` goes. The file and send rows are in the table, the setting and the page; their fences are landing
+   2's. §9's three refusal sentences; the setting `deployment.access`, checked at save and at start; the start report
+   of wider rows (Host log, settings page); the settings section as the table. Behaviour changes only in the middle
+   column (no commands, credentials, local network or disk for home from outside) and in the dead guard row's removal.
 2. **Own files.** `shared_scopes`, the outside fences narrowed to own files, home's checks removed, the two offer lists
    by conversation (closes the 2026-11-24 case).
 3. **D1 and D3.** Stored ids in `received_file` and `offer_file`.

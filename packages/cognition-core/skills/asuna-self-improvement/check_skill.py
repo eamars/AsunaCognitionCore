@@ -28,6 +28,9 @@ L, M and N pin the three closing checks v18 wrote right after 这一本正文自
 prose ships its own pin in the same pass, the falsification breaks each newly written
 block, and pins are renamed when a rule is overturned -- including pins that are meant
 to redden once a fact advances.
+O pins the dual check v19 added to that same cell: after editing any skill body both the
+book's own check_skill.py and skill creator's read-only structural validation must run,
+their findings go back verbatim, and a warning never rides into a publish.
 """
 import hashlib
 import os
@@ -124,6 +127,15 @@ GROUPS = [
         "到期变红",
         "那是设计好的提醒，不是自检坏了",
         "第一次真跑之后就该红",
+    ]},
+    # v19: 改完任何一本技能正文，随书自检与 skill creator 结构校验两样都要跑（发布前自检 那一节）
+    {"name": "O_SKILL_CREATOR_STRUCTURAL_CHECK", "section": "发布前自检", "absent": [], "needles": [
+        "还必须走一遍 skill creator",
+        "管该本自带的围栏与参数",
+        "管结构与可读性",
+        "去绕 HTTP 或自己重写脚本",
+        "quick_validate.py <技能目录>",
+        "不许留着告警发布交差",
     ]},
 ]
 

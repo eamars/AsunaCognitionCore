@@ -327,14 +327,13 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
    `list_routes=yes` lists every ready workflow (the filter on `unsupplied` and on text-to-image or source gone):
    `pictures: {name: 'required' | 'optional'}` beside `source_image`, with the workflow's own description of the
    picture after a colon when it has one, and `needs: ['还要：<name>']` (§9) for an input the workflow requires that
-   `generate_image` does not send (`integration_image.CARRIED`). Whether any route has such an input today is in
-   neither reading (both record picture parameters only). `IMAGE_WORKFLOW_TAKES_NO_SOURCE` now says which pictures the
+   `generate_image` does not send (`integration_image.CARRIED`); on the service's listing of 2026-11-26 no route has
+   one, so `needs` is shown on none. `IMAGE_WORKFLOW_TAKES_NO_SOURCE` now says which pictures the
    route takes (its old note said "draws only from text", false for a face-reference route). Cost: the action brain's
-   tools +202 characters declared (17,943 -> 18,145, budget raised); the listing, on a stub shaped like the reading
-   with synthetic guidance, 20,189 -> 24,619 characters (18 -> 22 routes, about 1,100 each; 25,427 with every
-   picture's description at its 200-character clip; at an estimated four characters a token about 6,000 tokens, half
-   of what DSH carries inline, 12,500, `maxInlineTokens`; the real guidance's length not measured), its note +80
-   (204 -> 284). Not built: the routes' other settings (her skill reads `mask_channel`, `grow_mask_by` and `denoise` on
+   tools +202 characters declared (17,943 -> 18,145, budget raised); the listing, measured on the service's own
+   metadata (2026-11-26 18:3x, `list_workflows` of main and of this landing on the same listing, nothing drawn),
+   24,179 -> 29,840 characters (18 -> 22 routes; at an estimated four characters a token about 7,500 tokens, inside
+   the 12,500 that DSH carries inline, `maxInlineTokens`), its note +80 (204 -> 284). Not built: the routes' other settings (her skill reads `mask_channel`, `grow_mask_by` and `denoise` on
    the inpaint routes and `input_fit` on face-reference): `options` still takes only `steps`, `cfg`, `sampler_name`
    and `scheduler`, so the service's defaults apply.
 7. **§6**, the classifier's line.

@@ -406,9 +406,15 @@ def video_snapshot(data):
     """(png bytes, words) for a video, or (None, {'error': words}): as `animated.video_snapshot`, cut in the video
     child while the Host runs (in this process only where no Host ever started one: tests and tools)."""
     from . import animated
-    side = VIDEO
-    if side is None:
+    if VIDEO is None:
         return animated.video_snapshot(data)
+    return _video_job({'job': 'video'}, data, VIDEO_DEADLINE, VIDEO_BUDGET)
+
+
+def _video_job(header, data, deadline, budget):
+    """One job of the video child: (its picture, its words), or (None, {'error': words}) for the machine's state or the
+    child's failure, in the video side's words."""
+    side = VIDEO
     if not side['enabled']:
         return None, {'error': VIDEO_OFF}
     if side['missing']:
@@ -416,11 +422,11 @@ def video_snapshot(data):
     if side['child'] is None:
         return None, {'error': VIDEO_NOT_STARTED}
     try:
-        answer, sheet = side['child'].call({'job': 'video'}, data, VIDEO_DEADLINE, VIDEO_BUDGET)
+        answer, picture = side['child'].call(header, data, deadline, budget)
     except StartFailed:
         return None, {'error': VIDEO_NOT_STARTED}
     except Timeout:
         return None, {'error': VIDEO_TIMEOUT}
     except (Died, JobError):
         return None, {'error': VIDEO_CRASHED}
-    return (sheet or None), answer.get('words') or {}
+    return (picture or None), answer.get('words') or {}

@@ -119,6 +119,7 @@ web_fetch's save (ADR-120 D2): an address's bytes into the task's folder and its
 - def `saved` — A row web_fetch saved.
 - def `name_for` — The file name: `save`'s when it gives one, else the address's last part, made safe, with the extension of its type when it has none.
 - def `save` — web_fetch with `save`: the fetched bytes (`body`: the plugin's {url, status, content_type, data (base64)}) written to /task/downloads/ and registered in the task's own conversation.
+- def `conversation_words` — The conversation a task or a turn is bound to (`scene_id`), as she reads it (People.scene_title).
 
 ## `action_tiers`
 

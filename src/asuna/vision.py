@@ -15,6 +15,9 @@ ref 也可以是一个本机文件路径（绝对路径，或行动任务自己�
 哪些图读得到看同一个来路（own_files.py）：来路许 ``all_files`` 的（默认家里与外面托、家里办），任何对话 REF_DAYS
 天内的 ref（拉下来的副本也只留这么久）与存好的图（不限天数，不问是谁的、在哪个对话）都读得到，字节还在就行；只许
 ``own_files`` 的（默认外面），只读这个对话自己的（含联动的）。别的对话的图和没有的图回同一句话，另记一笔（access.record）。
+
+视频的 ref 不带 ``at`` 是一张按时间截的格子图；带 ``at``（第几秒）就按 ref 重新拉一次视频，在视频子进程里截那一刻的一帧
+（video_frame），存成这个对话自己的一张图（来源 ``frame:<ref>:<毫秒>``，同一 ref 同一 at 只存一份），她看到的就是这一帧。
 """
 from __future__ import annotations
 import base64
@@ -43,7 +46,8 @@ IMAGE_MEDIA_TYPES = ('image/png', 'image/jpeg', 'image/webp', 'image/gif')
 # 在拉取这一步拦下 5 MiB 的照片只是我们自己加的围栏，不是路由的能力边界。
 DEFAULT_MAX_BYTES = 8 * 1024 * 1024
 HARD_MAX_BYTES = 8 * 1024 * 1024
-# A video is downloaded only to cut its contact sheet (animated.video_snapshot); its bytes are never stored.
+# A video is downloaded only to cut its contact sheet (animated.video_snapshot), or one frame of it (`at`, video_frame);
+# its bytes are never stored.
 VIDEO_MAX_MB = 32
 VIDEO_MAX_BYTES = VIDEO_MAX_MB * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 15
@@ -620,15 +624,18 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
     附件与存好的图读到哪些对话（own_files.reach）；``by`` 是这一次所在的回合或任务，表拒的那一笔记在它名下
     （access.record）；``task_dir`` 是本任务自己的工作区，只有它有 ``/task/`` 这种写法。"""
     args = args if isinstance(args, dict) else {}
-    unknown = set(args) - {'ref', 'max_bytes'}
+    unknown = set(args) - {'ref', 'max_bytes', 'at'}
     if unknown:
-        raise ValueError('READ_IMAGE_ARGUMENT_DENIED: 不认识的参数 %s；只收 ref' % '、'.join(sorted(unknown)))
+        raise ValueError('READ_IMAGE_ARGUMENT_DENIED: 不认识的参数 %s；只收 ref 和 at' % '、'.join(sorted(unknown)))
     ref = args.get('ref')
     if not isinstance(ref, str) or not 4 <= len(ref) <= PATH_CHARS:
         raise ValueError('INVALID_READ_IMAGE_REF: ref 要是 4..%d 字的字符串，给的是 %s；照抄图旁标的 ref（att-…）、'
                          '一张存好的图的 artifact_id（blob-…），或家里可用的本机图片路径'
                          % (PATH_CHARS, '%d 字' % len(ref) if isinstance(ref, str)
                             else '没给' if ref is None else type(ref).__name__))
+    at = args.get('at')
+    if at is not None and (isinstance(at, bool) or not isinstance(at, (int, float)) or not 0 <= at < float('inf')):
+        raise ValueError(AT_INVALID % echoed(at))
     # The size cap is the program's (vision.max_bytes); DSH scales every picture for the model. A caller's own
     # max_bytes only refused pictures over its guess (2026-10-06: 20 KB-200 KB guesses on stickers), so an old
     # call that still sends one is read with the program's cap.
@@ -642,6 +649,8 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
     reach = own_files.reach(config, origin)
     if reach is None:
         access.require(store, by, origin, 'own_files', tool, config)
+    if at is not None and (ARTIFACT_REF.fullmatch(ref) or path_form(ref)):
+        raise ValueError(AT_NOT_VIDEO)
     if ARTIFACT_REF.fullmatch(ref):
         return stored_image(store, blobs, task, config, ref, max_bytes, offered, origin=origin, by=by, tool=tool)
     if path_form(ref):
@@ -661,6 +670,10 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
         raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在这个对话最近 %d 天的图里；%s'
                          % (echoed(ref), REF_DAYS, '最近的是 ' + '、'.join(recent) + '，ref 照抄其中一个' if recent
                             else '最近 %d 条消息里没有图，%s' % (SCENE_SCAN_MESSAGES, GIVE_UP)))
+    if at is not None:
+        if entry['type'] != 'video':
+            raise ValueError(AT_NOT_VIDEO)
+        return video_frame(store, blobs, task, config, entry, at, route=route, origin=origin, by=by, tool=tool)
     if not entry.get('pullable'):
         raise ValueError('IMAGE_NOT_PULLABLE: 这张图拉不了（%s）；%s'
                          % (entry.get('not_pullable_because') or NO_CAUSE, GIVE_UP))
@@ -715,6 +728,64 @@ def elsewhere(store, task, config, ref, entries=None):
     is answered as a missing one and recorded apart (access.record)."""
     entry, _ = attachment_by_ref(store, task, config, ref, True, entries)
     return bool(entry and entry.get('wide_reach'))
+
+
+# read_image's `at` (ADR-120 D4): one frame of a video, kept as a picture of this conversation she can send.
+FRAME_SOURCE = 'frame:'                 # source id `frame:<the video's ref>:<at in ms>` (media_life.POLICY)
+AT_FIELD = '只对视频：写第几秒（比如格子图上标的 2.5），给你那一刻的一帧，存成这个对话的一张图，可以发出去；不写给的是格子图。'
+AT_INVALID = 'INVALID_READ_IMAGE_AT: at 写视频里的第几秒，0 或更大的数；给的是 %s'
+AT_NOT_VIDEO = 'READ_IMAGE_AT_NOT_VIDEO: at 只对视频有用，这个 ref 不是视频'
+CUT = '截好了：视频第 %s 秒这一帧（%d×%d），记在%s'
+# How she sends it from where she read it: the doing side offers it; at home her speak takes any picture she may send
+# there; elsewhere her speak takes only what this turn lists, and a frame cut now is not on that list.
+FRAME_SEND = {'executor': '要发就用 offer_file，artifact_id 写这个。',
+              'home': '要发就用 speak 的 picture，写这个 id。',
+              'listed': '这里能发的图里没有它：要发，先让任务用 offer_file 登记这个 id。'}
+
+
+def video_frame(store, blobs, task, config, entry, at, *, route='executor', origin='outside', by=None,
+                tool=READ_IMAGE_TOOL_NAME):
+    """read_image of a video with `at`: the one frame `at` seconds in, cut in the video child (media_children) from the
+    video pulled again by its ref, and stored as a picture of this conversation (its own files, `own_files`) through the
+    picture registration, source `frame:<ref>:<ms>`. The same `at` on the same ref here reads that row back: no second
+    copy, no second download. What she reads: the frame itself, CUT with its id, and how to send it (FRAME_SEND)."""
+    from PIL import Image
+    from io import BytesIO
+    from . import access
+    from .blobs import BlobStore
+    from .downloads import conversation_words
+    from .outbound_media import register_imported_image
+    access.require(store, by, origin, 'own_files', tool, config)      # the frame becomes one of this conversation's own
+    millis = round(at * 1000)
+    source = '%s%s:%d' % (FRAME_SOURCE, entry['ref'], millis)
+    row = artifact_records.of_kind(store, 'image', state='DONE', storage=artifact_records.STORED,
+                                   scope=task['scope_key'], source=source).first()
+    if row:
+        data = (blobs or BlobStore(store)).get(row['_id'], row['scope_key'], operator=True)
+        artifact_id, digest = row['_id'], row['sha256']
+    else:
+        if not entry.get('pullable'):
+            raise ValueError('IMAGE_NOT_PULLABLE: 这张图拉不了（%s）；%s'
+                             % (entry.get('not_pullable_because') or NO_CAUSE, GIVE_UP))
+        full = {**entry, **media_source(store, task, config, entry)}
+        video = pull_bytes(full, config, video=True)[0]
+        data, words = media_children.video_frame(video, at)    # in the video child while the Host runs
+        if data is None:
+            raise ValueError(words['error'] + ('' if 'seconds' in words else '；' + GIVE_UP))
+        made = register_imported_image(store, task['scope_key'], data, source=source) or {}
+        if not made.get('registered'):
+            raise ValueError('VIDEO_FRAME_NOT_STORED: 这一帧截出来了，但没存下（%s）；不是参数的问题'
+                             % (made.get('reason') or NO_CAUSE))
+        artifact_id, digest = made['artifact_id'], made['sha256']
+    width, height = Image.open(BytesIO(data)).size
+    media_type = sniff_media_type(data)
+    moment = ('%.3f' % (millis / 1000)).rstrip('0').rstrip('.')
+    send = 'executor' if route != 'character' else 'home' if origin == 'home' else 'listed'
+    return {'ref': entry['ref'], 'at': at, 'scene_id': task['scene_id'],
+            'cut': CUT % (moment, width, height, conversation_words(store, task)),
+            'artifact_id': artifact_id, 'sha256': digest, 'media_type': media_type, 'bytes': len(data),
+            'image': {'media_type': media_type, 'data': base64.b64encode(data).decode()},
+            'visual': 'awaiting_attachment', 'note': FRAME_SEND[send]}
 
 
 def path_image(store, blobs, task, config, ref, max_bytes=None, origin='outside', task_dir=None, *, by=None,
@@ -929,7 +1000,8 @@ READ_IMAGE_TOOL = {
                     '没调用就是没看过。家里还能看你别的对话里 7 天内的图，也能读盘上的图（ref 写绝对路径，'
                     '或行动任务工作区里的 /task/… 路径）。视频的 ref 也认：给你按时间截的一张格子图（没有声音），'
                     '视频超过 %d MB 不下载。看不了会照实说原因。' % VIDEO_MAX_MB),
-    'parameters': {'ref': {'type': 'string', 'required': True}}}
+    'parameters': {'ref': {'type': 'string', 'required': True},
+                   'at': {'type': 'number', 'description': AT_FIELD}}}
 
 
 def picture_to_edit(store, blobs, task, config, ref, *, task_dir=None, origin='outside', by=None):

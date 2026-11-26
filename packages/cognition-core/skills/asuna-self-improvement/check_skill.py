@@ -31,6 +31,13 @@ to redden once a fact advances.
 O pins the dual check v19 added to that same cell: after editing any skill body both the
 book's own check_skill.py and skill creator's read-only structural validation must run,
 their findings go back verbatim, and a warning never rides into a publish.
+P pins the ruler v20 added right after that dual-check cell: after a publish only that
+project's own `state` and `packageRoot` in activation.json count. The copies lying on disk
+(installed node_modules, the frozen snapshot, the candidate root) prove nothing whether they
+match byte-for-byte or not -- the read path takes packageRoot joined with skills via
+skillDirectories(), and `effective()` only hands the installed copy to it when activation.json
+has no usable selection (`projects[id]` missing, or its state is HOST_RESTART_REQUIRED); in
+that state the old installed body is used silently, with no error.
 """
 import hashlib
 import os
@@ -136,6 +143,15 @@ GROUPS = [
         "去绕 HTTP 或自己重写脚本",
         "quick_validate.py <技能目录>",
         "不许留着告警发布交差",
+    ]},
+    # v20: 发布后判生效只认 activation.json 里该项目那一格的 state 与 packageRoot（发布前自检 那一节）
+    {"name": "P_ACTIVATION_ROOT_IS_THE_RULER", "section": "发布前自检", "absent": [], "needles": [
+        "`activation.json` 里该项目那一格的 `state` 与 `packageRoot` 两个键",
+        "这些副本之间字节相同或不同都不算凭据",
+        "`skillDirectories()` 取的 `packageRoot` 拼 `skills`",
+        "`projects[id]` 存在且 `state` ≠ `HOST_RESTART_REQUIRED` 就用它",
+        "拿已装那一份的 sha 判「没生效」＝拿错尺",
+        "静默回落到已装那份旧正文",
     ]},
 ]
 

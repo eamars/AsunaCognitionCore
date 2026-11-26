@@ -100,6 +100,7 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 
 - 退出码 0 才算绿；红的时候最后一行写着失败的用例名。
 - **这一本正文自己的钉**：`python3 packages/cognition-core/skills/asuna-self-improvement/check_skill.py`（在候选根跑；已装的那一份里同路径去掉 `packages/cognition-core/` 前缀，也可以直接拿已装正本当参数喂它）。它只判字面在不在，不跑任何东西，且**没有旗标**：`argv[1]` 一律被当成 SKILL.md 的路径，喂 `--help` 会死在 `FileNotFoundError`（rc 1，11-21 现读），用法读脚本开头那段 docstring。体例是**每组规矩配自己那一套钉，钉字面不钉我的意图：删掉哪一格就红哪一组，各组不会合成一发**。**组数不在正文里写死**（另有一组自检钉专钉这条）——数从当拍脚本输出读：`GROUPS <n>` 是当拍脚本里分了几组，`RESULT 通过数/总数` 是钉数，`RED_GROUPS` 是红了哪几组。规矩改了顺手补那一组的钉，别攒到下一趟。改完任何一本技能的正文之后，除了跑那本自带的 `check_skill.py`，还必须走一遍 skill creator 验技能自身的结构合规性。两样各管什么：`check_skill.py` 管该本自带的围栏与参数；skill creator 管结构与可读性——判「哪一格会让下一次调用它的 agent 读不明白，去绕 HTTP 或自己重写脚本」。只读校验走它自带的 `quick_validate.py <技能目录>`（就地读一份已有技能，不为它重写脚本、不绕 HTTP；它的评测与描述优化那一半要起 `claude -p`，不算这一格的校验步骤）。报出的合规项与告警原样交回；有结构问题先改掉再发布，不许留着告警发布交差。
+- **发布之后判「我改的东西生效没有」，只认 `activation.json` 里该项目那一格的 `state` 与 `packageRoot` 两个键**（`projects.<project>` 那一格，它不可用时才落到 `active.<project>`）：从那一格的 `packageRoot` 往下读要判的那份文件；`state` 只有 `HOST_RESTART_REQUIRED` 才算没上线。盘上同一份内容往往躺着三四个副本——已装的 `node_modules\@asuna\<包>\…`、`development\<project>\frozen\<candidate>\…`、`work\self-development\<project>\…` 候选根——**这些副本之间字节相同或不同都不算凭据**，别拿它们互相比对。core 技能正文的读路径走 `skillDirectories()` 取的 `packageRoot` 拼 `skills`；`node_modules` 那一份只在 `activation.json` 里没有可用 selection 时被兜底吃到，可用与否判在 `effective()`：`projects[id]` 存在且 `state` ≠ `HOST_RESTART_REQUIRED` 就用它。**拿已装那一份的 sha 判「没生效」＝拿错尺。** 残余脆弱：真掉进「`activation.json` 里没有可用 selection」那种状态，读路径**静默回落到已装那份旧正文**，不报错，只有那两个键能逮到。
 - **改技能的收尾三格（2026-11-23 本机实测；它是上面那条的收尾动作，不另起一套）**：这一本自检绿只说明「我写的字面和我写的钉一致」——判据和正文都是我自己产的，那个绿本身不证明有护栏。写完正文必须过这三格，哪格没过就在交回里写明哪格没过：
   - **① 新口径当趟配钉**：正文新增的每一格口径，同一趟就在随书自检脚本里给它配上钉，形状是 `(钉名, 关键词)`：钉名 ＋ 那段正文里能照抄的字面（这本是 `GROUPS` 里一组 `needles`，人格包那本叫 `BODY_PINS`，两本同一形状）。配不上钉的一格，交回里必须明写「这一格没护栏」，不许拿自检全过当绿灯。
   - **② 反证拆到新写的每一段**：临时拆掉我这一趟新写的某一段（拆之前记下那一份的 sha256，跑完逐字节还原），自检要红，而且**红的那枚钉要和那段对得上**；几段拆几发，各拆各的，不是一发全删。**只拆老字面能红，不算验过新块**——老字面本来就有钉，拆它当然红；拆我新写的段不红，那才是要报的事。
@@ -234,6 +235,9 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 来路：2026-10-20 12:13 那笔 `ede4e2b0` 是发布自动提交，父提交 `f9bc5f20`（`git merge-base --is-ancestor f9bc5f20 ede4e2b0` → rc=0），`--stat` 显示这一笔改的是 `packages/personas/<name>/persona-model.json`（1 增 1 删），而它自己的提交正文说它没动那个人格包目录的镜像（这一节两处 `<name>` 都是泛化写法：正文原句带的是具体那个人格包的路径，不是逐字照抄，所以这里不放引号）——正文与 `--stat` 打架的就是这一格。发布任务：`task-2a3c346e608f1837268c9a1421d9b66d`。
 
 ## 版本
+v20（2026-11-27 01:42）：「发布前自检」那一节、紧接 v19 那条双验之后加一格发布后判生效的尺子：只认 `activation.json` 里该项目那一格的 `state` 与 `packageRoot` 两个键；盘上那几个副本（已装的 `node_modules\@asuna\…`、frozen 快照、候选根）之间字节相同或不同都不算凭据；读路径走 `skillDirectories()` 取的 `packageRoot` 拼 `skills`，`node_modules` 那份只在 `effective()` 判没有可用 selection 时兜底吃到，那种状态静默回落到旧正文、不报错。这一趟给这一格配一组钉（脚本里 P 组，钉数与组数从当拍脚本输出读），并当场真跑了一发 `quick_validate.py`（v19 那条的第一次执行）。旧内容一条没删。
+
+
 v19（2026-11-26 23:45）：「发布前自检」那一节、「这一本正文自己的钉」那条末尾并入一格硬流程：改完任何一本技能的正文之后，除了跑那本自带的 `check_skill.py`，还必须走一遍 skill creator 验技能自身的结构合规性。两样分工写死：`check_skill.py` 管该本自带的围栏与参数，skill creator 管结构与可读性——哪一格会让下一次调用它的 agent 读不明白、去绕 HTTP 或自己重写脚本；只读校验入口写死成它自带的 `quick_validate.py <技能目录>`；报出的合规项与告警原样交回，有结构问题先改掉再发布，不许留着告警发布交差。这一趟给这一格配一组钉（脚本里 O 组，钉数与组数从当拍脚本输出读）。旧内容一条没删。
 
 

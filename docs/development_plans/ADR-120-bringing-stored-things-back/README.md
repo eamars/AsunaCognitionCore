@@ -238,7 +238,19 @@ the action brain's drawing tool.
 |---|---|---|---|
 | R1 | `list_routes` lists the filtered routes too, each with the pictures it still needs | Take it | Each such route is listed with 「还要：<slot>」 per missing slot (§9); with R2 built, a slot `pictures` can fill is no longer missing. |
 | R2 | A required picture slot other than the source open | Take it | `generate_image` gains `pictures: {<slot>: <ref or id>}` for the route's other required `*_image` slots; each is resolved through `picture_to_edit` with the same table as `source_image` (D1's resources), size-capped as `source_image` is, uploaded beside it and forgotten after the job as it is (`integration_image.py:213-230`, `341-360`). A mask she draws with `render_svg` is a picture of this conversation like any other. |
-| R3 | Repeatable picture slots | Only after the service is shown to have a ready edit route driven by several pictures | Read the service's workflow list (metadata only, no drawing) at the build's start; no such route: R3 is dropped with that reading as its reason. |
+| R3 | Repeatable picture slots | Only after the service is shown to have a ready edit route driven by several pictures | Dropped 2026-11-26 by the reading: no route declares a picture parameter that takes several pictures (each takes one, and R2 fills every declared one by name); a route that does is a new page. |
+
+R3's two readings (2026-11-26, the service's workflow list, metadata only, nothing drawn), both stopping at what the
+schema declares:
+- Big sis's, 17:49 (local evidence `.runtime/private/adr120/r3-reading-1126.md`, 3.5 KB): 22 routes, all ready. 2 draw
+  from text only; 16 take `input_image` only (one edit route requires it, 15 text-to-image or image-to-image routes
+  take it optionally); 2 inpaint routes require `input_image` and `mask_image`; 2 face-reference routes require
+  `face_image` and declare neither `input_image` nor a text-to-image mode. Every picture parameter is a single string.
+- Hers (agent line 0712, 18:05), of the same listing (22 routes, 422,935 bytes, sha256
+  `205628c20aa36c4cc230a742186d9ddc5ac394f596e6f950df67f517012a83ac`), the whole `parameter_schema` walked: no `array`
+  type, no `items`, `maxItems` or `minItems`, no array default; the picture parameters are only `input_image` (18
+  routes), `mask_image` (2) and `face_image` (2), each a single string. Routes with a required picture: 5 (the 2
+  inpaint, `input_image` and `mask_image`; the 2 face-reference, `face_image` only; 1 edit, `input_image`).
 
 ## 8. Landings
 
@@ -300,7 +312,31 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
    `/task/downloads/` folder is a folder of the task like any other (no deny-execute entry, its files not removed with
    the stored bytes), and the address's `Content-Disposition` name is not read.
 5. **D4.** A frame at a time.
-6. **R1 and R2** (R3 read first).
+6. **R1 and R2** (R3 dropped by its reading, §7.2). `generate_image` takes `pictures`, `{name: ref or artifact_id}`,
+   at most 4 and only with `workflow` (without one the service picks a text-to-image or a one-picture edit route,
+   which takes no other picture): a workflow's other declared `*_image` parameters, required and optional alike
+   (`integration_image.picture_slots`). Each is read as `source_image` is (`picture_to_edit`: `read_image`'s fence for
+   the task's origin, `own_files`, `all_files` or `disk`, and its size cap; outside, another conversation's picture
+   answers as a missing one), uploaded beside the source under the same name prefix, passed as that parameter and
+   removed after the job (a queued job's are swept by a later call, as the source is). Refused before any upload: a
+   name the workflow does not declare (`IMAGE_PICTURE_NOT_IN_WORKFLOW`, with the pictures it takes) and a required
+   picture not given (`IMAGE_WORKFLOW_NEEDS_MORE_PICTURES`, kept with new words; it names `source_image` too when that
+   is also missing). A workflow with no `input_image` and no text-to-image mode draws from the prompt and its pictures
+   (the face-reference routes). A drawing made from someone else's picture goes back where the first such picture came
+   from (the source first), as an edit of it does; her own mask or face picture leaves the drawing hers.
+   `list_routes=yes` lists every ready workflow (the filter on `unsupplied` and on text-to-image or source gone):
+   `pictures: {name: 'required' | 'optional'}` beside `source_image`, with the workflow's own description of the
+   picture after a colon when it has one, and `needs: ['还要：<name>']` (§9) for an input the workflow requires that
+   `generate_image` does not send (`integration_image.CARRIED`). Whether any route has such an input today is in
+   neither reading (both record picture parameters only). `IMAGE_WORKFLOW_TAKES_NO_SOURCE` now says which pictures the
+   route takes (its old note said "draws only from text", false for a face-reference route). Cost: the action brain's
+   tools +202 characters declared (17,943 -> 18,145, budget raised); the listing, on a stub shaped like the reading
+   with synthetic guidance, 20,189 -> 24,619 characters (18 -> 22 routes, about 1,100 each; 25,427 with every
+   picture's description at its 200-character clip; at an estimated four characters a token about 6,000 tokens, half
+   of what DSH carries inline, 12,500, `maxInlineTokens`; the real guidance's length not measured), its note +80
+   (204 -> 284). Not built: the routes' other settings (her skill reads `mask_channel`, `grow_mask_by` and `denoise` on
+   the inpaint routes and `input_fit` on face-reference): `options` still takes only `steps`, `cfg`, `sampler_name`
+   and `scheduler`, so the service's defaults apply.
 7. **§6**, the classifier's line.
 
 ## 9. Her words (read by her 2026-11-25, agent line 0668)

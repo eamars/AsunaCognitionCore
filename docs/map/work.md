@@ -441,21 +441,25 @@ Trusted one-shot image generation, run only inside the managed integration names
 - def `guidance` — How this workflow wants to be prompted and what it is for, in the service's own words.
 - def `lora_defaults` — {id: default strength} of the LoRAs this workflow declares (parameter_schema loras.properties), else None.
 - def `pose_info` — {'pose': bool, 'pose_strength': default} read from parameter_schema; the strength only where it is declared.
-- def `list_workflows`
+- def `list_workflows` — Every ready workflow, with the pictures it takes and, where it requires one, what generate_image cannot give.
 - def `text_to_image`
 - def `takes_source` — The workflow declares the uploaded picture it works from (parameter_schema input_image).
 - def `needs_source`
-- def `unsupplied` — Pictures the workflow requires besides the source (an inpaint mask…): this client cannot give them.
-- def `choose_workflow` — The named workflow when it is ready and fits the request (a source picture or none); otherwise the service's own choice: an edit route for a source picture, a text-to-image one without.
-- def `upload` — The source picture uploaded under its content name; returns the name the workflow takes as input_image.
-- def `forget` — The uploaded source removed from the service again; a failure is said, never raised.
+- def `picture_slots` — {name: 'required' | 'optional'} of the pictures the workflow declares besides the source (an inpaint mask, a face): generate_image's `pictures`.
+- def `shown_slot` — A picture slot as the list shows it: required or optional, and the workflow's own description when it has one.
+- def `unsupplied` — The required pictures besides the source that were not given.
+- def `uncarried` — Inputs the workflow requires that generate_image never sends (none is a picture).
+- def `not_taken` — A picture the workflow does not take, refused in words with the pictures it does take (the source first).
+- def `choose_workflow` — The named workflow when it is ready and fits the request (a source picture or none, the other pictures it takes, each it requires given); otherwise the service's own choice: an edit route for a source picture, a text-to-image one without.
+- def `upload` — A picture (the source, or one of `pictures`) uploaded under its content name; returns the name the workflow takes for it.
+- def `forget` — An uploaded picture removed from the service again; a failure is said, never raised.
 - def `search_poses` — GET /project/poses: each pose with its id, names, people and view ids (nothing is drawn).
 - def `lora_check` — A LoRA id the workflow does not declare is refused here, with the ids it does.
 - def `parameters` — Only the fields the workflow declares; anything else is refused here, as the service would.
 - def `warning` — A service warning in its own words: its code and message, and the sizes when it changed the source (input_downscaled, input_first_frame, over_pixel_budget…).
 - def `first_view`
 - def `run`
-- def `sweep` — Sources this client uploaded that outlived their job (one left for a queued job, or a run cut short).
+- def `sweep` — Pictures this client uploaded that outlived their job (left for a queued job, or a run cut short).
 - def `collect` — Wait for the job and fetch its picture into /data/artifact.bin.
 - def `main`
 

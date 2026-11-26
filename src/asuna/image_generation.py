@@ -13,7 +13,7 @@ import re
 import secrets
 
 from . import clock
-from .integration_image import SOURCE_PREFIX
+from .integration_image import SOURCE_PARAMETER, SOURCE_PREFIX
 from .integration_import import resolve_target, validate_target_path
 
 IMAGE_ENDPOINT = 'image'
@@ -22,6 +22,7 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024        # the namespace's file-size cap and the
 DEFAULT_TIMEOUT, MIN_TIMEOUT, MAX_TIMEOUT = 180, 30, 300
 PROMPT_CHARS = 8000
 SOURCE_REF_CHARS = 512
+PICTURES_MOST = 4                        # a route's other pictures in one call (each one picture, as the source)
 POSE_ANGLES = ('front', 'diag', 'side', 'high', 'low')
 POSE_QUERY_CHARS, POSE_REF_CHARS, LORA_MAX = 80, 512, 12
 OPTION_RULES = {'steps': ('int', 1, 100), 'cfg': ('number', 0, 30),
@@ -71,6 +72,9 @@ GENERATE_IMAGE_TOOL = {
                    'poses_limit': {'type': 'integer'},
                    'job': {'type': 'string'},
                    'source_image': {'type': 'string'},
+                   'pictures': {'type': 'object', 'additionalProperties': True,
+                                'description': 'other pictures a route takes, by the names list_routes=yes shows '
+                                               '(mask_image…): {name: ref or artifact_id}; with workflow'},
                    'workflows': {'type': 'boolean'},
                    'target_relative_path': {'type': 'string'},
                    'timeout': {'type': 'integer'}}}
@@ -100,6 +104,11 @@ def _given(value):
     return '给的是 %s %s' % (type(value).__name__, str(value)[:40])
 
 
+INVALID_PICTURES = ('pictures 要是对象 {名字: 图的 ref 或 artifact_id}：名字照抄 list_routes=yes 里这条路线 pictures 列的'
+                    '（比如 mask_image），原图写在 source_image；最多 %d 张，%s。')
+PICTURES_WITHOUT_WORKFLOW = 'pictures 要配上 workflow：不写 workflow 时服务只挑文生图或改一张图的路线，它们不收 pictures 里的图。'
+PICTURES_UNAVAILABLE = '这里读不到图，pictures 里的图给不了。'
+PICTURE_NOT_A_PICTURE = 'pictures 里的 %s 读到的不是 png/jpeg/gif/webp 图片。'
 OPTION_WORDS = {'steps': 'steps 要是 1..100 的整数', 'cfg': 'cfg 要是 0..30 的数',
                 'sampler_name': 'sampler_name 要是小写字母、数字或 _（80 字以内）',
                 'scheduler': 'scheduler 要是小写字母、数字或 _（80 字以内）'}
@@ -232,6 +241,15 @@ def validate(args):
     if source is not None and (not isinstance(source, str) or not 4 <= len(source) <= SOURCE_REF_CHARS):
         return None, _error('INVALID_SOURCE_IMAGE', note='source_image 是一张图的 ref（图旁标的 att-…）或 artifact_id'
                                                          '（blob-…），和 read_image 收的一样，%s。' % _given(source))
+    pictures = args.get('pictures')
+    if pictures is not None and pictures != {}:
+        if (not isinstance(pictures, dict) or len(pictures) > PICTURES_MOST
+                or not all(isinstance(slot, str) and re.fullmatch(r'[a-z][a-z0-9_]{0,40}_image', slot)
+                           and slot != SOURCE_PARAMETER for slot in pictures)
+                or not all(isinstance(ref, str) and 4 <= len(ref) <= SOURCE_REF_CHARS for ref in pictures.values())):
+            return None, _error('INVALID_PICTURES', note=INVALID_PICTURES % (PICTURES_MOST, _given(pictures)))
+        if 'workflow' not in request:
+            return None, _error('PICTURES_WITHOUT_WORKFLOW', note=PICTURES_WITHOUT_WORKFLOW)
     return request, None
 
 
@@ -244,11 +262,38 @@ def extension(data):
     return None
 
 
+LISTED = ('按 best_for/not_for 挑路线，用它要的 style 和语言写提示词（多数要英文）；画时把 workflow 填上；标着 source_image '
+          '的路线是改一张图的，写上 source_image；带 pictures 的路线还收别的图，按它列的名字写 pictures={名字: 图的 ref 或 '
+          'artifact_id}，标着 required 的要给；路线带 loras 就按它列的 id 写 loras={id: 强度}（不写按默认强度自动用上），'
+          'pose 为 true 的路线才收 pose（先 poses=<搜索词> 取 view id）。')
+STILL_NEEDED = 'needs 里「还要：」后面那样东西，generate_image 给不了。'
+
+
+def _read(source, ref, slot=None):
+    """(picture, None) or (None, error): a picture read with the task's own fence (`source`), for source_image or for
+    one of `pictures` (its `slot`), with its kind and the name it is uploaded under."""
+    if source is None:
+        return None, (_error('SOURCE_IMAGE_UNAVAILABLE', note='这里读不到原图，改图做不了；只从文字画就去掉 source_image。')
+                      if slot is None else _error('PICTURES_UNAVAILABLE', note=PICTURES_UNAVAILABLE))
+    try:
+        picture = source(ref)
+    except (ValueError, PermissionError) as exc:
+        return None, (_error('SOURCE_IMAGE_NOT_READABLE', detail=str(exc)[:400]) if slot is None
+                      else _error('PICTURE_NOT_READABLE', picture=slot, detail=str(exc)[:400]))
+    kind = extension(picture['data'])
+    if kind is None:
+        return None, (_error('SOURCE_IMAGE_NOT_A_PICTURE', note='source_image 读到的不是 png/jpeg/gif/webp 图片；换一张。')
+                      if slot is None else _error('PICTURE_NOT_A_PICTURE', picture=slot, note=PICTURE_NOT_A_PICTURE % slot))
+    token = hashlib.sha256(picture['data']).hexdigest()[:12] + '-' + secrets.token_hex(3)
+    return {**picture, 'kind': kind, 'name': '%s%s.%s' % (SOURCE_PREFIX, token, kind)}, None
+
+
 def generate(args, *, runner, workspace, protected=(), register=None, now=None, source=None):
     """One picture into the workspace; failures are the service's or the transport's own words.
 
-    `source(ref)` reads the picture to edit with read_image's own fence and returns {data, register}: `register`
-    files the result where an edit of that picture may go (outbound_media.edit_register)."""
+    `source(ref)` reads a picture (source_image, and each of `pictures`) with read_image's own fence and returns
+    {data, register}: `register` files the result where an edit of that picture may go (outbound_media.edit_register),
+    None for her own."""
     request, failure = validate(args)
     if failure:
         return failure
@@ -262,21 +307,25 @@ def generate(args, *, runner, workspace, protected=(), register=None, now=None, 
             return {'generated': False, **failure}
         if target.exists():
             return _error('TARGET_EXISTS', target_relative_path=relative, note='换一个文件名；生成的图不覆盖已有文件。')
-    picture = None
-    if args.get('source_image') is not None and not request.get('list') and not request.get('job'):
-        if source is None:
-            return _error('SOURCE_IMAGE_UNAVAILABLE', note='这里读不到原图，改图做不了；只从文字画就去掉 source_image。')
-        try:
-            picture = source(args['source_image'])
-        except (ValueError, PermissionError) as exc:
-            return _error('SOURCE_IMAGE_NOT_READABLE', detail=str(exc)[:400])
-        kind = extension(picture['data'])
-        if kind is None:
-            return _error('SOURCE_IMAGE_NOT_A_PICTURE', note='source_image 读到的不是 png/jpeg/gif/webp 图片；换一张。')
-        token = hashlib.sha256(picture['data']).hexdigest()[:12] + '-' + secrets.token_hex(3)
-        request['source'] = {'file': 'source.' + kind, 'name': '%s%s.%s' % (SOURCE_PREFIX, token, kind)}
-        register = picture.get('register') or register
-    result = runner.generate_image(request, **({'source': picture['data']} if picture else {}))
+    picture, others = None, {}
+    if not request.get('list') and not request.get('job'):
+        if args.get('source_image') is not None:
+            picture, failure = _read(source, args['source_image'])
+            if failure:
+                return failure
+            request['source'] = {'file': 'source.' + picture['kind'], 'name': picture['name']}
+        for slot, ref in sorted((args.get('pictures') or {}).items()):
+            others[slot], failure = _read(source, ref, slot)
+            if failure:
+                return failure
+        if others:
+            request['pictures'] = {slot: {'file': slot + '.' + other['kind'], 'name': other['name']}
+                                   for slot, other in others.items()}
+        # The result goes where an edit of the first picture that is not hers may go; else it is hers.
+        register = next((p['register'] for p in (picture, *others.values()) if p and p.get('register')), register)
+    result = runner.generate_image(request, **({'source': picture['data']} if picture else {}),
+                                   **({'pictures': {request['pictures'][slot]['file']: other['data']
+                                                    for slot, other in others.items()}} if others else {}))
     report = result.get('report') or {}
     if result.get('transport_error'):
         return _error('IMAGE_TRANSPORT_FAILED', detail=str(result['transport_error'])[:400],
@@ -285,8 +334,9 @@ def generate(args, *, runner, workspace, protected=(), register=None, now=None, 
         if not report.get('listed'):
             return {k: v for k, v in report.items() if v is not None} or _error(
             'IMAGE_LIST_FAILED', note='生图服务没列出路线，也没给原因；' + AGAIN + '。')
-        return {'workflows': report.get('workflows') or [],
-                'note': '按 best_for/not_for 挑路线，用它要的 style 和语言写提示词（多数要英文）；画时把 workflow 填上；标着 source_image 的路线是改一张图的，写上 source_image；路线带 loras 就按它列的 id 写 loras={id: 强度}（不写按默认强度自动用上），pose 为 true 的路线才收 pose（先 poses=<搜索词> 取 view id）。'}
+        workflows = report.get('workflows') or []
+        return {'workflows': workflows,
+                'note': LISTED + (STILL_NEEDED if any(w.get('needs') for w in workflows if isinstance(w, dict)) else '')}
     if request.get('pose_search'):
         if not report.get('listed'):
             return {k: v for k, v in report.items() if v is not None} or _error(

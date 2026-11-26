@@ -3,7 +3,8 @@
 The action brain supplies a prompt and a few choices; this script supplies the
 sequence of the image service's own agent API (project-comfyui-agent/v1): pick a
 ready text-to-image workflow (the one named, or POST /project/resolve), check the
-options against that workflow's parameter_schema, POST /project/generate, poll
+options and the pictures against that workflow's parameter_schema, upload the
+pictures (POST /upload/image), POST /project/generate, poll
 GET /project/jobs/{prompt_id}, then GET the first /view output. Only the alias
 named in the request is reachable, over its relay; no URL is ever accepted. The
 picture is written to /data/artifact.bin and the report is one JSON line on
@@ -25,8 +26,13 @@ POLL_SECONDS = 2.0
 TEXT_TO_IMAGE = 'text-to-image'
 EDIT_MODE = 'image-edit'                 # the service's input mode for an instruction edit of one picture
 SOURCE_PARAMETER = 'input_image'         # a workflow that works from an uploaded picture declares it
-SOURCE_PREFIX = 'asuna-edit-'            # the name of every source this client uploads (content-addressed)
-SOURCE_KEPT_SECONDS = 3600               # a source older than this has outlived any job that used it
+SOURCE_PREFIX = 'asuna-edit-'            # the name of every picture this client uploads (content-addressed)
+SOURCE_KEPT_SECONDS = 3600               # an upload older than this has outlived any job that used it
+PICTURE_SUFFIX = '_image'                # a workflow's other pictures (mask_image, face_image…): `pictures`
+# What generate_image sends a workflow besides its pictures (image_generation.validate, its options included).
+CARRIED = ('prompt', 'negative_prompt', 'width', 'height', 'seed', 'batch_size', 'loras', 'pose', 'pose_strength',
+           'steps', 'cfg', 'sampler_name', 'scheduler')
+STILL_NEEDS = '还要：%s'                  # §9, her 0668: the name of the one thing generate_image cannot give
 
 
 class Failure(Exception):
@@ -138,14 +144,18 @@ def pose_info(workflow):
 
 
 def list_workflows(service):
+    """Every ready workflow, with the pictures it takes and, where it requires one, what generate_image cannot give."""
     listing = service.json('GET', '/project/workflows')
     out = []
     for workflow in listing.get('workflows') or ():
-        if (isinstance(workflow, dict) and workflow.get('ready') and not unsupplied(workflow)
-                and (text_to_image(workflow) or takes_source(workflow))):
+        if isinstance(workflow, dict) and workflow.get('ready'):
+            slots = picture_slots(workflow)
             out.append({'workflow': workflow.get('id'), 'description': clip(workflow.get('description') or '', 200),
                         **({'source_image': 'required' if needs_source(workflow) else 'optional'}
                            if takes_source(workflow) else {}),
+                        **({'pictures': {slot: shown_slot(workflow, slot, need) for slot, need in slots.items()}}
+                           if slots else {}),
+                        **({'needs': [STILL_NEEDS % name for name in uncarried(workflow)]} if uncarried(workflow) else {}),
                         **guidance(workflow),
                         **({'loras': lora_defaults(workflow), 'loras_note': LORAS_NOTE} if lora_defaults(workflow) else {}),
                         **pose_info(workflow)})
@@ -166,15 +176,49 @@ def needs_source(workflow):
     return SOURCE_PARAMETER in ((workflow.get('parameter_schema') or {}).get('required') or ())
 
 
-def unsupplied(workflow):
-    """Pictures the workflow requires besides the source (an inpaint mask…): this client cannot give them."""
+def picture_slots(workflow):
+    """{name: 'required' | 'optional'} of the pictures the workflow declares besides the source (an inpaint mask, a
+    face): generate_image's `pictures`."""
+    schema = workflow.get('parameter_schema') or {}
+    required = schema.get('required') or ()
+    return {name: 'required' if name in required else 'optional' for name in sorted(schema.get('properties') or {})
+            if name != SOURCE_PARAMETER and name.endswith(PICTURE_SUFFIX)}
+
+
+def shown_slot(workflow, slot, need):
+    """A picture slot as the list shows it: required or optional, and the workflow's own description when it has one."""
+    spec = ((workflow.get('parameter_schema') or {}).get('properties') or {}).get(slot)
+    about = spec.get('description') if isinstance(spec, dict) else None
+    return need + ': ' + clip(about, 200) if isinstance(about, str) and about.strip() else need
+
+
+def unsupplied(workflow, given=()):
+    """The required pictures besides the source that were not given."""
+    return [name for name, need in picture_slots(workflow).items() if need == 'required' and name not in given]
+
+
+def uncarried(workflow):
+    """Inputs the workflow requires that generate_image never sends (none is a picture)."""
     return sorted(name for name in (workflow.get('parameter_schema') or {}).get('required') or ()
-                  if name != SOURCE_PARAMETER and name.endswith('_image'))
+                  if name not in CARRIED and name != SOURCE_PARAMETER and not name.endswith(PICTURE_SUFFIX))
+
+
+NOT_TAKEN = '这条路线不收 %s；它收的图：%s。'
+TEXT_ONLY = '这条路线不收 %s，它只从文字画。'
+NOT_ALL_GIVEN = '这条路线要的图还没给全：%s。'
+
+
+def not_taken(workflow, refused):
+    """A picture the workflow does not take, refused in words with the pictures it does take (the source first)."""
+    named = (['source_image（%s）' % ('required' if needs_source(workflow) else 'optional')] if takes_source(workflow)
+             else []) + ['pictures 里的 %s（%s）' % item for item in picture_slots(workflow).items()]
+    return NOT_TAKEN % (refused, '、'.join(named)) if named else TEXT_ONLY % refused
 
 
 def choose_workflow(service, request):
-    """The named workflow when it is ready and fits the request (a source picture or none); otherwise the service's
-    own choice: an edit route for a source picture, a text-to-image one without."""
+    """The named workflow when it is ready and fits the request (a source picture or none, the other pictures it takes,
+    each it requires given); otherwise the service's own choice: an edit route for a source picture, a text-to-image
+    one without."""
     name, source = request.get('workflow'), bool(request.get('source'))
     if not name:
         query = ({'input_type': 'image', 'input_mode': EDIT_MODE} if source else
@@ -193,25 +237,31 @@ def choose_workflow(service, request):
     workflow = detail['workflow'] if isinstance(detail.get('workflow'), dict) else detail
     if not workflow.get('ready'):
         raise Failure('IMAGE_WORKFLOW_NOT_READY', workflow=name)
-    if unsupplied(workflow):
-        raise Failure('IMAGE_WORKFLOW_NEEDS_MORE_PICTURES', workflow=name, needs=unsupplied(workflow),
-                      note='这条路线还要 %s，generate_image 给不了，所以清单里没有它；换一条 list_routes=yes 里的。'
-                           % '、'.join(unsupplied(workflow)))
+    given = sorted(request.get('pictures') or ())
+    slots = picture_slots(workflow)
+    unknown = [slot for slot in given if slot not in slots]
+    if unknown:
+        raise Failure('IMAGE_PICTURE_NOT_IN_WORKFLOW', workflow=name, pictures=unknown, allowed=sorted(slots),
+                      note=not_taken(workflow, '、'.join('pictures 里的 ' + slot for slot in unknown)))
+    if unsupplied(workflow, given):
+        missing = (['source_image'] if needs_source(workflow) and not source else []) + unsupplied(workflow, given)
+        raise Failure('IMAGE_WORKFLOW_NEEDS_MORE_PICTURES', workflow=name, needs=missing,
+                      note=NOT_ALL_GIVEN % '、'.join(slot if slot == 'source_image' else 'pictures 里的 ' + slot
+                                                    for slot in missing))
     if source and not takes_source(workflow):
-        raise Failure('IMAGE_WORKFLOW_TAKES_NO_SOURCE', workflow=name,
-                      note='这条路线只从文字画，不收原图；改图换一条 list_routes=yes 里标着 source_image 的路线，'
-                           '或不写 workflow 让服务挑。')
+        raise Failure('IMAGE_WORKFLOW_TAKES_NO_SOURCE', workflow=name, note=not_taken(workflow, 'source_image'))
     if not source and needs_source(workflow):
         raise Failure('IMAGE_WORKFLOW_NEEDS_SOURCE', workflow=name,
                       note='这条路线要一张原图：写 source_image（图旁标的 ref 或一张图的 artifact_id）；只想从文字画就换一条路线。')
-    if not source and not text_to_image(workflow):
+    if not source and not given and not text_to_image(workflow):
         raise Failure('IMAGE_WORKFLOW_NOT_TEXT_TO_IMAGE', workflow=name,
                       input_modes=(workflow.get('capabilities') or {}).get('input_modes'))
     return name, workflow
 
 
 def upload(service, source):
-    """The source picture uploaded under its content name; returns the name the workflow takes as input_image."""
+    """A picture (the source, or one of `pictures`) uploaded under its content name; returns the name the workflow
+    takes for it."""
     data = Path(__file__).with_name(source['file']).read_bytes()
     boundary = 'asuna' + hashlib.sha256(data).hexdigest()[:24]
     head = ('--%s\r\nContent-Disposition: form-data; name="overwrite"\r\n\r\ntrue\r\n'
@@ -231,7 +281,7 @@ def upload(service, source):
 
 
 def forget(service, name):
-    """The uploaded source removed from the service again; a failure is said, never raised."""
+    """An uploaded picture removed from the service again; a failure is said, never raised."""
     from urllib.parse import quote
     try:
         status, _headers, _body = service.request('DELETE', '/project/inputs/' + quote(name, safe=''))
@@ -270,9 +320,11 @@ def lora_check(wanted, workflow):
                            % ('、'.join(unknown), '、'.join(sorted(props)) or '（没有）'))
 
 
-def parameters(request, workflow, source_name=None):
-    """Only the fields the workflow declares; anything else is refused here, as the service would."""
-    wanted = {'prompt': request['prompt'], 'batch_size': 1, **({SOURCE_PARAMETER: source_name} if source_name else {})}
+def parameters(request, workflow, source_name=None, pictures=None):
+    """Only the fields the workflow declares; anything else is refused here, as the service would. `pictures` are the
+    uploaded names of its other pictures, by parameter."""
+    wanted = {'prompt': request['prompt'], 'batch_size': 1, **({SOURCE_PARAMETER: source_name} if source_name else {}),
+              **(pictures or {})}
     for key in ('negative_prompt', 'width', 'height', 'seed', 'loras', 'pose', 'pose_strength'):
         if key in request:
             wanted[key] = request[key]
@@ -319,11 +371,17 @@ def run(request, service, *, clock=time.monotonic, sleep=time.sleep):
         report['prompt_id'] = request['job']
         return collect(service, request, report, deadline, clock, sleep)
     name, workflow = choose_workflow(service, request)
-    uploaded = upload(service, request['source']) if request.get('source') else None
-    waiting = False
+    uploaded, waiting = [], False
     try:
+        source, pictures = None, {}
+        if request.get('source'):
+            source = upload(service, request['source'])
+            uploaded.append(source)
+        for slot, picture in sorted((request.get('pictures') or {}).items()):
+            pictures[slot] = upload(service, picture)
+            uploaded.append(pictures[slot])
         queued = service.json('POST', '/project/generate', {'workflow': name, 'client_id': 'asuna',
-                                                            'parameters': parameters(request, workflow, uploaded)})
+                                                            'parameters': parameters(request, workflow, source, pictures)})
         effective = queued.get('effective_parameters') or queued.get('applied_parameters') or {}
         applied = queued.get('applied_parameters') or {}      # loras and pose_strength are listed here, not in effective
         report.update({'workflow': name, 'prompt_id': queued.get('prompt_id'),
@@ -339,14 +397,14 @@ def run(request, service, *, clock=time.monotonic, sleep=time.sleep):
         waiting = failure.report.get('error') == 'IMAGE_JOB_STILL_RUNNING'
         raise
     finally:
-        # The source can be a photo of someone: it does not stay on the service once its job is over. A job still
-        # queued needs it; a later call clears it (sweep).
-        if uploaded and not waiting:
-            forget(service, uploaded)
+        # A picture can be a photo of someone: none stays on the service once its job is over. A job still queued needs
+        # them; a later call clears them (sweep).
+        for item in uploaded if not waiting else ():
+            forget(service, item)
 
 
 def sweep(service, now=None):
-    """Sources this client uploaded that outlived their job (one left for a queued job, or a run cut short)."""
+    """Pictures this client uploaded that outlived their job (left for a queued job, or a run cut short)."""
     try:
         listing = service.json('GET', '/project/inputs')
     except Failure:

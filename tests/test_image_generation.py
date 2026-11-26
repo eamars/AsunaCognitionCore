@@ -5,6 +5,7 @@ import pytest
 
 from asuna import image_generation as gen
 from asuna import integration_image as script
+from test_whose import home  # noqa: F401  (a fixture: the fixture world's conversations at home and outside)
 
 PNG = b'\x89PNG\r\n\x1a\n' + b'\x00' * 64
 T2I = {'id': 'demo-t2i', 'ready': True, 'capabilities': {'input_modes': ['text-to-image']},
@@ -177,11 +178,12 @@ def test_what_the_namespace_may_be_asked_is_decided_on_the_host(args, error):
 
 class FakeRunner:
     def __init__(self, result):
-        self.result, self.requests, self.sources = result, [], []
+        self.result, self.requests, self.sources, self.pictures = result, [], [], []
 
-    def generate_image(self, value, source=None):
+    def generate_image(self, value, source=None, pictures=None):
         self.requests.append(value)
         self.sources.append(source)
+        self.pictures.append(pictures)
         return self.result
 
 
@@ -323,16 +325,116 @@ def test_a_service_warning_keeps_its_code_and_the_sizes_it_used():
     assert script.warning('plain words') == 'plain words'
 
 
-def test_a_route_that_needs_a_picture_this_tool_cannot_give_is_not_listed_and_is_refused(monkeypatch, tmp_path):
-    inpaint = {**EDIT, 'id': 'demo-inpaint', 'parameter_schema': {
-        'properties': {'prompt': {}, 'input_image': {}, 'mask_image': {}}, 'required': ['input_image', 'mask_image']}}
-    service = FakeService(workflows=(T2I, EDIT, inpaint))
-    listed = run(service, gen.validate({'workflows': True})[0], monkeypatch, tmp_path)
-    assert [w['workflow'] for w in listed['workflows']] == ['demo-t2i', 'demo-edit']
-    with pytest.raises(script.Failure) as failure:
-        edit(monkeypatch, tmp_path, service, workflow='demo-inpaint')
-    assert failure.value.report['error'] == 'IMAGE_WORKFLOW_NEEDS_MORE_PICTURES'
-    assert failure.value.report['needs'] == ['mask_image'] and not service.deleted, 'refused before any upload'
+# Shaped like the service's routes of 2026-11-26: an inpaint route takes a source and a mask, a face route a face only.
+INPAINT = {'id': 'demo-inpaint', 'ready': True, 'capabilities': {'input_modes': ['inpaint']}, 'parameter_schema': {
+    'properties': {'prompt': {}, 'input_image': {'type': 'string'}, 'denoise': {},
+                   'mask_image': {'type': 'string', 'description': 'white is redrawn, black is kept'}},
+    'required': ['input_image', 'mask_image']}}
+FACE = {'id': 'demo-face', 'ready': True, 'capabilities': {'input_modes': ['face-reference']}, 'parameter_schema': {
+    'properties': {'prompt': {}, 'face_image': {'type': 'string'}, 'pose': {}}, 'required': ['face_image']}}
+MASK = {'file': 'mask_image.png', 'name': 'asuna-edit-ba5eba11cafe-d1e2f3.png'}
+FACE_PICTURE = {'file': 'face_image.png', 'name': 'asuna-edit-facefacefade-a1b2c3.png'}
+
+
+def drawn(monkeypatch, tmp_path, service, value):
+    monkeypatch.setattr(script, '__file__', str(tmp_path / 'integration_image.py'))
+    for name in ('source.png', MASK['file'], FACE_PICTURE['file']):
+        (tmp_path / name).write_bytes(PNG)
+    return run(service, value, monkeypatch, tmp_path)
+
+
+def test_every_ready_route_is_listed_with_the_pictures_it_takes(monkeypatch, tmp_path):
+    odd = {**T2I, 'id': 'demo-odd', 'parameter_schema': {'properties': {'prompt': {}, 'subject': {}},
+                                                         'required': ['prompt', 'subject']}}
+    asleep = {**T2I, 'id': 'demo-asleep', 'ready': False}
+    service = FakeService(workflows=(T2I, EDIT, INPAINT, FACE, odd, asleep))
+    listed = {w['workflow']: w for w in run(service, gen.validate({'workflows': True})[0], monkeypatch, tmp_path)['workflows']}
+    assert list(listed) == ['demo-t2i', 'demo-edit', 'demo-inpaint', 'demo-face', 'demo-odd']
+    assert listed['demo-inpaint']['source_image'] == 'required'
+    assert listed['demo-inpaint']['pictures'] == {'mask_image': 'required: white is redrawn, black is kept'}
+    assert listed['demo-face']['pictures'] == {'face_image': 'required'} and 'source_image' not in listed['demo-face']
+    assert 'pictures' not in listed['demo-edit'] and 'needs' not in listed['demo-inpaint']
+    assert listed['demo-odd']['needs'] == ['还要：subject'], 'a required input this tool cannot give, by its name'
+    assert set(gen.OPTION_RULES) <= set(script.CARRIED)
+    host = lambda workflows: gen.generate({'workflows': True}, runner=FakeRunner(
+        {'report': {'listed': True, 'workflows': workflows}, 'body': b''}), workspace=tmp_path)['note']
+    assert host([listed['demo-odd']]).endswith(gen.STILL_NEEDED) and gen.STILL_NEEDED not in host([listed['demo-face']])
+
+
+def test_an_inpaint_route_gets_its_source_and_mask_uploaded_and_both_removed_after(monkeypatch, tmp_path):
+    service = FakeService(workflows=(T2I, INPAINT))
+    report = drawn(monkeypatch, tmp_path, service, {**request(workflow='demo-inpaint'), 'source': SOURCE,
+                                                     'pictures': {'mask_image': MASK}})
+    assert report['workflow'] == 'demo-inpaint'
+    uploads = [body for _m, path, body in service.calls if path == '/upload/image']
+    assert len(uploads) == 2 and SOURCE['name'].encode() in uploads[0] and MASK['name'].encode() in uploads[1]
+    queued = next(body for _m, path, body in service.calls if path == '/project/generate')
+    assert queued['parameters']['input_image'] == SOURCE['name'] and queued['parameters']['mask_image'] == MASK['name']
+    assert service.deleted == [SOURCE['name'], MASK['name']], 'no picture stays on the service'
+
+
+def test_a_missing_or_unknown_picture_is_refused_before_any_upload(monkeypatch, tmp_path):
+    service = FakeService(workflows=(INPAINT, FACE))
+    for value, error, said in (
+            ({**request(workflow='demo-inpaint'), 'source': SOURCE}, 'IMAGE_WORKFLOW_NEEDS_MORE_PICTURES', ['mask_image']),
+            (request(workflow='demo-inpaint'), 'IMAGE_WORKFLOW_NEEDS_MORE_PICTURES', ['source_image', 'mask_image']),
+            ({**request(workflow='demo-inpaint'), 'source': SOURCE,
+              'pictures': {'mask_image': MASK, 'face_image': FACE_PICTURE}}, 'IMAGE_PICTURE_NOT_IN_WORKFLOW', ['face_image']),
+            ({**request(workflow='demo-face'), 'source': SOURCE, 'pictures': {'face_image': FACE_PICTURE}},
+             'IMAGE_WORKFLOW_TAKES_NO_SOURCE', None)):
+        with pytest.raises(script.Failure) as failure:
+            drawn(monkeypatch, tmp_path, service, value)
+        report = failure.value.report
+        assert report['error'] == error and report.get('needs', report.get('pictures')) == said, report
+    assert report['note'] == '这条路线不收 source_image；它收的图：pictures 里的 face_image（required）。'
+    assert not any(path == '/upload/image' for _m, path, _b in service.calls) and not service.deleted
+
+
+def test_a_face_route_draws_from_the_prompt_and_the_face_alone(monkeypatch, tmp_path):
+    service = FakeService(workflows=(FACE,))
+    report = drawn(monkeypatch, tmp_path, service, {**request(workflow='demo-face'), 'pictures': {'face_image': FACE_PICTURE}})
+    assert report['workflow'] == 'demo-face' and report['bytes'] == len(PNG)
+    queued = next(body for _m, path, body in service.calls if path == '/project/generate')
+    assert queued['parameters'] == {'prompt': 'a quiet reading corner, soft light', 'face_image': FACE_PICTURE['name']}
+    assert service.deleted == [FACE_PICTURE['name']]
+
+
+def test_pictures_are_read_with_the_tasks_fence_and_travel_beside_the_script(tmp_path):
+    asked, kept = [], []
+    theirs = lambda data, meta: kept.append(meta) or {'registered': True}
+    def source(ref):
+        asked.append(ref)
+        return {'data': PNG, 'register': theirs if ref == 'att-face' else None}     # someone's face, her own mask
+    runner = FakeRunner(GOOD)
+    value = gen.generate({'prompt': 'x', 'workflow': 'demo-face', 'pictures': {'face_image': 'att-face'}},
+                         runner=runner, workspace=tmp_path, source=source, register=lambda data, meta: 1 / 0)
+    assert value['generated'] and asked == ['att-face'] and kept, "an edit of someone's picture goes back with it"
+    sent = runner.requests[0]['pictures']['face_image']
+    assert sent['file'] == 'face_image.png' and sent['name'].startswith(script.SOURCE_PREFIX)
+    assert runner.pictures == [{'face_image.png': PNG}] and runner.sources == [None]
+    assert gen.validate({'prompt': 'x', 'pictures': {'mask_image': 'att-x'}})[1]['error'] == 'PICTURES_WITHOUT_WORKFLOW'
+    for wrong in ({'input_image': 'att-x'}, {'mask': 'att-x'}, {'mask_image': 5}, ['att-x']):
+        assert gen.validate({'prompt': 'x', 'workflow': 'w', 'pictures': wrong})[1]['error'] == 'INVALID_PICTURES', wrong
+
+
+def test_outside_another_conversations_picture_in_pictures_answers_as_missing(home):
+    from asuna import vision
+    from asuna.blobs import BlobStore
+    from test_own_files import picture, where
+    from test_whose import LOCAL
+    store = home
+    at_home = picture(store, 'scene:' + LOCAL)
+    def source(ref):
+        return vision.picture_to_edit(store, BlobStore(store), where('g1'), store.config, ref, origin='outside',
+                                      by={'task': 'task-outside', 'scope': 'scene:g1'})
+    said = {}
+    for ref in (at_home, 'blob-' + 'f' * 32):
+        runner = FakeRunner(GOOD)
+        for args in ({'pictures': {'mask_image': ref}}, {'source_image': ref}):
+            value = gen.generate({'prompt': 'x', 'workflow': 'w', **args}, runner=runner, workspace=None, source=source)
+            said.setdefault(ref, []).append(value['detail'])
+        assert not runner.requests
+    assert said[at_home] == said['blob-' + 'f' * 32] == [vision.NOT_HERE] * 2
 
 
 CHARACTER = {**T2I, 'id': 'demo-character', 'parameter_schema': {'properties': {

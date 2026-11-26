@@ -541,8 +541,9 @@ class IntegrationRunner:
                 'content_type': report.get('content_type'), 'location': report.get('location'),
                 'transport_error': report.get('transport_error')}
 
-    def generate_image(self, request, source=None):
-        """One picture from the image endpoint (image_generation); only that relay is reachable.
+    def generate_image(self, request, source=None, pictures=None):
+        """One picture from the image endpoint (image_generation); only that relay is reachable. `pictures` are the
+        bytes of the workflow's other pictures by their file name in the request.
 
         The runner lock covers the launch only: a generation can take minutes, and the integration tools,
         status and stop must not wait behind it.
@@ -550,10 +551,11 @@ class IntegrationRunner:
         from .image_generation import IMAGE_ENDPOINT
         if not any(e['name'] == IMAGE_ENDPOINT for e in self.endpoints):
             return {'transport_error': 'IMAGE_ENDPOINT_NOT_CONFIGURED: 集成配置里没有 image 端点，本机生图用不了；重试也一样'}
-        # A source picture travels beside the script in its frozen copy, never in the command line.
+        # The pictures travel beside the script in its frozen copy, never in the command line.
+        files = {**({request['source']['file']: source} if source else {}), **(pictures or {})}
         report, body, failure = self._trusted_run('integration_image.py', {**request, 'endpoint': IMAGE_ENDPOINT},
                                                   request['timeout'] + 30, 'IMAGE', only=IMAGE_ENDPOINT,
-                                                  files={request['source']['file']: source} if source else None)
+                                                  files=files or None)
         if failure:
             return {'transport_error': failure}
         if report.get('generated'):

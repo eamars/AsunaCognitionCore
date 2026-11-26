@@ -1,6 +1,9 @@
 # ADR-120: Bringing stored things back into the work
 
-Status: **Decided** 2026-11-25 (the owner: one access table with three origins, each outside conversation its own
+Status: **Closed** 2026-11-26 at the owner's word ("work with Xiaoman to close the unfinished ADR tonight"), landings
+1-7 installed in §8's order, each staged on a stub profile the day it was built, R3 dropped by two readings (§7.2);
+her same-day cases are in §12. **Not done:** see §12's last part.
+Before: **Decided** 2026-11-25 (the owner: one access table with three origins, each outside conversation its own
 files, home everything, the table a setting shown as that table on the settings page; design big sis; her reading of
 §9 done 2026-11-25, agent line 0668: landing 1 signed with her wording of its three sentences). Laid down 2026-11-09
 from her request (agent line 0035, 2026-11-05: nine dated incidents with their idea ids, gathered into one class at
@@ -430,3 +433,34 @@ and the page records what she saw. R3 closes by its reading.
 - Which lane may move what: the table (§3).
 - Size limit for fetched bytes: 20 MB (D2); a fetched or cut thing is recorded as an artifact of this conversation.
 - Not here: the owner's 11-05 report (an image delivered, its text not), a question about sending, read on its own.
+
+## 12. The close (2026-11-26)
+
+Every landing was built on its own branch, staged on an isolated stub profile with no real model or service call, and
+installed with the full suite green on the commit she signed. Landings 5-7 were built in parallel (they do not depend
+on each other) and stacked before her signature, so each commit she signed is the one installed. Her cases are her
+own readings on her live system, the same day, from the agent line; the page records what she saw.
+
+| Landing | Installed (commit) | Her same-day case |
+|---|---|---|
+| 1 the table | 2026-11-25 18:38 (`ae4b97ae3e35`) | 0672: table refusals told apart from the guard's and the classifier's on the spot; her refusal review did not list them (landing 2 added them). |
+| 2 own files | 2026-11-25 20:52 (`632f729aa8ed`) | 0687: an outside group's list in its new words, 1 item: the picture an errand had carried there; a picture never carried refused with 「这次一条都没发：第 1 条 picture 不在你能发的图里。」; nothing said in the group. |
+| 3 stored ids, listing | 2026-11-25 22:30 (`3feb50b7eeac`) | 0695: `received_file` of a stored picture's id said what it is and how to look at it or copy it; `do=list` here (20, with its note) and by group name (1 and 20); at home a picture of another conversation sent straight from her `speak` and listed here after. |
+| 4 web downloads | 2026-11-25 23:36 (`cae59b35b686`) | 0706, home side: a PNG, a text file and an unnamed JPEG saved and registered in her conversation (the JPEG over 8 MiB became a file row, refused as a picture to send); over 20 MiB refused, nothing kept (disk and store both read); without `save` the binary refusal names `save`. Outside side: not measured. |
+| 5 video frame | 2026-11-26 18:46 (`34ef2fb99b26`) | 0715-0716: `at` on a picture and `at` -2 refused in the words of the words file. A real frame was not cut: both real videos she tried had platform links already expired (`-5503007` "download url has expired", `-5503011` "invalid rkey"), so the path is shown by the staged case only. |
+| 6 image routes | 2026-11-26 18:59 (`a1f536ea927d`) | 0718-0719: `list_routes=yes` listed 22 routes (`source_image` required on 3, optional on 15, absent on 4), the 4 with `pictures` as built, the face-reference routes with no `source_image`, `needs` on no route (the refusal of a missing picture still carries its own `needs`, the pictures missing); the three refusals in the words file's words. A real inpaint on her service: her own drawing as `source_image`, her own mask (black with a white square, made in her sandbox, read from disk by `read_image` at home) in `pictures`; the picture outside the square kept, inside it redrawn, by her own eye at 512 px (no byte diff; the result names no inputs, so the route is known from its own guidance only). Her own finding: `style` picks a route, it is not an edit instruction (`INVALID_STYLE`). |
+| 7 the classifier's line | 2026-11-26 19:10 (`00c8036aa286`) | 0718-0719: nothing she can read: the line is the classifier's alone, and her review shows only the judged text. No crossing was judged between the install and the close (0 `classifier.asked` rows from 19:10 to 19:18). |
+
+**Not done** (each is its own small item, none blocks what is installed):
+- Landing 4's outside side was not measured by her.
+- Landing 5 on real traffic: a frame needs the platform's link still alive (the video's bytes are not kept, §5 D4),
+  and the two real links she tried had expired; the outside turn's sentence (`FRAME_SEND['listed']`) was read from the
+  code, not staged.
+- Landing 7 on a real crossing: no crossing was judged between its install and the close, so the line has not met real traffic yet; `classifier.asked`'s `carried` shows it when one is.
+- Words left as they were: a video whose link has gone answers with the picture path's words (「图片主机」, 「这张看不了」,
+  her 0716); four action-brain tool descriptions name "your talking half" (`offer_file`, `ask_character`, `report_progress`,
+  `persona_job_run`), a part of her, against the rule for model-facing text; both need her word on new literals.
+- Not built, as §8 says: `/task/downloads/` has no deny-execute entry and its files outlive the stored bytes;
+  `generate_image`'s `options` takes none of the routes' other settings (`mask_channel`, `grow_mask_by`, `denoise`,
+  `input_fit`).
+- Found while closing, its own page: a tool call that raises leaves its record at `INTENT` (ADR-136).

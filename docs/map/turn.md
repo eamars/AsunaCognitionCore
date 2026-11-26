@@ -445,14 +445,16 @@ A safety classifier on what crosses between outside and home (ADR-135 D9): only 
 - def `mode`
 - def `direction`
 - def `policy` — (text, version) of a direction's policy file: its text and the first 12 characters of its sha256.
-- def `question`
+- def `question` — The question about one text: what kind it is, what rides along with it (`carried`, counts by kind), the program's reminder, the text.
+- def `carried_line` — 「附带：N 张图、M 个文件」 for the counts by kind, a kind with none left out; None when nothing rides along.
+- def `carried` — What rides along with a crossing, by kind ({'image': n, 'file': m}, a kind with none left out): the stored pictures and files these ids name whose bytes are still there.
 - def `check` — 'flagged' or 'clear' for an answer that is one of the two words (around it only spaces, its 「」 and a full stop); anything else is told back.
 - def `dictionary` — (record, reminder) for one outbound text: the private-words list's matches by category and the configured secret values found, as counts; `private_words` is 'unchecked' when the deployment has no list.
 - def `alongside` — Run beside her work: she never waits for a verdict.
 - def `submit` — Ask about one text, alongside, when the setting asks for it.
 - def `judge` — One verdict, recorded: `classifier.verdict` (flagged, clear, or flagged as off_format) or `classifier.unchecked`.
 - def `ran` — What of the work had run when the verdict came: a task's steps so far, whether a note was read, and how many lines the turn the crossing opened has said (`spoken`).
-- def `after_call` — After one of her calls succeeded: the text it carried in or out of home, when it carried one.
+- def `after_call` — After one of her calls succeeded: the text it carried in or out of home, when it carried one, and what rides along with it (an errand's picture or file, checked and carried there by the call; a note and an idea carry text only).
 - def `result_text` — What a result says, without its stored keys and ids: the judge reads only that.
 - def `after_result` — A task's result, as it arrives in an outside conversation (tasks.py); `ep`: the turn that handed it over.
 - def `should_stop` — Whether a harmful verdict stops the work: in `stop` mode only, and never for the owner's own ask.

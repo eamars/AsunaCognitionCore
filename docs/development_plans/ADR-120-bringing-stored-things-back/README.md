@@ -211,9 +211,34 @@ levels go into `RUNTIME_API.md` as present behaviour.
 
 ## 6. The classifier sees what rides along
 
-A note, an errand or a result that carries a stored file or picture puts one program line into the classifier's
-question: 「附带：N 张图、M 个文件」 (counts and kinds, never a name). The judge then knows something goes with the
-words. Text only is judged, as today; the line costs no extra request.
+A crossing the classifier judges that carries stored pictures or files puts one program line into its question, right
+after the kind of text: 「附带：N 张图、M 个文件」 (counts by kind, never a name, an id or a path; a kind with none is left
+out, 「附带：2 张图」, and with nothing riding along there is no line). The judge then knows something goes with the
+words. Text only is judged as before: the same question byte for byte, one request per crossing, the same verdicts
+and modes. The line is in the question, after the fixed system text (the policy), so the cached prefix is unchanged;
+the policy texts do not change. Only the classifier reads the line; her review shows the judged text, not the question.
+
+What each crossing can carry (read from the code, main `76dc8ad33381`):
+
+| Crossing | Judged (ADR-135 D9) | What rides along | Counted from |
+|---|---|---|---|
+| A note, into or out of home | yes | nothing: `note` takes text only | none |
+| An idea written outside | yes | nothing | none |
+| An errand | yes | one picture or file (`artifact_id`, kinds `image`, `file`), checked and shared there by the call (`own_files.carry`) before it is judged | the call's `artifact_id` |
+| A task's result shown outside | yes | the pictures and files the task offered with `offer_file` (every revision), the ones its result turn lists first | `outbound_files.offered_by` |
+| A visit | no | one picture | none: D9 does not read visits |
+
+Only rows whose bytes are still stored are counted (`classifier.carried`). Stickers do not ride on these crossings
+(they are sent by name in `speak`); a sticker's row (`global-safe`) named by an errand is not counted, being
+everyone's. `classifier.asked` records the counts (`carried`). The operation key of a question is the hash of the
+question, no longer of the text alone, so two crossings of one turn with the same words and different attachments are
+two questions, each with its own session and receipt.
+
+Not built: a picture a task drew (`generate_image`, `render_svg`) and did not offer is not counted: it is that
+conversation's own from the moment it is drawn and is listed as its pictures are, not carried by the result. Whether
+the conversation's channel can send what rides along (a direct chat lists no files) is the send path's; the count is
+what the crossing carried there. The outbound policy (`classify_outbound.md`, the owner's words) names the reminder line
+and not this one.
 
 ## 7. The image routes (ADR-124, merged 2026-11-11)
 
@@ -301,7 +326,16 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
    the stored bytes), and the address's `Content-Disposition` name is not read.
 5. **D4.** A frame at a time.
 6. **R1 and R2** (R3 read first).
-7. **§6**, the classifier's line.
+7. **§6**, the classifier's line. `classifier.question` takes the counts (`carried`) and puts 「附带：…」 after the kind
+   line, before the program's reminder; `classifier.carried` counts the stored pictures and files a crossing names
+   (stickers and rows without bytes left out); `after_call` passes an errand's `artifact_id`, `after_result` the ids
+   its task offered (`offered_by`); `classifier.asked` keeps `carried`; the operation key hashes the question. Staged
+   2026-11-26 on an isolated stub profile (database `asuna_v2_demo_l7`, every route on the stub, no model key, the classifier in
+   `stop`; an outside group on the QQ kind with synthetic ids, its lines posted on the channel API as an adapter
+   would, no adapter running): a member's task rendered a picture and offered it and a text file; the stub received
+   「这段文字是：一件事的结果，要在外面给人看」 then 「附带：1 张图、1 个文件」; its flagged verdict stopped the result turn
+   (`SUPPRESSED`, `CLASSIFIER_HELD`). A second task offered nothing: its question had no line, clear, its turn ran. One
+   classifier request per result. The demo was removed after.
 
 ## 9. Her words (read by her 2026-11-25, agent line 0668)
 

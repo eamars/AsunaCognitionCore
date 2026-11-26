@@ -5,7 +5,9 @@ outside: it enters her notebook, which home reads) and outbound (a note from hom
 result shown outside). A brief or a plan written in an outside conversation stays there and is not read. They judge
 concrete security and privacy actions, never her language. Her own chat model, on a lane of its own (`classify`: one
 tool-free session per question), asked one fixed question about one text: the direction's policy
-file is the system text, the same every time; the question is the kind of text and the text, nothing else, and for an
+file is the system text, the same every time; the question is the kind of text and the text, nothing else, with one
+line of what rides along when stored pictures or files go with it (ADR-120 §6: `carried`, counts by kind, never a
+name, an id or a path; an errand's picture or file, the pictures and files a result's task offered), and for an
 outbound text one line of the program's reminder when the dictionary check found private words or a credential's
 value (their categories and counts, never a word). The answer is binary by the program's check, as the relevance
 gate's is: only the two words are accepted, anything else is asked again with a repair note (answers.ask); an answer
@@ -50,6 +52,8 @@ KINDS = {                               # kind: (direction, what the text is, in
 CATEGORY_WORDS = {'person': '真名', 'group': '群名', 'account': '账号号码', 'site': '站点 id', 'host': '主机名',
                   'email': '邮箱', 'other': '别的私人词'}
 REMINDER = '程序的提醒：这段文字里有%s。'
+CARRIED = '附带：%s'                     # what rides along, by kind; a kind with none is left out
+CARRIED_KINDS = (('image', '%d 张图'), ('file', '%d 个文件'))
 SETTLE_DAYS = 2                         # how far back the start-up sweep looks for a request cut by a restart
 
 
@@ -67,9 +71,33 @@ def policy(way):
     return text, hashlib.sha256(text.encode('utf-8')).hexdigest()[:12]
 
 
-def question(kind, text, reminder=None):
-    return '这段文字是：%s\n%s\n文字：\n%s' % (KINDS[kind][1], reminder + '\n' if reminder else '',
-                                           excerpt(text, TEXT_CHARS))
+def question(kind, text, reminder=None, carried=None):
+    """The question about one text: what kind it is, what rides along with it (`carried`, counts by kind), the
+    program's reminder, the text."""
+    line = carried_line(carried)
+    return '这段文字是：%s\n%s%s\n文字：\n%s' % (KINDS[kind][1], line + '\n' if line else '',
+                                             reminder + '\n' if reminder else '', excerpt(text, TEXT_CHARS))
+
+
+def carried_line(counts):
+    """「附带：N 张图、M 个文件」 for the counts by kind, a kind with none left out; None when nothing rides along."""
+    parts = [words % counts[kind] for kind, words in CARRIED_KINDS if (counts or {}).get(kind)]
+    return CARRIED % '、'.join(parts) if parts else None
+
+
+def carried(store, ids):
+    """What rides along with a crossing, by kind ({'image': n, 'file': m}, a kind with none left out): the stored
+    pictures and files these ids name whose bytes are still there. Stickers are everyone's and are not counted."""
+    from .own_files import STICKERS
+    from .records import artifacts as artifact_records
+    ids = [item for item in dict.fromkeys(ids or ()) if isinstance(item, str) and item]
+    counts = {}
+    if not ids:
+        return counts
+    for row in artifact_records.by_ids(store, ids, storage=artifact_records.STORED).rows(fields=['kind', 'scope_key']):
+        if row.get('kind') in dict(CARRIED_KINDS) and row.get('scope_key') != STICKERS:
+            counts[row['kind']] = counts.get(row['kind'], 0) + 1
+    return counts
 
 
 def check(text):
@@ -146,19 +174,20 @@ def alongside(work):
     threading.Thread(target=work, name='asuna-classify', daemon=True).start()
 
 
-def submit(store, lane, ep, kind, text, ref, requester, stream=None):
+def submit(store, lane, ep, kind, text, ref, requester, stream=None, riding=()):
     """Ask about one text, alongside, when the setting asks for it. `ref`: what holds the text ({'task': id}, {'note':
     id}, {'idea': id}, or {'text': ...} when nothing else stores it); `stream`: where the records go
-    (the turn's, else a task's)."""
+    (the turn's, else a task's); `riding`: the ids of the stored pictures and files the crossing carries."""
     if mode(store.config) == 'off' or not str(text or '').strip():
         return None
     way = direction(kind)
     _, version = policy(way)
     stream = stream or ep['_id']
     checked, reminder = dictionary(store.config, text) if way == 'outbound' else (None, None)
+    counts = carried(store, riding)
     asked = {'kind': kind, 'direction': way, 'ref': ref, 'sha256': _hash(text), 'owner_asked': _owner(store, requester),
              'policy_version': version, 'mode': mode(store.config), 'episode': ep['_id'],
-             **({'dictionary': checked} if checked else {})}
+             **({'dictionary': checked} if checked else {}), **({'carried': counts} if counts else {})}
     row = store.audit(stream, 'classifier.asked', asked, ep['scope_key'])
     request = row['_id']
     alongside(lambda: judge(store, lane, ep, kind, text, {**asked, 'request': request}, stream, reminder))
@@ -169,8 +198,8 @@ def judge(store, lane, ep, kind, text, asked, stream, reminder=None):
     """One verdict, recorded: `classifier.verdict` (flagged, clear, or flagged as off_format) or
     `classifier.unchecked`."""
     started = time.monotonic()
-    system, body = policy(asked['direction'])[0], question(kind, text, reminder)
-    operation = '%s:CLASSIFY:%s' % (ep['_id'], asked['sha256'][:16])
+    system, body = policy(asked['direction'])[0], question(kind, text, reminder, asked.get('carried'))
+    operation = '%s:CLASSIFY:%s' % (ep['_id'], _hash(body)[:16])       # one question, one session and receipt
 
     def generate(attempt, note):
         return lane.generate(_binding(store, ep), operation + (':fix-%d' % attempt if attempt else ''), 'CLASSIFY',
@@ -238,13 +267,15 @@ def ran(store, kind, ref):
 
 # ── what is judged: her calls, and a task's result shown outside ──
 def after_call(tools, ep, name, args, result):
-    """After one of her calls succeeded: the text it carried in or out of home, when it carried one."""
+    """After one of her calls succeeded: the text it carried in or out of home, when it carried one, and what rides
+    along with it (an errand's picture or file, checked and carried there by the call; a note and an idea carry
+    text only)."""
     if mode(tools.store.config) == 'off' or not isinstance(result, dict):
         return None
     from . import guard
     store = tools.store
     outside = guard.outside(store, ep)
-    found = None
+    found, riding = None, ()
     if name == 'note' and result.get('note'):
         from . import notes
         row = notes.get(store, result['note']) or {}
@@ -261,11 +292,12 @@ def after_call(tools, ep, name, args, result):
                                                        'place': str(args.get('place') or '')[:80],
                                                        **({'event_id': visit['event_id'], 'scene_id': visit['scene_id']}
                                                           if visit.get('event_id') else {})})
+        riding = [args['artifact_id'].strip()] if isinstance(args.get('artifact_id'), str) else ()
     if not found:
         return None
     kind, text, ref = found
     return submit(store, getattr(tools.coordinator, 'classify', None) or HANDS.get('lane'), ep, kind, text, ref,
-                  guard.asker(store, ep, name, args) or None)
+                  guard.asker(store, ep, name, args) or None, riding=riding)
 
 
 def result_text(value):
@@ -276,13 +308,15 @@ def result_text(value):
 
 
 def after_result(store, task, ep, value):
-    """A task's result, as it arrives in an outside conversation (tasks.py); `ep`: the turn that handed it over. Only
-    its text is judged."""
+    """A task's result, as it arrives in an outside conversation (tasks.py); `ep`: the turn that handed it over. Its
+    text is judged; what rides along is what the task offered with offer_file, which the turn about it lists first."""
     if mode(store.config) == 'off' or not ep:
         return None
+    from .outbound_files import offered_by
     text = result_text(value)
     requester = (task.get('whose') or {}).get('person_id') or task.get('requester_id')
-    return submit(store, HANDS.get('lane'), ep, 'result', text, {'task': task['_id']}, requester, stream=task['_id'])
+    return submit(store, HANDS.get('lane'), ep, 'result', text, {'task': task['_id']}, requester, stream=task['_id'],
+                  riding=offered_by(store, task['_id']))
 
 
 # ── the stop path: built, used only when the owner decides (landing 7) ──

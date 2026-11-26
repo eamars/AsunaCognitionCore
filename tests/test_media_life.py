@@ -55,7 +55,8 @@ def test_every_kind_of_stored_picture_names_its_life_cycle():
     written = set()
     for path in (ROOT / 'src' / 'asuna').glob('*.py'):
         text = path.read_text(encoding='utf-8')
-        written |= set(re.findall(r"^(?:POOL_SOURCE|SOURCE|PRODUCED_SOURCE|EDIT_SOURCE) = '([a-z-]+:)'", text, re.M))
+        written |= set(re.findall(r"^(?:POOL_SOURCE|SOURCE|PRODUCED_SOURCE|EDIT_SOURCE|FRAME_SOURCE) = '([a-z-]+:)'",
+                                  text, re.M))
     written |= {'file:', 'in-', 'local-upload:'}
     assert written and written <= set(media_life.POLICY), written - set(media_life.POLICY)
 

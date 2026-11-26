@@ -3,8 +3,8 @@
 A picture is stored in the BlobStore (`artifacts` rows, the blob store's bytes) for one of three reasons, named by the prefix
 of its first source id:
 
-- a copy pulled from a platform or a disk (`read_image`, a video's contact sheet): the platform or the disk is the
-  source, so the copy expires after `PULLED_DAYS`, which is as long as `read_image` accepts its ref;
+- a copy pulled from a platform or a disk (`read_image`, a video's contact sheet, one frame of a video): the platform
+  or the disk is the source, so the copy expires after `PULLED_DAYS`, which is as long as `read_image` accepts its ref;
 - a candidate in the sticker pool: kept while the pool or her shelf lists it (and for a day after it is stored);
 - her records (a kept sticker, a picture she made or edited, one the owner sent at home): kept.
 
@@ -36,6 +36,7 @@ POLICY = {
     'task-file:': OFFERED,       # a file a task registered to send (outbound_files)
     'received-file:': RECEIVED,  # a file someone sent her, fetched when she read it (received_files)
     'download:': OFFERED,        # a picture or file web_fetch saved (downloads): a task's file, as offer_file's are
+    'frame:': PULLED,            # a frame read_image cut from a video (`at`, vision.video_frame): as a pulled copy
 }
 
 

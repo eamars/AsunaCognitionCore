@@ -9,6 +9,9 @@ differ visibly from every cell were left out, and whether there is fast back-and
 as blinking or two layers at once and that no single frame contains.
 
 The stored bytes stay the original; only what reaches the model is the sheet.
+
+A video is sampled the same way into its contact sheet (`video_snapshot`); one frame of it at a moment (`video_frame`)
+is found by the seek a cell uses, so the moment on a cell's label gives that cell's frame at its own size.
 """
 from __future__ import annotations
 
@@ -267,6 +270,55 @@ def video_snapshot(data):
     except Exception as exc:               # noqa: BLE001
         return None, {'error': VIDEO_UNREADABLE % type(exc).__name__}
     return sheet, words
+
+
+# One frame of a video at a moment (read_image's `at`): found by the seek a contact sheet's cell uses, so a moment read
+# off a cell's label gives that cell's frame, kept at its own size up to FRAME_EDGE on its long edge, as a JPEG.
+FRAME_EDGE = 1920
+FRAME_QUALITY = 92
+FRAME_OUT_OF_RANGE = 'VIDEO_FRAME_OUT_OF_RANGE: 这段视频约 %s 秒，at 写 0 到 %s 之间的数'
+
+
+def video_frame(data, at):
+    """(jpeg bytes, {'seconds', 'frame_ms', 'width', 'height'}) for the frame shown `at` seconds into a video, or (None,
+    {'error': words}): the reason it could not be read, or the video's length when `at` is past its end."""
+    try:
+        import av
+    except ImportError:
+        return None, {'error': VIDEO_NO_DECODER}
+    try:
+        container = av.open(io.BytesIO(data))
+    except Exception as exc:               # noqa: BLE001 not a video the decoder knows
+        return None, {'error': VIDEO_UNREADABLE % type(exc).__name__}
+    with container:
+        stream = next((item for item in container.streams if item.type == 'video'), None)
+        if stream is None:
+            return None, {'error': VIDEO_UNREADABLE % '里面没有画面'}
+        seconds = (float(stream.duration * stream.time_base) if stream.duration
+                   else container.duration / 1_000_000 if container.duration else 0)
+        if seconds <= 0:
+            return None, {'error': VIDEO_UNREADABLE % '读不出时长'}
+        if not 0 <= at <= seconds:
+            length = _seconds(int(seconds * 1000))
+            return None, {'error': FRAME_OUT_OF_RANGE % (length, length), 'seconds': seconds}
+        picked = None
+        try:
+            container.seek(int(at / stream.time_base), stream=stream, backward=True)
+            for frame in container.decode(stream):
+                picked = frame
+                if frame.time is None or frame.time >= at - 0.001:
+                    break
+            image = picked.to_image() if picked is not None else None
+        except Exception as exc:           # noqa: BLE001 a truncated file
+            return None, {'error': VIDEO_UNREADABLE % type(exc).__name__}
+    if image is None:
+        return None, {'error': VIDEO_UNREADABLE % '那一刻读不出画面'}
+    image.thumbnail((FRAME_EDGE, FRAME_EDGE))
+    out = io.BytesIO()
+    image.convert('RGB').save(out, format='JPEG', quality=FRAME_QUALITY)
+    moment = picked.time if picked.time is not None else at
+    return out.getvalue(), {'seconds': seconds, 'frame_ms': int(round(moment * 1000)), 'width': image.width,
+                            'height': image.height}
 
 
 def seen(data, media_type):

@@ -207,7 +207,7 @@ levels go into `RUNTIME_API.md` as present behaviour.
 | D1 | A stored thing's body by id | `received_file` (both brains) takes a `blob-` id as `ref` (kinds `image`, `file`, `received_file`), through `own_files.stored`: outside another conversation's id answers as a missing one (`RECEIVED_FILE_NOT_FOUND: 这个对话里没有这个文件。`) and is recorded (`all_files`). `do=read`: a received file, or a task's file that is text within 1 MiB, in pages as today; anything else said for what it is (kind, type, size), a picture with `read_image`, and how to copy it. `do=copy` (the action brain): any kind into `/task/stored/` with the existing copy (name cleaning, the deny-execute folder, copy tracking; `drop_copies` now takes the copies of all three kinds). `read_file` reads the copy; `read_image` of a `/task` path is the `disk` row (home only), so outside a picture is read by its id. | `own_files` or `all_files` |
 | D2 | A public URL's bytes into `/task` | `web_fetch` (the core registers DSH's tool with one more argument, `fetch.js` `registerWebFetch`) gains `save`, a file name or `true`: a body of any type is read as bytes on the same line as a page (`SlimFetch.download`: the same two providers, the task's scope, the same refusal of a local address), at most 20 MiB (over it, declared or read, refused and nothing kept), and handed to the worker with the call (`ToolBroker.call`'s `body`, base64 in the one worker line, never in its record). The worker (`downloads.py`) writes it to `/task/downloads/<name>` (the name made safe as a received copy's, ` (2)` for a name that exists), reads its type from the bytes and registers it in the task's conversation (source `download:`, kept as a task file is): a picture as an `image` row, anything else a `file` row, neither listed until `offer_file` offers it by id. She reads 「存好了：…」 with its id, its path and the sha256. Without `save` nothing changes, and a body that is not text is told it can be saved. | `own_files`, `internet` (or `local_network`) |
 | D3 | An old picture or file onto this turn's list | `offer_file` takes `artifact_id` (a stored id) in place of `path` (`outbound_files.offer_stored`): readable as D1, sendable into the task's conversation (`own_files.send_refused`, else 「这个文件不归这个对话发。」), then shared into it. A picture (kind `image`) goes on the picture list, a task's file on the file list as it is, a received file is registered as a file of the task (its sender kept). The turn about the task lists what the task offered first on both blocks, whatever its age (`outbound_files.offered_by`, from the task's done `offer_file` calls, passed as `picked` with a going-out's pick). At home the list is a convenience, not a gate: a home turn's `speak` picture and file parts take any id it may read and send there; outside, the list gate stays as it was. | `send_own`, `send_to_asker` or `send_any` |
-| D4 | A viewed frame as a picture | `read_image` of a video takes `at` (seconds): the video child cuts that one frame (`media_children`), stored as this conversation's picture (source prefix `frame:`, 7 days unless sent); the grid stays as it is. It is then offered like any picture (D3). | `own_files`, then a send row |
+| D4 | A viewed frame as a picture | `read_image` (both brains) takes `at` (seconds, a number of 0 or more) with a video's `att-` ref: the video is pulled again by its ref as for the grid (its 32 MB, the ref's 7 days, the origin's reach), and the video child cuts that one frame by the seek a grid's cell uses (`media_children.video_frame`: the moment on a cell's label gives that cell's frame), at its own size up to 1920 px on its long edge, as a JPEG. It is stored as a picture of the turn's or task's own conversation through the picture registration, source `frame:<ref>:<ms>` (`media_life.POLICY`: as a pulled copy, 7 days unless a message names it); the same `at` on the same ref there reads that row back, with no second download. She sees the frame and 「截好了：视频第 <at> 秒这一帧（<w>×<h>），记在<the conversation>」 with its id and how to send it from where she is: a task by `offer_file`'s `artifact_id`, a home turn by `speak`'s picture; elsewhere the frame is not on the turn's list (it is the conversation's own, not listed, as a picture someone sent there), so a task offers it (D3). `at` past the end, on anything but a video, and a video that can no longer be pulled are said in words; the grid is never the answer to `at`, and without `at` nothing changes. | `own_files` (the ref read by `own_files` or `all_files`), then a send row |
 
 ## 6. The classifier sees what rides along
 
@@ -311,7 +311,28 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
    brain's `web_fetch` as it is sent +175 characters (242 -> 417, measured on the two registrations). Not built: the
    `/task/downloads/` folder is a folder of the task like any other (no deny-execute entry, its files not removed with
    the stored bytes), and the address's `Content-Disposition` name is not read.
-5. **D4.** A frame at a time.
+5. **D4.** `read_image`'s `at` (§5), in the one function both brains call (`vision.read_image_for_task` →
+   `video_frame`). The frame is cut in the video child as a second job beside the grid (`media_worker`'s `frame` job,
+   `animated.video_frame`; one try 60 s, 120 s in all, so a hung frame holds the video child's other jobs at most that
+   long), never in the worker; out of a running Host (tests, tools) it is cut in the process. Storing it needs
+   `own_files`, asked before the pull (`ACCESS_DENIED_OWN_FILES`, recorded, where the owner narrowed it). One copy per
+   conversation, ref and moment: the source key is looked up in the turn's or task's scope before any pull. Its result
+   says how to send it from where it was read (a task: `offer_file`; a home turn: `speak`'s picture; any other turn: a
+   task's `offer_file` first, since an outside turn sends only what its list holds and a frame cut now is not on it).
+   Cost: `at`'s field +104 characters declared in each brain (the character brain's tools 19,845 -> 19,949, inside its
+   budget; the action brain's 17,943 -> 18,047, budget raised). Staged 2026-11-26 on the demo (`asuna_v2_demo_l5`,
+   stub model, a 造的 3-second video of three colours from a local host): at home, a line on the demo's agent line
+   carrying the video, her `read_image` at 1.5 gave the 320×240 frame of the second colour, cut in the video child and
+   stored as the line's own picture (`frame:<ref>:1500`); her `speak` picture sent it and the line received it, its
+   sha256 verified; the same moment again read the row back with no download (the video host's log); `at` 9, a link
+   answering 404, `at` on a stored id and `at` -2 were each said in words. Outside, on a seeded group with no channel
+   route (the code run on the demo's database, the video pulled over HTTP): a task's cut stored the frame as the
+   group's, not on its list until the task offered it by `artifact_id`, then first on the list of the turn about the
+   task and sendable there; another outside group asking for that video was answered as for a ref that names nothing,
+   recorded. Not built: the time of the frame given when `at` falls between two frames (the frame at or after it, as a
+   cell's) is not said; `at` takes no animated picture (refused as not a video); a video's pull refusals keep the grid's
+   words, which say 图 (这张图没拉下来…); the outside talking side's sentence was read from the code, not staged live
+   (the demo has no outside channel).
 6. **R1 and R2** (R3 dropped by its reading, §7.2). `generate_image` takes `pictures`, `{name: ref or artifact_id}`,
    at most 4 and only with `workflow` (without one the service picks a text-to-image or a one-picture edit route,
    which takes no other picture): a workflow's other declared `*_image` parameters, required and optional alike
@@ -330,7 +351,7 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
    `generate_image` does not send (`integration_image.CARRIED`); on the service's listing of 2026-11-26 no route has
    one, so `needs` is shown on none. `IMAGE_WORKFLOW_TAKES_NO_SOURCE` now says which pictures the
    route takes (its old note said "draws only from text", false for a face-reference route). Cost: the action brain's
-   tools +202 characters declared (17,943 -> 18,145, budget raised); the listing, measured on the service's own
+   tools +202 characters declared (18,047 -> 18,249 on top of landing 5, budget raised); the listing, measured on the service's own
    metadata (2026-11-26 18:3x, `list_workflows` of main and of this landing on the same listing, nothing drawn),
    24,179 -> 29,840 characters (18 -> 22 routes; at an estimated four characters a token about 7,500 tokens, inside
    the 12,500 that DSH carries inline, `maxInlineTokens`), its note +80 (204 -> 284). Not built: the routes' other settings (her skill reads `mask_channel`, `grow_mask_by` and `denoise` on

@@ -254,6 +254,7 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `resolve_image_file` — 路径 ref 指的是哪个文件：``/task/…`` 落在本任务自己的工作区下，绝对路径照原样拿。
 - def `read_image_for_task` — read_image 的实际执行：场景围栏 → 能力核对 → 拉字节 → 落 BlobStore → 交给插件的视觉输入载荷。
 - def `elsewhere` — Whether a ref this conversation does not hold names an attachment of another of her conversations: such a read is answered as a missing one and recorded apart (access.record).
+- def `video_frame` — read_image of a video with `at`: the one frame `at` seconds in, cut in the video child (media_children) from the video pulled again by its ref, and stored as a picture of this conversation (its own files, `own_files`) through the picture re
 - def `path_image` — Read a picture from this machine's disk, where the access table allows this origin `disk`: the bytes are this call's real visual input, and the file it came from is recorded as the artifact's source (``file:<绝对路径>``).
 - def `stored_image` — Look again at a picture already stored as an image artifact: any, where this origin reads every conversation's files (own_files.reach); else one of this conversation's own (own_files.holds), or one this turn was offered to send.
 - def `local_upload_bytes` — A local-chat picture's stored bytes, re-checked against the row that records it: the row must be the program's own local input (no platform envelope), and the artifact must be in that row's scope with that input as its source — a platform m
@@ -403,6 +404,7 @@ Animated pictures as something a still-image model can see: one labelled contact
 
 - def `snapshot` — (png bytes, words) for an animated picture; (None, words) when it could not be split; None when still.
 - def `video_snapshot` — (png bytes, words) for a video, or (None, words) with the reason it could not be split.
+- def `video_frame` — (jpeg bytes, {'seconds', 'frame_ms', 'width', 'height'}) for the frame shown `at` seconds into a video, or (None, {'error': words}): the reason it could not be read, or the video's length when `at` is past its end.
 - def `seen` — What the model is given for these bytes: ({'media_type', 'data'}, words or None).
 
 ## `voice`
@@ -469,6 +471,7 @@ Voice and video decoding in child processes (ADR-095 §5.3.1): one long-lived ch
 - def `start_video` — The Host's video side: off, not set up (one Host log line), or a child started in the background.
 - def `stop_video` — The video side stops: a video asked for afterwards says the decoder is not running.
 - def `video_snapshot` — (png bytes, words) for a video, or (None, {'error': words}): as `animated.video_snapshot`, cut in the video child while the Host runs (in this process only where no Host ever started one: tests and tools).
+- def `video_frame` — (jpeg bytes, words) for the one frame `at` seconds into a video, or (None, {'error': words}): as `animated.video_frame`, cut in the same video child as the contact sheet (in this process only where no Host ever started one).
 
 ## `media_worker`
 

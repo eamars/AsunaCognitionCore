@@ -194,7 +194,7 @@ def test_video_side_says_off_and_not_set_up_in_its_own_words():
         media_children.VIDEO = None
 
 
-def test_a_real_video_child_cuts_the_contact_sheet():
+def test_a_real_video_child_cuts_the_contact_sheet_and_one_frame():
     from test_media_life import a_video
     data = a_video()
     side = media_children.start_video(enabled=True)
@@ -205,6 +205,10 @@ def test_a_real_video_child_cuts_the_contact_sheet():
         assert sheet and sheet[:8] == b'\x89PNG\r\n\x1a\n' and words.get('kind') == '视频快照'
         sheet, words = media_children.video_snapshot(b'\x00\x00\x00\x18ftypmp42 not really a video')
         assert sheet is None and words['error'].startswith('VIDEO_NOT_SPLIT')
+        frame, words = media_children.video_frame(data, 1.5)       # the same child, one more job
+        assert frame[:3] == b'\xff\xd8\xff' and (words['width'], words['height'], words['frame_ms']) == (64, 48, 1500)
+        frame, words = media_children.video_frame(data, 9)
+        assert frame is None and words['error'].startswith('VIDEO_FRAME_OUT_OF_RANGE') and words['seconds'] == 3
     finally:
         media_children.stop_video()
 

@@ -107,7 +107,7 @@ def save(store, task, task_dir, args, body):
         target.unlink(missing_ok=True)          # nothing kept when it could not be recorded
         raise
     out = {'saved': SAVED % (target.name, outbound_files.size_words(len(data)), outbound_files.type_words(media_type),
-                             _where(store, task)),
+                             conversation_words(store, task)),
            'artifact_id': artifact_id, 'path': '/task/' + relative, 'sha256': hashlib.sha256(data).hexdigest(),
            'note': NOTES[kind]}
     if kind == outbound_files.KIND:
@@ -129,8 +129,8 @@ def _register(store, scope, data, media_type, fields, source):
     return stored['artifact_id'], outbound_files.KIND
 
 
-def _where(store, task):
-    """The task's conversation as she reads it (People.scene_title)."""
+def conversation_words(store, task):
+    """The conversation a task or a turn is bound to (`scene_id`), as she reads it (People.scene_title)."""
     from .people import People
     from .records import scenes as scene_records
     scene = scene_records.get(store, task['scene_id']) or {'_id': task['scene_id']}

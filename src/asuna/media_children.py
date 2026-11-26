@@ -19,7 +19,8 @@ hang or a crash in native decoding holds only its own kind of work and never the
 - Each kill, death, failed start or program error in a child is one lane fault (`lane_faults.record`, lanes
   `transcriber`, `video` and `data`, FAULT_LANES); a program error's traceback tail comes back in its answer for the
   evidence.
-- `video_snapshot` is the video side: the contact sheet of `animated.video_snapshot`, cut in the video child.
+- `video_snapshot` and `video_frame` are the video side: the contact sheet of `animated.video_snapshot` and one frame
+  of `animated.video_frame`, each cut in the video child.
 """
 from __future__ import annotations
 
@@ -40,6 +41,8 @@ VOICE_DEADLINE = 90          # one try of one voice, decoded and transcribed (a 
 VOICE_BUDGET = 180           # one voice in all: waiting behind other voices, a start, two tries
 VIDEO_DEADLINE = 120         # one try of one video's contact sheet (36 seeks, at most 32 MB)
 VIDEO_BUDGET = 240
+FRAME_DEADLINE = 60          # one try of one frame of a video (one seek, at most 32 MB)
+FRAME_BUDGET = 120
 FAULT_LANES = {'voice': 'transcriber', 'video': 'video', 'data': 'data'}
 MEDIA_WORKER = 'asuna.media_worker'         # the media kinds' program, told its kind before the Host's pid
 VIDEO_PACKAGES = ('av', 'PIL')
@@ -406,9 +409,25 @@ def video_snapshot(data):
     """(png bytes, words) for a video, or (None, {'error': words}): as `animated.video_snapshot`, cut in the video
     child while the Host runs (in this process only where no Host ever started one: tests and tools)."""
     from . import animated
-    side = VIDEO
-    if side is None:
+    if VIDEO is None:
         return animated.video_snapshot(data)
+    return _video_job({'job': 'video'}, data, VIDEO_DEADLINE, VIDEO_BUDGET)
+
+
+def video_frame(data, at):
+    """(jpeg bytes, words) for the one frame `at` seconds into a video, or (None, {'error': words}): as
+    `animated.video_frame`, cut in the same video child as the contact sheet (in this process only where no Host ever
+    started one)."""
+    from . import animated
+    if VIDEO is None:
+        return animated.video_frame(data, at)
+    return _video_job({'job': 'frame', 'at': at}, data, FRAME_DEADLINE, FRAME_BUDGET)
+
+
+def _video_job(header, data, deadline, budget):
+    """One job of the video child: (its picture, its words), or (None, {'error': words}) for the machine's state or the
+    child's failure, in the video side's words."""
+    side = VIDEO
     if not side['enabled']:
         return None, {'error': VIDEO_OFF}
     if side['missing']:
@@ -416,11 +435,11 @@ def video_snapshot(data):
     if side['child'] is None:
         return None, {'error': VIDEO_NOT_STARTED}
     try:
-        answer, sheet = side['child'].call({'job': 'video'}, data, VIDEO_DEADLINE, VIDEO_BUDGET)
+        answer, picture = side['child'].call(header, data, deadline, budget)
     except StartFailed:
         return None, {'error': VIDEO_NOT_STARTED}
     except Timeout:
         return None, {'error': VIDEO_TIMEOUT}
     except (Died, JobError):
         return None, {'error': VIDEO_CRASHED}
-    return (sheet or None), answer.get('words') or {}
+    return (picture or None), answer.get('words') or {}

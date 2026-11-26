@@ -157,7 +157,7 @@ home from outside), `everywhere`, or `none`. The table (defaults in `access.RESO
 
 | Resource | Covers | Default |
 |---|---|---|
-| `own_files` | the conversation's own files ([Own files](#own-files)): read by id or ref, listed, saved into (`web_fetch`'s `save`) | `everywhere` |
+| `own_files` | the conversation's own files ([Own files](#own-files)): read by id or ref, listed, saved into (`web_fetch`'s `save`, a video's frame cut by `read_image`'s `at`) | `everywhere` |
 | `all_files` | every conversation's stored files by id, with no conversation or age check while the bytes exist; every conversation's message attachments by ref, for 7 days | `home_from_outside` |
 | `list_files` | other conversations' pictures and files in a home conversation's lists (`image_artifacts_from_program`, `file_artifacts_from_program`, `your_pictures_from_program`); `received_file`'s `list` of a group by its name (`place`) | `home_from_outside` |
 | `disk` | a disk path to `read_image`, for both brains | `home` |
@@ -1131,6 +1131,7 @@ does not declare `voice_in` keeps its placeholder.
 | `allow_insecure_http` | `false` | allow `http` links |
 
 - Bytes are accepted as PNG, JPEG, WebP or GIF by file signature. A video (at most 32 MB, `VIDEO_MAX_MB`) is read as a contact sheet and not kept, cut in a child process of its own that starts with the worker and stays loaded while `videoDecoding` is on (`media_children.video_snapshot`): a video has 240 s in all, a try past 120 s is killed and the video tried once more in a fresh child, and a second timeout, a crash or a program error in the child (`拆视频的程序出错了`), the decoder not installed (`ASUNA_VIDEO_DECODER_UNAVAILABLE` in the Host log at start), or the setting off each says so in its own words; an animated picture is read as a contact sheet too, in the worker (`src/asuna/animated.py`).
+- **One frame of a video** (`at`, seconds into it, a number of 0 or more; `vision.video_frame`). Given with a video's reference, `read_image` gives that one frame in place of the sheet: the video is pulled again by its reference as for the sheet (its 32 MB, the reference's 7 days, the origin's reach), and the frame is found by the seek a sheet's cell uses, so the moment on a cell's label gives that cell's frame, in the same video child (one try 60 s, 120 s in all, `media_children.video_frame`), at its own size up to 1920 px on its long edge, as a JPEG (quality 92). It is stored as a picture of the turn's or the task's own conversation through the picture registration (`outbound_media.register_imported_image`), source `frame:<reference>:<at in ms>`, which needs `own_files` (`ACCESS_DENIED_OWN_FILES`); the same `at` on the same reference there reads that row back, with no second download. It lives as a pulled copy (7 days; kept while a message or her shelf names it). The result is the frame itself as the picture, `cut` 「截好了：视频第 <at> 秒这一帧（<width>×<height>），记在<the conversation as she reads it>」, `artifact_id`, `sha256` and `note`: in a task `要发就用 offer_file，artifact_id 写这个。`, in a home turn `要发就用 speak 的 picture，写这个 id。`, in any other turn `这里能发的图里没有它：要发，先让任务用 offer_file 登记这个 id。` (a frame is its conversation's own: sendable there, not on an outside turn's list). A video that can no longer be pulled is refused as for the sheet, never answered with the sheet.
 - A link its platform signs is signed again with the current [media key](#post-the-current-media-link-keys) before the fetch.
 - Pulled bytes are stored in the scoped blob store; how long each kind of stored picture lives is `src/asuna/media_life.py` (`POLICY`).
 
@@ -1146,6 +1147,9 @@ does not declare `voice_in` keeps its placeholder.
 | `IMAGE_GONE` | the host says the picture is gone (HTTP 404 or 410) |
 | `IMAGE_SIGNATURE_UNAVAILABLE` | no current key is known; worth trying again later |
 | `IMAGE_TOO_LARGE`, `IMAGE_TYPE_UNSUPPORTED` | over the limit, or not a supported type |
+| `INVALID_READ_IMAGE_AT`, `READ_IMAGE_AT_NOT_VIDEO` | `at` not a number of 0 or more, or given with anything but a video's reference |
+| `VIDEO_FRAME_OUT_OF_RANGE` | `at` past the video's end: `这段视频约 <s> 秒，at 写 0 到 <s> 之间的数` |
+| `VIDEO_FRAME_NOT_STORED` | the frame was cut but the store did not take it |
 
 ### Sending pictures
 
@@ -1282,6 +1286,8 @@ The managed integration (a channel adapter or a LAN device tool run in the sandb
 ### Drawing and rendering
 
 - `generate_image` drives the endpoint aliased `image` through that service's agent API (`project-comfyui-agent/v1`): `POST /project/resolve` (when no `workflow` is named), `POST /project/generate` with `batch_size` 1, `GET /project/jobs/{prompt_id}`, the first `/view` output; for a source picture `POST /upload/image` and `DELETE /project/inputs/{name}` (`src/asuna/integration_image.py`). `width` and `height` are 64–2048 in multiples of 8; `timeout` 30–300 s (default 180); a job still running is collected later with `job`. The picture is registered as hers (source `integration:image:<view path>`); an edit of someone else's picture is not hers and may go only back where it came from.
+- A workflow's other pictures (its declared `*_image` parameters besides `input_image`: a mask, a face) are `generate_image`'s `pictures`, `{name: ref or artifact_id}`, at most 4, only with `workflow`. Each is read as `source_image` is (`read_image`'s fence for the task's origin, its size cap), uploaded beside it and removed after the job. A required one not given (`IMAGE_WORKFLOW_NEEDS_MORE_PICTURES`, which names `source_image` too when it is also missing) and a name the workflow does not declare (`IMAGE_PICTURE_NOT_IN_WORKFLOW`) are refused before any upload. A drawing made from someone else's picture (the source or one of `pictures`, the source first) goes back where that picture came from, as an edit does.
+- `list_routes=yes` lists every ready workflow: `source_image` and each of `pictures` marked `required` or `optional` (with the workflow's own description of that picture), and `needs` (「还要：<name>」) for an input the workflow requires that `generate_image` does not send.
 - `render_svg` turns an SVG in the task folder (at most 2 MiB, no XML entities) into a PNG with resvg in the Host (`packages/cognition-core/src/svg.js`), `width` 16–2048; the PNG is registered as hers (source `integration:svg:<path>`).
 - Offline checks: `tests/test_image_generation.py`, `tests/test_svg_render.py`, `python3 tools/integration_import_offline_check.py`, `python3 tools/outbound_image_offline_check.py`.
 

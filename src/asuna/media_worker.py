@@ -4,7 +4,8 @@ in media_children's frames. stdout carries frames only; anything else the librar
 
 - voice: a voice's bytes and their container -> the detector's pieces, decoded on their own (voice.SenseVoice), with
   the time each stage took. A voice that cannot be decoded answers its reason in words.
-- video: a video's bytes -> its contact sheet (animated.video_snapshot) and its words.
+- video: a video's bytes -> its contact sheet (animated.video_snapshot) and its words; with `job` `frame` and `at`,
+  the one frame at that moment (animated.video_frame).
 - An error of the child's own code (not of the job's content) is answered with `program` and the traceback's tail.
 - It exits when its stdin closes or its Host's pid is gone, even in the middle of a job (on Windows the Host's job
   object kills it as well).
@@ -48,8 +49,11 @@ def _video():
     from . import animated
 
     def job(header, data):
-        sheet, words = animated.video_snapshot(data)
-        return {'ok': True, 'words': words}, sheet or b''
+        if header.get('job') == 'frame':
+            picture, words = animated.video_frame(data, float(header['at']))
+        else:
+            picture, words = animated.video_snapshot(data)
+        return {'ok': True, 'words': words}, picture or b''
     return job
 
 

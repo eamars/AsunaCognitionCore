@@ -1016,7 +1016,8 @@ class ToolBroker:
                 if not getattr(self,'integration',None):raise Denied('IMAGE_SERVICE_UNAVAILABLE: 本机生图服务这会儿没接上（集成运行器没启动）；'+UNAVAILABLE)
                 from .image_generation import generate
                 def source(ref):
-                    # The picture to edit: only one this task may look at (read_image's fence, this task's origin).
+                    # A picture to draw from (source_image, or one of pictures): only one this task may look at
+                    # (read_image's fence, this task's origin).
                     if not getattr(self,'vision',None):raise ValueError('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
                     picture=self.vision.picture_to_edit(task,ref,task_dir=sandbox.task_dir,origin=origin)
                     # Her own drawing edited stays hers; anyone else's goes back where it came from.

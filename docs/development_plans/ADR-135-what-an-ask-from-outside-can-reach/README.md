@@ -17,6 +17,10 @@ read-only: rows by state, kind, class and time, program text, and counts. No mod
 
 Found after (2026-11-25, ADR-120 §2): the guard row `_image_path` checks `args['path']`, which `read_image` never takes (a path arrives as `ref`), so it never fires; the fence in `vision.py:703-713` does. Nothing was exposed; the row is removed in ADR-120 landing 1.
 
+Changed after (2026-11-26, ADR-120 §6, landing 7): D9's question is no longer only the kind and the text: when the
+crossing carries stored pictures or files, one line 「附带：N 张图、M 个文件」 (counts by kind, never a name) comes after the
+kind line. Text alone is still what is judged; the policies are unchanged.
+
 The texts of all 28 tools are in [tool-texts.md](tool-texts.md).
 
 ## The ask

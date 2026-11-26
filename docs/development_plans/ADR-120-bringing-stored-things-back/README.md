@@ -377,7 +377,7 @@ One branch each from main, staged on an isolated stub profile, the full suite pe
    one, so `needs` is shown on none. `IMAGE_WORKFLOW_TAKES_NO_SOURCE` now says which pictures the
    route takes (its old note said "draws only from text", false for a face-reference route). Cost: the action brain's
    tools +202 characters declared (18,047 -> 18,249 on top of landing 5, budget raised); the listing, measured on the service's own
-   metadata (2026-11-26 18:3x, `list_workflows` of main and of this landing on the same listing, nothing drawn),
+   metadata (2026-11-26, `list_workflows` of main and of this landing on the same listing, nothing drawn),
    24,179 -> 29,840 characters (18 -> 22 routes; at an estimated four characters a token about 7,500 tokens, inside
    the 12,500 that DSH carries inline, `maxInlineTokens`), its note +80 (204 -> 284). Not built: the routes' other settings (her skill reads `mask_channel`, `grow_mask_by` and `denoise` on
    the inpaint routes and `input_fit` on face-reference): `options` still takes only `steps`, `cfg`, `sampler_name`

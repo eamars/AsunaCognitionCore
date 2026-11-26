@@ -1,5 +1,12 @@
 # CHANGELOG · asuna-image-generation-and-display
 
+体例：这本每次发布记一笔，一行一条：发布号＋改了哪一处字面；最新在顶，下面的旧条目一条没重排。
+
+- 11-26（第四笔，本趟；发布号以发布回执里的 candidate 为准，正文不自引，免得为回填号再发一笔）：`SKILL.md` 在「离线自检」节前新增「派腿画图那张纸：身份、路径、留档、围栏（六条＋一条通则）」一节（身份只认 sha 前 12 位＋字节数、引路径两种写法、沙箱 `/task` 可能是空目录、库内字段路径现读、prompt 逐字进表、围栏按本不按节，加文件名时间戳与 mtime 不同源一条通则），既有节一字未动；`check_skill.py` 加 `DISPATCH_SHEET` 一组 12 枚钉＋节存在一枚。
+- 11-26（a9670ebb49f5）：「官方定妆」节完整提示词形状代码块里那一行形象词，在 `calm face` 之后插入 `warm tanned skin, healthy wheat tone`；`check_skill.py` 加 `SELF_SKIN` 组一枚钉 `self_skin_warm_wheat_tone`。
+- 11-26（b15a554ed3da）：「失败怎么读」表里 `ATTACHMENT_NOT_AN_IMAGE` 那行「（包括超上限的图）」换成两闸划分的括注（`web_fetch` 带 `save` 的公网图超 8 MiB 在落库时被降成 `file` 撞这句，`kind=image` 而超上限撞 `ATTACHMENT_OVER_LIMIT`）；`check_skill.py` 的 `ATTACH` 名单加 `attach_err_not_an_image_literal` 一枚钉。
+- 11-26（326549275cda）：「失败怎么读」表新增 `ATTACHMENT_NOT_AN_IMAGE` 一行（picture 指向 `kind=file` 的回执字面）；「本机已有那张图怎么进可发清单」里 `web_fetch` 带 `save` 那条的结尾括注从「读码所得」改成「现场量过」的实测句；该趟没动 `check_skill.py`。
+
 - 11-25（单点·正文两行字面·来源：腿 11-25 18:50 现读；本条由当趟腿落笔）：
   ① 旧代号 `IMAGE_PATH_HOME_ONLY` 随 ADR-120 第一步（提交 `ae4b97ae3e35`）退役——`tests/test_access.py:182` 显式断言它不在 `guard.RULES`。现在现场那句中文是「盘上的路径只在家里能读。」，码里的行名是 `ACCESS_DENIED_DISK`。正文两处（现排第 490、841 行）把代号换成现场字面＋行名，并写明那串代号不会出现在我看到的回执里、别拿它当现场凭据。
   ② 新边界并进同一格：**「外面托、家里办」那一拍连同它回来的那一拍按外面算**，读盘上的路径同样被拒（旧正文只写「家里限定／群线用不了」，没覆盖这一拍）。

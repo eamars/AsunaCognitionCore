@@ -688,6 +688,38 @@ SELF_SKIN = [
     ("self_skin_warm_wheat_tone", "warm tanned skin, healthy wheat tone"),
 ]
 
+# 派腿画图那张纸一节（六条＋通则）：只钉列出的关键字面，同一条其余字面被删不红（代价写在 CHANGELOG）。
+# 切片＝「## 派腿画图那张纸」那一节；整节被删或改标题时切片为空，下面每枚一起红。
+DISPATCH_HEADING = "## 派腿画图那张纸"
+DISPATCH_SHEET = [
+    ("dispatch_identity_sha12_bytes", "图的身份只认 `sha256` 前 12 位＋字节数"),
+    ("dispatch_blob_id_is_a_handle", "这一次投递的把手"),
+    ("dispatch_blob_id_not_unique", "会把一张图数成两张"),
+    ("dispatch_path_two_forms", "引路径只有两种写法"),
+    ("dispatch_path_task_relative", "任务目录相对路径"),
+    ("dispatch_sandbox_task_may_be_empty", "`/task` 可能指到一个空目录"),
+    ("dispatch_db_field_path_read_first", "`content.sections[].body`"),
+    ("dispatch_prompt_verbatim_into_table", "prompt 原文必须逐字进表"),
+    ("dispatch_prompt_free_variable", "文字提示词本身就是一处自由变量"),
+    ("dispatch_fence_per_book_not_section", "围栏按这一本技能给，不按这一节给"),
+    ("dispatch_pin_in_same_book_not_over_fence", "不算越围栏"),
+    ("dispatch_clock_pair_not_offset", "当场拉一对现读配对"),
+]
+
+
+def dispatch_section_slice(body):
+    """「## 派腿画图那张纸」标题下、下一个二级标题之前的正文。"""
+    out, taking = [], False
+    for line in body.splitlines():
+        if line.startswith(DISPATCH_HEADING):
+            taking = True
+        elif taking and line.startswith("## "):
+            break
+        if taking:
+            out.append(line)
+    return "\n".join(out)
+
+
 # 画本人这一族的提示词排除配饰＋交回自检·配饰那一格＋两格共用的处理口径（同一趟复盘：提示词没提项圈，
 # 模型自己长出黑色 choker ＋圆牌，是交回之后人眼看出来的）。与上面那组各钉各的：删配饰那一格只红这一组。
 SELF_ACCESSORY = [
@@ -1011,6 +1043,13 @@ def main():
     for name, token in SELF_SKIN:
         check(name, token in look_slice,
               "「%s」不在「官方定妆」的形象词序列里（切片 %d 字）" % (token, len(look_slice)))
+
+    # 派腿画图那张纸一节：节标题被改或删→切片为空→这一组一起红（切片为空不等于查过）。
+    dispatch_slice = dispatch_section_slice(body)
+    check("dispatch_section_present", bool(dispatch_slice), "「派腿画图那张纸」一节切不出正文（标题被改或删）")
+    for name, token in DISPATCH_SHEET:
+        check(name, token in dispatch_slice,
+              "「%s」不在「派腿画图那张纸」这一节里（切片 %d 字）" % (token, len(dispatch_slice)))
 
     # 人像实测那一节（2026-11-05）：标题被删 → 切片为空 → 下面几条一起红；
     # 保守字面与「判不了」那条同等承重——只留配方不写适用面，下次会拿便宜档草稿的漂移去判配方失效。

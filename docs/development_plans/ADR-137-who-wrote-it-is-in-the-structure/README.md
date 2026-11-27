@@ -104,11 +104,16 @@ Two parts, landed in order: **D2 first**, on its own; **D1** only after §9, by 
    not carry a line's `receipt` as a `user`/`channel` source, so `visibleCarried` and the receipt check do not take it
    for the line (`context-delivery.js:61`, `navigation.js:72`).
    Because those pictures were never attached (§2.1), this does not move them: it **turns group-turn pictures on** for
-   the first time (up to two images in about 165 group turns a week), and probably adds a visible row to a group's
-   page. So the owner split it off (2026-11-27): D2a, item 1, lands first; D2b lands after a staged look at the group
-   page and his word (branch `claude/adr137-d2-pictures`). Until then she is told plainly that group pictures were
-   not attached, so she keeps using `read_image`. The review's concern about a person's picture inside the program's
-   message (W5) therefore never happened in practice; D2b keeps it from starting.
+   the first time (up to two images in about 165 group turns a week). It was expected to add a visible row to a
+   group's page, so the owner split it off (2026-11-27): D2a, item 1, lands first; D2b lands after a staged look at the
+   group page and his word (branch `claude/adr137-d2-pictures`). Until then she is told plainly that group pictures
+   were not attached, so she keeps using `read_image`. The review's concern about a person's picture inside the
+   program's message (W5) therefore never happened in practice; D2b keeps it from starting.
+   **Staged 2026-11-27 23:03 (造的, evidence `.runtime/private/adr137/staging-d2b/`):** the Chat view is unchanged.
+   DSH draws a program message that did not start the turn as a context node with no row. The Trajectory tab lists
+   it as a context row "Images ×2 · " followed by the label line, which opens to the thumbnails. The model received the
+   lines, then one message with each picture under its line's label line, then the notice naming its line with no
+   image part.
 3. No format change, no migration. D2a changes nothing on the Web page.
 
 ### 3.2 D1: one envelope (after §9, the owner's choice)

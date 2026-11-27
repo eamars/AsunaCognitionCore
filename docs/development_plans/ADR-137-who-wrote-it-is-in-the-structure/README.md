@@ -113,7 +113,7 @@ Two parts, landed in order: **D2 first**, on its own; **D1** only after §9, by 
    DSH draws a program message that did not start the turn as a context node with no row. The Trajectory tab lists
    it as a context row "Images ×2 · " followed by the label line, which opens to the thumbnails. The model received the
    lines, then one message with each picture under its line's label line, then the notice naming its line with no
-   image part.
+   image part. The owner's word on the look, 2026-11-27 23:09: "Look fine!"
 3. No format change, no migration. D2a changes nothing on the Web page.
 
 ### 3.2 D1: one envelope (after §9, the owner's choice)

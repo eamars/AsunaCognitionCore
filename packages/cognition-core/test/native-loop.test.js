@@ -335,6 +335,65 @@ test('a group turn reads its line, then its pictures in a message of their own, 
   assert.equal(JSON.stringify(h.requests[0].messages).split('a-att-').length - 1, 2);
 });
 
+// ADR-137 D2a: a notice that named its line has no copy of the line's words. When a compaction takes the line, the
+// restore brings the words back once; a later compaction that leaves that restore in view sends them no more.
+test('the restore that brought back the calling line\'s words is the last to send them while it is in view', async t => {
+  const h = await harness(t);
+  const core = h.core;
+  const role = await h.create('group-g');
+  core.channels.set('qq', { kind: 'qq', title: 'QQ' });
+  const host = { sessionPersistence: { stat: async () => true }, workspaceRegistry: { unarchiveSession: async () => {} },
+    sessionController: { list: async () => ({ items: [] }) } };
+  core.ctx = new Proxy(h.ctx, { get: (target, key) => key in host ? host[key] : target[key] });
+  const binding = { scene_id: 'qq:group:1', cwd: '/data' };
+  await core.onEvent({ kind: 'stage', session_id: 'group-g', token: 'turn-1', phase: 'TURN', lane: 'character',
+    scene_kind: 'group', system: 'persona', text: 'tail', episode_id: 'ep-1', binding,
+    context: { scene: '群', event: { event_id: 'evt-1', text: '看图', line: '〔12〕', trusted_context_events: [] } },
+    channel_input: { session_id: 'group-g', binding, input: { id: 'in-ep-1', text: '[某人 #4] 11/26 23:52 〔12〕\n  看图',
+      sender: '10001', received_at: '2026-11-26T10:52:00Z', state: 'ACCEPTED' } } });
+  await role.whenIdle();
+  // A compaction at the next step: of everything, or of everything before the restore still in view.
+  const plan = [];
+  let n = 0;
+  h.ctx.on('agent/pre-step', async ({ agent }, next) => {
+    const how = agent === role ? plan.shift() : undefined;
+    if (how) {
+      const session = role.session, nodes = session.surface.nodes;
+      const first = nodes.find(seq => session.eventAt(seq).type !== 'system/message');
+      const kept = how === 'all' ? -1 : nodes.findIndex(seq => session.eventAt(seq).data?.source?.phase === 'RESTORE');
+      assert.ok(how === 'all' || kept > nodes.indexOf(first), 'the restore is on the surface to be kept');
+      const last = how === 'all' ? nodes.at(-1) : nodes[kept - 1];
+      const shadowed = nodes.filter(seq => seq >= first && seq <= last);
+      const turn = session.snapshotEvents().findLast(event => event.type === 'turn/start').data.turn;
+      const id = 'c' + ++n;
+      session.append('compaction/start', { compactionId: id, turn });
+      const summary = session.append('compaction/summary', { compactionId: id, summary: [{ type: 'text', text: 'earlier' }],
+        shadowedRange: { start: first, end: last }, shadowedSeqs: shadowed, shadowedTokenCount: 10, provider: 'fixture',
+        model: 'one-model' });
+      session.append('user/message', createUserMessage({ source: { kind: 'compact-checkpoint', compactionId: id },
+        content: [{ type: 'text', text: '<compacted-summary>earlier</compacted-summary>' }] }),
+      { surfaceOp: { op: 'replace', startSeq: first, endSeq: last }, sourceEventSeqs: [summary.seq, ...shadowed] });
+      session.append('compaction/end', { compactionId: id, turn });
+    }
+    return next();
+  });
+  const restores = () => role.session.snapshotEvents()
+    .filter(event => event.type === 'user/message' && event.data.source?.phase === 'RESTORE')
+    .map(event => ({ seq: event.seq, sent: JSON.parse(event.data.content[0].text.split('\n')[1]) }));
+  plan.push('all');
+  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'one' }] }));
+  await role.whenIdle();
+  const [first] = restores();
+  assert.equal(first?.sent.event?.text, '看图', 'the line was taken: its words come back with the restore');
+  plan.push('kept');
+  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'two' }] }));
+  await role.whenIdle();
+  assert.equal(n, 2, 'both compactions ran');
+  assert.ok(role.session.surface.nodes.includes(first.seq), 'the first restore is still in view');
+  assert.deepEqual(restores().slice(1).filter(restore => 'text' in (restore.sent.event ?? {})), [],
+    'no later restore sends the words again');
+});
+
 // ADR-098: what the model reads in her lanes holds no local root of this computer; the action brain's requests and
 // every stored message stay as they were.
 const PATHS = JSON.parse(readFileSync(new URL('../../../tests/fixtures/path_placeholders.json', import.meta.url), 'utf8'));

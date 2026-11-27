@@ -5,7 +5,7 @@ ADR"), after his reading: the core issue is how the input is structured, so that
 from without an extra prompt or notice; several input patterns are a yellow flag. Reviewed the same day by an
 independent session (Mythos 5.2) in two rounds, and agreed with it (`review.md`, `review-2.md`, big sis's answers
 `response-1.md`, `response-2.md`, in `.runtime/private/adr137/`). The owner gave his word on §8 the same day: D2 is
-built first; D1 only after §9 and his choice. Everything below was read 2026-11-27 from the code on `main` (`da18a02cc9c9`), from the installed
+built first, in two landings (D2a the copy, D2b the pictures, §3.1); D1 only after §9 and his choice. Everything below was read 2026-11-27 from the code on `main` (`da18a02cc9c9`), from the installed
 DSH (`node_modules`, pinned `ef6a4702b45d`), and read-only from her database and her session files (forms, counts,
 characters and fixed-string hits only). "Last week" is 11-20 00:00 to the reading on 11-27, her 25 character
 conversations active in it. Times are local.
@@ -47,7 +47,7 @@ Who wrote a message is told only by a convention in its text:
 | A platform line | `navigation.js:112`, text from `people.transcript` (`people.py:604`) | `[某人 #4] 11/26 23:52 〔812〕`, then the body indented two spaces | 27,738 messages, 1.96M characters |
 | A platform notice (a recall, a poke) | the same, `notices.py` | a label line ending （平台通知）, the program's words as the body | among the above |
 | The owner's Web line | DSH's composer | his text alone; its number in the next notice (`event.line`, ADR-108 A3) | 518, 40k |
-| A turn notice | `index.js:882`, `:892` | `〔程序〕`, a JSON object, then a paragraph of program prose; **a group turn's pictures as image parts of this message** (`index.js:892`, `coordinator.py:417-442`, `role_tools.py:1297-1332`) | 1,753, 16.9M |
+| A turn notice | `index.js:882`, `:892` | `〔程序〕`, a JSON object, then a paragraph of program prose. A group turn's pictures were meant to be image parts of this message (`index.js:892`, `coordinator.py:417-442`, `role_tools.py:1297-1332`), but **they were never attached** (found by D2's build, 2026-11-27): only the Web input's admission builds them (`index.js:1707`), and a group turn's notice goes out through `startStage` → `message()` (`:1045`). Since 11-01, 0 of 6,937 notices carried an image; last week 165 of 1,788 still said, in `pictures_from_program`, 「这些图已经作为图片跟这一次一起给你了」 | 1,753, 16.9M |
 | A repair notice | the same | `〔程序〕` and prose | 11 |
 | A restore notice | `index.js:910` | `〔程序〕` and JSON | 2 |
 | A checkpoint | DSH's `frameSummary` around ours (`marks.js` `withCheckpointHead`) | DSH's English preamble, `<compacted-summary>`, our `〔摘要〕` line, the compactor's Markdown | 136, 1.42M |
@@ -97,12 +97,19 @@ Two parts, landed in order: **D2 first**, on its own; **D1** only after §9, by 
    text only when it is not. A turn the program opened keeps `event.text`: those words are the program's or the
    action brain's, and `woken_by_program` says so (ADR-108 D5). The owner's Web line is treated the same way: its
    number stays, its copy goes.
-2. **Pictures leave the notice.** A group turn's pictures come in a message of their own, after the line that brought
-   them and **before** the notice, so the program's own words stay the last thing before her turn. Each picture
-   names its own line (up to two come from earlier lines, `role_tools.py:1309-1317`). The message is headed in the
-   form of the line that brought it, and its `source` does not carry a line's `receipt` as a `user`/`channel` source,
-   so `visibleCarried` and the receipt check do not take it for the line (`context-delivery.js:61`, `navigation.js:72`).
-3. No format change, no migration, nothing on the Web page.
+2. **Pictures, in a message of their own (D2b, a landing of its own).** A group turn's pictures come in a message of
+   their own, after the line that brought them and **before** the notice, so the program's own words stay the last
+   thing before her turn. Each picture names its own line (up to two come from earlier lines,
+   `role_tools.py:1309-1317`). The message is headed in the form of the line that brought it, and its `source` does
+   not carry a line's `receipt` as a `user`/`channel` source, so `visibleCarried` and the receipt check do not take it
+   for the line (`context-delivery.js:61`, `navigation.js:72`).
+   Because those pictures were never attached (§2.1), this does not move them: it **turns group-turn pictures on** for
+   the first time (up to two images in about 165 group turns a week), and probably adds a visible row to a group's
+   page. So the owner split it off (2026-11-27): D2a, item 1, lands first; D2b lands after a staged look at the group
+   page and his word (branch `claude/adr137-d2-pictures`). Until then she is told plainly that group pictures were
+   not attached, so she keeps using `read_image`. The review's concern about a person's picture inside the program's
+   message (W5) therefore never happened in practice; D2b keeps it from starting.
+3. No format change, no migration. D2a changes nothing on the Web page.
 
 ### 3.2 D1: one envelope (after §9, the owner's choice)
 
@@ -365,8 +372,25 @@ that carry the verdict.
 
 ## 10. Closes when
 
-- **D2:** built, installed, and read the day it is installed: no notice's `event` carries the text of a line that
-  is in the conversation, and no group turn's picture is an image part of a notice (counts, numbers only).
+- **D2a:** built, installed, and read the day it is installed: no notice's `event` carries the text of a line that
+  is in the conversation (a count, numbers only). **Met 2026-11-27.** Installed at 19:48:36 (`fb14805c09ad`); the
+  count's window runs to 22:09 (`scripts/d2a_count.py`, `.runtime/private/adr137/`). There were 6 turn notices:
+  - 3 name their calling line (`event.line`) and carry no `text`. The person's words are still in view: the line is
+    its own message, right before the notice;
+  - 3 are turns the program opened. They have no calling line and keep `text`, and that text is in no person's message
+    of their conversation;
+  - 0 carry the text of a line in view.
+
+  Checked from her side over the same window, the notices match one by one. The count is small because the groups
+  were quiet: between 19:58 and 22:00 none of the 377 lines that arrived called her, which is normal there (the same
+  hours on 11-26 had 511 lines and 0 wakes).
+
+  What is met is the copy within one turn: the program's message no longer repeats the words of the line that called
+  her. A program receipt that a later turn's delivered history lists again is that history's job, and D2a does not
+  touch it.
+- **D2b:** built after the staged look at a group page and the owner's word, installed, and read the day it is
+  installed: group turns that announce pictures carry them, in their own message before the notice, and no notice
+  carries an image part (counts).
 - **D1:** built and read the same way (every message Asuna writes since the install in its envelope, the owner's Web
   line bare; the changeover closed by its count), or declined by the owner after §9.
 - **R1:** as §3.3.

@@ -981,6 +981,72 @@ def cr_bytes(paths):
     return bad
 
 
+
+# ── 11-28 那批：交代点名要钉的三处旧字面（此前零钉）＋这趟六格新正文自带的钉 ──────────
+# 判红口径照本脚本已有的字面锁：剥掉反引号里的引用（prose），只在散文里判——引用旧句子不红。
+# 三处「两头都咬」＝一枚正钉（改后的新字面必须在）＋一枚反钉（改前的旧字面回到散文就红）。
+# 旧字面逐字取自 11-28 那笔发布的 git 改动行（`git show fb8bc46b6` 里被删掉的那几行），不是凭印象补的。
+# 六格那几组是单侧正钉：这些句子是这趟新写的，没有"旧说法"可反咬；拆掉哪一格只有那一组红。
+SAME_BASE_LORA = [
+    ("pin_lora_same_base_half_phrase", "同一底模＋那颗 LoRA"),
+]
+SAME_BASE_LORA_STALE = [
+    "在 v1-1 上自己挂 LoRA",
+]
+CFG1_NEGATIVE_ROUTE = [
+    ("pin_cfg1_negative_not_sampled", "负面提示词不参与采样"),
+]
+CFG1_NEGATIVE_ROUTE_STALE = [
+    "CFG 1 的路由不吃",
+]
+SMALL_TAG_COUNT = [
+    ("pin_small_tags_count_one_by_one", "除大招牌外，要逐个数"),
+]
+SMALL_TAG_COUNT_STALE = [
+    "判这一格要专门盯",
+]
+DISK_READ_RETRACTED_STALE = [
+    "那一拍按路径读图也不被拒",
+    "按路径读图不在它被拒的东西里面",
+]
+LOOK_LINE_TEST = [
+    ("pin_look_answer_which_line", "先答它是图上哪根线画出来的"),
+    ("pin_look_cannot_judge_this_cell", "这一格我判不了"),
+    ("pin_look_ask_if_missed_this_class", "这类物件我错过没有"),
+    ("pin_look_cross_page_line_named", "先说出两页各自画它的那根线"),
+    ("pin_look_symbol_not_motive", "只报符号不报动机"),
+    ("pin_look_no_stop_at_seen", "不许停在「我看到了」"),
+]
+PICTURE_VS_FILE_SLOT = [
+    ("pin_dispatch_picture_slot_id", "交回的必须是图口 id"),
+    ("pin_dispatch_read_whole_by_path", "按路径把成品整张读一次"),
+    ("pin_dispatch_path_offer_is_file_slot", "登记的那一份是文件口"),
+    ("pin_dispatch_no_home_trial_and_error", "别留到家里那一头发一次 picture 才试出来"),
+    ("pin_reg_image_slot_is_registered", "但图那一口确实登记出来了"),
+]
+DIFF_SET_LOCATE = [
+    ("pin_diff_set_not_appearance_scan", "用差集，不要按外观盲扫"),
+    ("pin_diff_set_per_pixel", "与产物逐像素作差"),
+    ("pin_diff_set_is_the_change", "差集＝改动本身"),
+    ("pin_diff_set_single_patch", "唯一被改的那一块"),
+]
+CONSTRAINED_PLANE = [
+    ("pin_banner_constrained_plane", "受约束的平面"),
+    ("pin_banner_paste_position_coords", "贴字位坐标"),
+    ("pin_shawl_has_no_flat_face", "披巾无平贴面"),
+]
+MOLE_EXECUTABLE = [
+    ("pin_mole_own_left_cheek", "痣在她自己的左脸颊"),
+    ("pin_mole_no_screen_side_words", "不写「画面左侧／右侧」"),
+    ("pin_mole_side_not_models_job", "位置这一项别指望模型"),
+    ("pin_mole_check_against_left_shoulder", "与她自己左肩同侧"),
+    ("pin_mole_verify_6x_pixel_coords", "放大到 6 倍并按像素坐标确认"),
+    ("pin_mole_warm_dot_within_5px", "5 像素以内的暖色暗点"),
+    ("pin_mole_eight_ray_hole_fill", "8 射线最近邻"),
+    ("pin_mole_no_ring_mean_fill", "整圈均值会留一圈亮疤"),
+]
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results, notes = [], []
@@ -1075,6 +1141,22 @@ def main():
 
     for name, token in GAP_FILL:
         check(name, token in body, token)
+
+    # 11-28 那批：三处旧字面两头都咬（正钉被抹掉红、旧字面回到散文也红），六格新正文各配一组正钉。
+    # 都押在散文（prose）上而不是某一节切片：这几格散在步骤 7、步骤 1、直路速查、官方定妆、派图纸、可发清单几处，
+    # 节切片反而会把它们拆散；代价写在这里——同一句话被搬到别的节里不红，拆掉整格才红。
+    for name, token in (LOOK_LINE_TEST + PICTURE_VS_FILE_SLOT + DIFF_SET_LOCATE
+                        + CONSTRAINED_PLANE + MOLE_EXECUTABLE
+                        + SAME_BASE_LORA + CFG1_NEGATIVE_ROUTE + SMALL_TAG_COUNT):
+        check(name, token in prose, token)
+    stale_lora_route = [item for item in SAME_BASE_LORA_STALE if item in prose]
+    check("no_stale_lora_route_claim", not stale_lora_route, ",".join(stale_lora_route))
+    stale_cfg1_route = [item for item in CFG1_NEGATIVE_ROUTE_STALE if item in prose]
+    check("no_stale_cfg1_negative_wording", not stale_cfg1_route, ",".join(stale_cfg1_route))
+    stale_small_tags = [item for item in SMALL_TAG_COUNT_STALE if item in prose]
+    check("no_stale_small_tag_wording", not stale_small_tags, ",".join(stale_small_tags))
+    stale_disk_read = [item for item in DISK_READ_RETRACTED_STALE if item in prose]
+    check("no_stale_disk_read_not_refused_claim", not stale_disk_read, ",".join(stale_disk_read))
 
     # 群聊生图上限（2026-10-16 v8）：节标题在 SECTIONS 里查（section_18），这里查节内硬指标与措辞版本。
     # 标题被删 → 切片为空 → 下面几条一起红：切片为空不等于查过，不会绿着放过。

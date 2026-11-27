@@ -66,7 +66,8 @@ scene_kinds: [home, group]
 每条路线多两格，都是服务端 parameter_schema 现读，不是写死的表：
 - `loras`：`{id: 默认强度}`，带一句 `loras_note`。id 以这格为准，**别默认写 `character`**：11-23 现读八条角色路线的 id 都叫 `character`，但默认强度不同（deepseek／gemini 0.9、chatgpt 0.8、claude／qwen／glm／grok／kimi 1.0）；animagine-xl-3.1-nsfw 的 id 是 `concept`（默认 0.9）和 `rapi`（默认 0.0＝默认关）。没有这格＝这条路线不收 loras。
 - `pose`：true／false。true 的再看有没有 `pose_strength`：有＝能调强度、给默认值；没有＝只能传 pose、不能调强度（11-23 现读 `qwen-image-2.1-t2i` 与 `moody-desire-v30` 是这种）。
-- **底模默认走 `anima-turbo-v1-1`（11-27 立；默认全部、例外点名，不是白名单）**：画图单没有特别理由，一律点名这一条；例外只有两条——① 写实静物走 `qwen-image-2.1-t2i`；② 拿现成图改走 `source_image`＋`pictures.mask_image` 那一族（edit／inpaint，见「改图与 `generate_image`」）。**角色类、ai 娘不算例外**，也不是「在 v1-1 上自己挂 LoRA」：11-27 当拍 `list_routes=yes` 22 条，`anima-turbo-v1-1` **不声明 `loras`**（没有 `loras`、没有 `loras_note`，也没有第二条同名）；带 `loras` 的是 8 条 `*-girl-anima-turbo`（键名 `character`，默认 0.8–1.0）和 `animagine-xl-3.1-nsfw`（`concept` 默认 0.9、`rapi` 默认 0）⇒ **要角色 LoRA 是换路线名，不是加参数**。这一条只讲 `list_routes` 清单这一格；服务端 `parameter_schema` 没读，别升级成「v1-1 服务端不挂 LoRA」。例外写不出为什么，就按默认走。
+- **底模默认走 `anima-turbo-v1-1`（11-27 立；默认全部、例外点名，不是白名单）**：画小满本人一律点名这一条，别的单没有特别理由也照此。例外只点名两类——① 要静物／写实照片感，走 `qwen-image-2.1-t2i`；② 在一张现成图上做局部改，走 `source_image`＋`pictures.mask_image` 那条带遮罩的 inpaint 路（`anima-turbo-inpaint`，见「改图与 `generate_image`」），**不换底模**。例外写不出为什么，就按默认走。来路：主人 11-27 00:44（本机钟面）原话「行，下次能默认用anima turbo么？」。
+- **ai 娘那颗 LoRA 也挂在 anima turbo 上（同一底模＋那颗 LoRA）**：主人 11-27 00:45（本机钟面）原话「其实ai娘也是anima turbo，不过附带了ai娘的lora」。ai 娘不属于例外。**这两处没对上，没圆**：主人说同底模加 LoRA；而 `list_routes=yes` 11-28 本趟现读 22 条，`anima-turbo-v1-1` **不声明 `loras`**（没有 `loras`、没有 `loras_note`），带 `loras` 的是 8 条 `*-girl-anima-turbo`（键名 `character`，默认 0.8–1.0，它们的 description 自述 official Anima Turbo v1.1 加 LoRA）和 `animagine-xl-3.1-nsfw`（`concept` 默认 0.9、`rapi` 默认 0）→ 调用上**要角色 LoRA 是换路线名，不是加参数**（底模不变，换的是路线名）。现读方法：每次画角色前先 `list_routes=yes`，看 `anima-turbo-v1-1` 有没有 `loras` 格、再看目标角色那条路线的 description 写的底模与它的 `loras` 键。这一条只讲 `list_routes` 清单这一格；服务端 `parameter_schema` 没读，别升级成「v1-1 服务端不挂 LoRA」，也别写成「v1-1 能直接传 loras」。
 
 **② 角色点名要 LoRA：完整调用形状**
 
@@ -255,7 +256,7 @@ for x in (res.get("matches") or [])[:3]:
 - 旧「没有 photoreal 专用路由」是 resolve 行为的旧实测，11-20 没重测；字面层面 photo 词已归 qwen 条（上面 11-20 读数）。
   想要照片感仍写进 prompt；「偏插画」是旧 resolve 行为的预期，未重测。
 - 提示词跟着选中 workflow 的 prompting 口径写（`prompting` / `prompt_granularity`），多数要英文。
-- **CFG 1 的路由不吃 `negative_prompt`**：「不要什么」必须写进正向提示词（如 `no text, no watermark`），
+- **CFG 1 的路线（anima-turbo 系、qwen-image）负面提示词不参与采样**：硬要求（体型、表情、别胖这类）必须正面写进 prompt 的正面词组，写成要的样子，不写成不要的样子。「不要什么」同样写进正向提示词（如 `no text, no watermark`），
   单开 negative 字段等于没说。
 
 ## 步骤 2：提示词按服务口径写，日常、不露骨
@@ -263,7 +264,7 @@ for x in (res.get("matches") or [])[:3]:
 - 方言与粒度跟着选中 workflow 的 `prompting.granularity.recommended`；不要把别的模型族的触发词抄过来。
 - 角色、服装、姿势、光线这些细节留在 `parameters.prompt` 里（`routing_boundary`：不为一个角色或一套衣服造路由）。
 - 明确写 SFW 约束与不要的东西：`fully clothed` / `modest` / `no nsfw`，加 `watermark, text, extra fingers, deformed hands`。
-- **店招／货架那一族：小价签是乱码高发位**。`every label blank`、`no letters` 这种整体约束压不住货架上那些小价签。
+- **动漫场景的小价签／小标签是乱码高发位**（店招、货架那一族最重）。`every label blank`、`no letters` 这种整体约束压不住货架上那些小价签。
   实测两种写法有效：① 把价签本身要求写成 `blank white tag`，并且**整条提示词里不要再出现 `shelf label` 这个词**；
   ② 让镜头离开货架特写，价签根本不出现在画面里。撞出这条的是 anime 那条 fallback 路线（`anima-turbo-v1-1`），
   别的路线没重测。
@@ -345,6 +346,16 @@ artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图
 
 两种红不一样，别混着说。也别把「没调用 read_image」写成「未做视觉复核」——那是没做，不是做不到。
 写「未做」时依据只有 job 回执 + 字节核验 + 当时提交的 prompt，要照实列出来。
+
+**看图那一层的兜底判据：说出口的每一样，先答它是图上哪根线画出来的**
+
+不只复核自己画的图——读别人发来的图、读一本子页同一把尺。说出口的每一样（物件、两页之间的关系、表情）都要能答一句「它是图上哪根线画出来的」；答不上就照下面三格各自的说法写。
+
+- **物件名**：剧情逻辑说「这里该有」的东西（已婚⇒戒指、职业⇒工牌这一类推法）不许直接点成物件名。**叫出名字的前提是你能指认出它是图上哪一格、哪根线画出来的**；指不出就写「这一格我判不了」，不拿推定当看见。要点名这一类物件之前先问一句：**这类物件我错过没有**——错过一次，这一类整体降级。
+- **跨页串联**：说「这两页是同一件事／同一个东西」之前，先说出两页各自画它的那根线是什么（实物轮廓／速度线／汗珠／网点，点名是哪一种）；说不出来就按两张互不相关的图处理，**不许串联，也不许升级成全书级符号**。
+- **表情**：先把画面映射到通用画法符号（瞪眼／咬紧／青筋／汗／眼被头发遮），**只报符号不报动机**——用力、爽、怒、惊在这一族画法里共用同一套符号。要写成「她在生气」，得有那个角色在别处的行为作凭据；没有就只报符号。
+- 三格共用一个出口：答不上「它是图上哪根线画出来的」，就降级成「我推的」，或者不说；**不许停在「我看到了」**。
+- 适用面：这一格只管「画面上有没有那样东西」这一层，**不顶同源那把尺**——要比对仍得同一份解码、同一来源量（正本字面在「edit／改图通路读数」那一节：「软不软要按解码后的像素量过再说」「拿文件字节比，会把编解码差读成重描更糊」）。
 
 ## 步骤 8：要把图发出去时，用 speak 的 picture part（不是发路径；所有对话同一条）
 
@@ -499,7 +510,7 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 
 - **群线收到的来图是消息图（attach ref，`att-…`）**：可以直接喂 `generate_image` 的 `source_image`。
 - **`artifact_id`（`blob-…`）**：同样直通。
-- **只有本地路径读图是家里限定**：家里那一拍传盘上路径能读；被拒时现场那句是「盘上的路径只在家里能读。」（码里的行名 `ACCESS_DENIED_DISK`；那串代号不会出现在我看到的回执里，别拿它当现场凭据）。attach 的图和 artifact id 不受这一行限。**「外面托、家里办」那一拍连同它回来的那一拍也拦盘上的路径，只是现场换话：给的是「这件是外面的人托的事：…」那句（里面明列「读盘上的路径…都不在这件事里」），不是上面那句。**那一栏**不是「外面」那一栏**：文件能读、能用所有对话的（外面那一栏只能读自己对话的），而**发**只发给托事的那个对话（家里才是哪里都能发）。
+- **只有本地路径读图是家里限定**：家里那一拍传盘上路径能读；被拒时现场那句是「盘上的路径只在家里能读。」（码里的行名 `ACCESS_DENIED_DISK`；那串代号不会出现在我看到的回执里，别拿它当现场凭据）。attach 的图和 artifact id 不受这一行限。**「外面托、家里办」那一拍连同它回来的那一拍也拦盘上的路径，只是现场换话：给的是「这件是外面的人托的事：…」那句，不是上面那句。那句里明列着「读盘上的路径…都不在这件事里」——这只说明那一拍现场给的是哪一句话，**不等于那一拍读得到盘上的路径**：被拒的是动作，两栏之间换的只是话（现读 `access.py:words`：`home_from_outside` 配 `NOT_IN_OUTSIDE_WORK`，那四项里就含 `disk`，回的就是这一句）。**那一栏**不是「外面」那一栏**：文件能读、能用所有对话的（外面那一栏只能读自己对话的），而**发**只发给托事的那个对话（家里才是哪里都能发）。
 - 判据一句：**报「这条路做不了」之前，先分清限的是哪种入口，再想一遍今天有没有用别的路走过同一件事。**
 
 **配错路线：瞬时返回，不排队、不白传图**
@@ -691,6 +702,7 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
 - **交回契约**指向「只画一次」⑨：逐发 `prompt_id`、成品 `artifact_id` 全 32 位、画面读数，生成步没跑就在第一格
   明写「没画」。这一节只往那三样里加一条：画面读数**要覆盖纸上点名保住的每一样**
   （上面「只改一处是愿望不是保证」那一格）。
+- **找「别人那张图上被改动过的那一小块」：用差集，不要按外观盲扫**（11-28 泪痣手工移植那一趟定的做法）。把那张图的来路——inpaint 的输入图、edit 的源件——从存储里现拉出来，与产物逐像素作差，**差出来的那一批像素就是这次改动的本体**；bbox、像素数、直径、中位数 RGB 都在差集上量。按外观（比如「找个深色小圆点」）在眼睛周围盲扫，扫到的全是发丝与阴影。凭据（那趟交回的读数，本趟腿没复算）：inpaint 输入图与产物作差，一次定到唯一被改的那一块，**Δ>2 共 201 像素，bbox x333..349 y429..446**。成因那一半是读数解释、服务端没正面说过：inpaint 把遮罩外的像素从输入图原样合成回去，所以差集＝改动本身。
 
 ## 姿势（pose）与现行 prompt 口径（2026-11-04 探到，服务端升级后的现量）
 
@@ -721,7 +733,7 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
 
 - `parameters.prompt` 必填（空串合法），≤8000 字符；宽高 64–2048 且为 8 的倍数（MOSS-Image 取 16 的倍数；11-20 的 instructions 原文仍这样写）。anima-turbo-v1-1 现读默认：896×1152、steps 12（推荐 8–12）、cfg 1.0、sampler `er_sde`、scheduler `simple`、filename_prefix `anima_turbo_v1_1`（run 46ffbe83）。
 - anima-turbo-v1-1 的 `prompting.structure`：quality/meta、subject count、character/series、appearance、outfit、**pose**、composition、environment、lighting（pose 这一格是新是旧没有旧版原文可比，未核实）。
-- negative：服务端现在明说了：`negative_prompt_effective_at_default: false`，「CFG 1 skips negative conditioning. Negative text has no effect at the default setting; CFG changes can affect distilled-model quality.」——和上文「CFG 1 的路由不吃 `negative_prompt`」一致，「不要什么」仍写进正向提示词。negative 字段仍被接受，默认值全文（11-20 现读，run 46ffbe83）：`worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, artist name, chromatic aberration`。
+- negative：服务端现在明说了：`negative_prompt_effective_at_default: false`，「CFG 1 skips negative conditioning. Negative text has no effect at the default setting; CFG changes can affect distilled-model quality.」——和上文「步骤 1」末尾那条一致（那一路负面词根本不进采样，「不要什么」只能写进正向），「不要什么」仍写进正向提示词。negative 字段仍被接受，默认值全文（11-20 现读，run 46ffbe83）：`worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, artist name, chromatic aberration`。
 - 内容：manifest `content`：「Resolve never routes by content: the prompt decides what an image shows … When the selected route has prompting.content_lines, add its 'explicit' or 'safe' line to the prompt. Explicit images must show adults.」我们只画全年龄：选中路线有 `prompting.content_lines` 时，把它的 `safe` 那一行加进 prompt。
 - 其他：保存的 PNG 带 ComfyUI prompt 元数据（输入文件名换成 `[input image]`）；发到不该看到 prompt 的地方前要剥（本技能「发出去的图不带提示词」一节已覆盖）。
 - 路线条数：现读 `list_routes=yes`（技能不存条数；11-04 那一趟读到的数已按现读口径从正文拿掉，正文几处旧写死数一并改成现读句式）。
@@ -801,10 +813,18 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
 - **左右按解剖学左算**，画面左右随构图走（「背朝镜头回头」那一类构图里，靠镜头这一侧其实是她自己的右侧）。
   **执行判据＝痣所在的那侧脸颊与她自己的左肩在同一侧**；判之前先把构图定下来（背朝哪边、脸转向哪边、
   看得见哪只耳），再照这条判，别拿「画面左边」当成她自己的左边。
-- **出图后必须自检那颗痣在不在、落在哪一侧**：按局部放大那一侧脸颊看（放大裁图的做法在「人像实测」第③条）。
-  不在、或长在镜像侧，两个出口：**在正确的像素位置把它贴上去**（家里 Pillow 本地贴、不重画，
-  与「只画一次」里「本地 Pillow 修字不算重画」那一格同一口径），或者**照崩了交回并重出一张**
-  （痣是原单点名的东西，缺它等于画面不对，这一支不算暗修；一单一画的上限照守，别连烧）。
+- **位置这一项别指望模型，写提示词也有讲究**：提示词里**不写「画面左侧／右侧」**，写「**痣在她自己的左脸颊**」；
+  位置判据＝**与她自己左肩同侧**（构图一转画面左右就翻，别拿画面边当尺）。这条路线（CFG 1、负面词不参与采样）
+  连开三枪都把痣画在镜像那一侧、写 `OWN LEFT` 都不动（凭据见本节末「为什么写成硬检」那一格）⇒ 位置别交给提示词，
+  画完就地像素级放。
+- **出图后必须自检那颗痣在不在、落在哪一侧，而且要验到位**：这颗痣**放大到 6 倍并按像素坐标确认**——
+  缩略图上左右根本看不出来（放大裁图的做法在「人像实测」第③条）。
+- **本地补救的做法写死（家里 Pillow，不重画，与「只画一次」里「本地 Pillow 修字不算重画」同一口径）**：
+  贴新痣＝按墨度掩膜挑落点、贴一颗 **5 像素以内的暖色暗点**（贴进皮肤自己的暗部梯度，别贴成死黑点）；
+  撤旧痣＝**8 射线最近邻 hole-fill**（沿孔外八条射线取最近邻往里填），**填色不用整圈均值**——整圈均值会留一圈亮疤。
+  两个出口照旧：本地贴，或者**照崩了交回并重出一张**（痣是原单点名的东西，缺它等于画面不对，这一支不算暗修；
+  一单一画的上限照守，别连烧）。来路：11-28 泪痣手工移植那一趟的交回读数（本趟腿没复算）；
+  家里贴过的先例见「edit／改图通路读数」里 `blob-1ca74087263a4d81a1e6658c1efc708a` 那一格。
 - **颗数也是自检项，不许只报「在不在／在哪一侧」就算过**：正本**只有一颗**泪痣，位置＝左眼下靠外；
   画面里出现**两颗或以上**＝缺陷（11-20 那一发点名了位置也点了左右，仍画出**两颗**，多出来那颗落在颊中部，
   最后靠本地 Pillow 中值滤波抹掉多余那颗才对上、没重画）。交回里必须写**数到的颗数**与各颗落点；
@@ -850,6 +870,12 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
   不是每张必画项——不放标不算画错我。
 - 点名要放才放：放了就**预期它带乱码**，随图一句说明直接交，**别再花一趟改图去删**
   （改图是整图轻重绘，代价见「edit／改图通路读数」那一节）。
+
+**布／牌上要写字：先把那一处写成受约束的平面，纸上另带贴字位坐标**
+
+- 派活纸点名「布／牌上写字」的单子，提示词必须把要写字的那一处写成**受约束的平面**——例：`a large unfolded rectangular banner stretched horizontally between both hands, flat blank flag face`；纸上另带**贴字位坐标意识**（那块面落在画面哪一带、多大、朝向）。
+- 光写 `blank cloth` 常画成披巾／垂坠，全图没有一块能贴字的平贴面（实测：第一枪披巾无平贴面；改成 `unfolded rectangular banner` 才出矩形旗面。来路：11-28 一趟派活单的读数，本趟腿没复算）。
+- 与「胸口小标」同一族：先要有那块面，字才谈得上对；面都没有，事后想贴字也没处贴。
 
 **明写不钉（防卡变枷锁）**
 
@@ -905,7 +931,7 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
 
 1. 手和手指数量对，脸没崩；
 2. 画面里没有乱码文字——要带字就得字对，对不了就宁可无字；
-   判这一格要专门盯**小价签**：大招牌干净不等于没乱码，货架那些小价签最容易冒 `ON`／`VK` 这种小字母
+   判这一格除大招牌外，要逐个数**小价签／小标签**（数几个、几个有字母）：大招牌干净不等于没乱码，货架那些小价签最容易冒 `ON`／`VK` 这种小字母
    （有效写法见「步骤 2」里店招／货架那一条）。人物身上的小平面（胸口图案、手机背面、墙上画框）同族，
    判完整张还要按局部裁开放大看（做法见「人像实测」那一节）。
 3. 构图没跑：改图不能把人重画成另一个人、另一套衣服、另一个姿势；
@@ -958,6 +984,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 
 ### 判据：`read_image` 按路径看过 ≠ 它在可发清单里
 - 按**路径**读盘上的图时，`vision.py` 的 `path_image` 也会登记一条，但来源前缀是 `file:<路径>`、scope 是**那个任务自己的** scope —— 它不算我做的图。
+- **但图那一口确实登记出来了**：按路径读盘上的图走的是 image 那一口（`vision.py:path_image` 把字节按 image 存进去），回执带 `pulled_via: local_file`，图口 id 就在同一条回执的 `blob_artifact`；家里那一拍 `speak` 不先过清单，认的就是这串。对照着看：**`offer_file` 按 `path` 登记的那一份是文件口**（`outbound_files.py:register` 落库写死 kind=`file`），picture 引它会撞 `ATTACHMENT_NOT_AN_IMAGE`；`offer_file` 只有带 `artifact_id` 指一张已登记成 image 的图，才走 picture 那一支（`outbound_files.py:offer_stored` 按那行的 kind 分）。⇒ 派图活的纸第 10 条照这个写死。
 - `read_image` 看过不改变清单：speak 的 picture 引不在 `image_artifacts_from_program` 里的 id 会被退（`ATTACH_ARTIFACT_NOT_IN_CONTEXT` 只认**这一轮列出的那些 id**）。
 - 所以要发哪张，就照抄**这一轮**清单里的 `artifact_id`；「我刚才看过它」不是依据，上一轮的 id 也可能已经掉出那 6 张。
 - **报告里交出去的 `artifact_id` 不能隔拍拿去发**：同一批字节登记两次就是两行两个 id（上面 `put()` 不去重那条），隔拍只剩源文件 sha 能把两个 id 对回同一份（11-19 实测：同一张图两次登记，两个 id 不同、源文件 sha 同一枚）。所以发之前一律照抄**当拍清单**里的那串，别拿上一拍报告里写过的 id 当凭据。
@@ -1073,6 +1100,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 7. **派图单固定带三句**：`no text, no signature, no watermark` 每张都带；例外点名——那张单本身要画字（带字海报／版面／改梗图文字）才不带，并在纸上写明为什么不带（11-27 凌晨六发都带这行，四角假签名与糊字一次没再来）。
 8. **图活一律派低档**，不管纸上细节多少——要点多、要求细是我把纸写长的代价，不该拿高档的时间去付。审美取舍归我（判「该不该画」在家做完再派），腿只跑，不拿「偏幼」「不好看」拒单。
 9. **成图的投递面继承原图所在那条线**：拿别人发来的图改出来的成图只能回原群，不许挪进私聊或别的群；派改图单当场只说「成图在原群端」，不许先说「好了发你私聊」（归属判据的正本在「改图与 `generate_image`」的归属边界那一格）。
+10. **要家里那条私聊线能随消息发出这张图，交回的必须是图口 id**：腿必须用 `read_image` 按路径把成品整张读一次（回执带 `pulled_via: local_file`，图口 id 就在那条回执的 `blob_artifact` 那一格），交回里照抄那串 id；`offer_file` 按 `path` 登记的那一份是文件口，`speak` 的 picture 不认它。这一条写死在纸上，**别留到家里那一头发一次 picture 才试出来**（机制与失败码见「本机已有那张图怎么进可发清单」里「判据：`read_image` 按路径看过 ≠ 它在可发清单里」那一格）。
 
 通则：**图上文件名的时间戳与本机 `mtime` 可能不同源（不同钟），落账前当场拉一对现读配对，别背偏移量。**
 
@@ -1098,6 +1126,8 @@ edit／改图通路读数那一节的钉（2026-11-25 起：节标题进名单�
 完整提示词形状在、那句限定「不是所有画图单的默认」、交回自检多余配饰、发现缺陷先报字面读数再报做了什么、
 不许拿「应该抹掉了」当交回）与颗数那一组（泪痣正本只有一颗、不许只报「在不在／在哪一侧」就算过）。
 两组各钉各的：删掉配饰那一格只红配饰那几条，删掉颗数那一格只红颗数那几条（11-21 两发反证分别验过）。
+11-28 那批分两组一起查（判红同样剥掉反引号里的引用、只在散文判）：交代点名要钉的三处各配一对钉——新字面被抹掉红，改前的旧字面回到散文里也红（`同一底模＋那颗 LoRA` 那半句／CFG 1 那条路线的负面词不进采样／除大招牌外还要逐个数小价签；旧字面逐字取自那笔发布的 git 改动行）；
+这趟新写的六格各配一组正钉（看图那一层的兜底判据、交回图口 id 与文件口之别、找改动用差集不按外观扫、写字面要先有一块受约束的面、泪痣的位置判据与本地补救做法），拆掉哪一格只红那一组。另有一枚反钉：被现场复算推翻的那句「按路径读图也没被拒」回到散文里就红。
 退役说法（`integration_dev`、`/skills` 挂载、把 DECIDE 的 `attach` 字段当当前流程、`九条路线全是 t2i`）有没有回到散文里、
 示例图路径是不是相对的、脚本语法能不能编译
 （内存 `compile(源码, 路径, 'exec')`，不落文件；只查语法，不查 import 和运行时）。

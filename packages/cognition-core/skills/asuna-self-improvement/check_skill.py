@@ -38,6 +38,15 @@ match byte-for-byte or not -- the read path takes packageRoot joined with skills
 skillDirectories(), and `effective()` only hands the installed copy to it when activation.json
 has no usable selection (`projects[id]` missing, or its state is HOST_RESTART_REQUIRED); in
 that state the old installed body is used silently, with no error.
+Q pins the origin-beat ruler v21 added to 谁能拿到开发工具: what decides whether a
+delegation carries the development tools is the beat that originated it -- not home vs.
+out there, not which kind of clock. own beats (heartbeat, settlement, woken by a note, a
+schedule firing, the visit beat) carry none, and the scope is default-everything with
+named exceptions, never a whitelist of beats that do. Before any write, and before
+creating a clock that would write, answer `is this beat one of the three`; if not, no
+write/change/publish verb on the paper and no such intent, and the write step becomes
+`do it on a beat that carries the tools`. The first needle pins the three-delegation
+lead line itself, so rewriting those three literals reddits this group too.
 """
 import hashlib
 import os
@@ -152,6 +161,20 @@ GROUPS = [
         "`projects[id]` 存在且 `state` ≠ `HOST_RESTART_REQUIRED` 就用它",
         "拿已装那一份的 sha 判「没生效」＝拿错尺",
         "静默回落到已装那份旧正文",
+    ]},
+    # v21: 带不带开发工具判的是委托的起源拍，不是地点也不是钟的种类（谁能拿到开发工具 那一节）
+    {"name": "Q_ORIGIN_BEAT_NOT_LOCATION", "section": "谁能拿到开发工具", "absent": [], "needles": [
+        "只有三种委托带开发工具：",
+        "决定一次委托带不带开发工具的是委托的起源拍",
+        "不是「从家里还是从外面派」，也不是钟的种类",
+        "own 拍不带 development（默认全部＋例外点名，不搞「哪几种拍带」的白名单）",
+        "写不出为什么就按全覆盖跑",
+        "这一拍的起源是不是那三种之一",
+        "不许出现「写／改／发布」这类落盘动作",
+        "先看这一拍带不带 development",
+        "回一个带权的拍再办",
+        "要说成「我下一拍办」",
+        "是腿从已装正文现读那三条把它更正回「起源拍」的",
     ]},
 ]
 

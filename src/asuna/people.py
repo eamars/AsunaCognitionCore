@@ -610,20 +610,9 @@ class People:
             profile = self.mentioned(row, number)
             self.entry(scene, self.account_person(scene['_id'], number), row if profile else None, profile)
         self.note_self(scene, row)
-        doc = self.entry(scene, row['author'], row)
-        # When it was said, on her clock face: the conversation keeps every line, so its age must be readable.
-        from .schedule_rules import line_stamp, her_zone
-        from .caught_up import CAUGHT_UP_WORD, is_caught_up, said_at
-        stamp = line_stamp(her_zone(self.config), said_at(row))
-        if stamp and is_caught_up(row):
-            stamp += '（%s）' % CAUGHT_UP_WORD
         from .channels import REPLY_ONLY_KEY
-        from .notices import KEY as NOTICE_KEY, MARK as NOTICE_MARK
-        number = ' 〔%d〕' % row['scene_seq'] if row.get('scene_seq') else ''
-        came = ADMITTED_WORDS.get(event.get('admitted'))
-        lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now())) + (' ' + stamp if stamp else '')
-                 + ('（%s）' % came if came else '')
-                 + number + (NOTICE_MARK if (event.get('raw') or {}).get(NOTICE_KEY) else '')]   # the program's line
+        from .notices import KEY as NOTICE_KEY
+        lines = [self.label_line(scene, row)]
         quoted = group if group.get('reply_to') or group.get('reply_message_id') else (event.get('reply') or {})
         # (a private chat's quote is `event.reply`, ADR-079)
         parent_id = quoted.get('reply_message_id')
@@ -657,6 +646,24 @@ class People:
         if refs:
             lines.append('  ' + refs)
         return '\n'.join(lines)
+
+    def label_line(self, scene, row):
+        """The first line `transcript` writes for a platform message: the speaker's label, when it was said, how they
+        came in, its number, and the mark of a platform notice."""
+        event = row.get('event') or {}
+        doc = self.entry(scene, row['author'], row)
+        # When it was said, on her clock face: the conversation keeps every line, so its age must be readable.
+        from .schedule_rules import line_stamp, her_zone
+        from .caught_up import CAUGHT_UP_WORD, is_caught_up, said_at
+        stamp = line_stamp(her_zone(self.config), said_at(row))
+        if stamp and is_caught_up(row):
+            stamp += '（%s）' % CAUGHT_UP_WORD
+        from .notices import KEY as NOTICE_KEY, MARK as NOTICE_MARK
+        number = ' 〔%d〕' % row['scene_seq'] if row.get('scene_seq') else ''
+        came = ADMITTED_WORDS.get(event.get('admitted'))
+        return (self.head(scene['_id'], doc, str(row.get('received_at') or now())) + (' ' + stamp if stamp else '')
+                + ('（%s）' % came if came else '')
+                + number + (NOTICE_MARK if (event.get('raw') or {}).get(NOTICE_KEY) else ''))   # the program's line
 
     def identity_line(self, scene, row):
         """The current speaker, in full: label, notes, names in quotes, and how the owner is known.

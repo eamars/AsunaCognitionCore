@@ -178,19 +178,34 @@ export async function imagesOf(attachments, messages, signal) {
   return images;
 }
 
-/** The pictures that come with a turn, saved as DSH attachments: one that cannot be saved is left out (her
- * context says read_image reaches any picture that did not appear). */
+/** The pictures that come with a turn, saved as DSH attachments, each under the head of the line it came from (its
+ * `head`, the first line her conversation shows for that line), pictures of one line under one head: one that cannot
+ * be saved is left out (her context says read_image reaches any picture that did not appear). */
 export async function pictureParts(attachments, pictures) {
   const parts = [];
+  let head;
   for (const picture of pictures.slice(0, 4)) {
     if (typeof picture?.data !== 'string' || typeof picture.media_type !== 'string') continue;
+    let attachment;
     try {
-      const attachment = await attachments.saveImage({ data: new Uint8Array(Buffer.from(picture.data, 'base64')),
+      attachment = await attachments.saveImage({ data: new Uint8Array(Buffer.from(picture.data, 'base64')),
         mediaType: picture.media_type, name: typeof picture.ref === 'string' ? picture.ref : undefined });
-      parts.push({ type: 'image', attachment });
-    } catch { /* left out: read_image still reaches it */ }
+    } catch { continue; /* left out: read_image still reaches it */ }
+    if (typeof picture.head === 'string' && picture.head && picture.head !== head) parts.push({ type: 'text', text: picture.head });
+    head = picture.head;
+    parts.push({ type: 'image', attachment });
   }
   return parts;
+}
+
+/** A group turn's pictures as a message of their own, which goes after the lines and before her notice (ADR-137 D2).
+ * It is not a line (no `user` source, no receipt) and carries no mark: it is in the form of the lines it shows. Null
+ * when no picture could be saved. */
+export async function picturesMessage(attachments, stage) {
+  const parts = attachments && stage.pictures?.length ? await pictureParts(attachments, stage.pictures) : [];
+  if (!parts.some(part => part.type === 'image')) return null;
+  return createUserMessage({ content: parts,
+    source: { kind: 'asuna', form: 'pictures', lane: stage.lane, operation: stage.token } });
 }
 
 /** The input row of the platform line a stage answers (the receipt navigation.js wrote it with), when one called her. */
@@ -894,7 +909,7 @@ export class CognitionCore {
     if (stage.lane === 'character') text = marked(text);
     // The summary is a stable identifier, never shown as prose; the client titles a turn's trigger
     // from `trigger` in the viewer's language (client.js).
-    return createUserMessage({ content: [{ type: 'text', text }, ...(stage.pictureParts ?? [])],
+    return createUserMessage({ content: [{ type: 'text', text }],
       source: { kind: 'asuna', form: 'notice', summary: 'asuna:' + stage.lane + ':' + stage.phase,
         operation: stage.token, lane: stage.lane, phase: stage.phase,
         ...(stage.trigger ? { trigger: stage.trigger } : {}), ...(carried ? { carried } : {}) } });
@@ -1580,6 +1595,12 @@ export class CognitionCore {
       }
       // Her notice comes last, composed with what this step adds before it (the line it answers among them).
       if (stage) messages = [...messages, this.message(stage, agent.session, messages)];
+      // ADR-137 D2: a group turn's pictures come in a message of their own, after the lines and before her notice.
+      const at = lane === 'character' && answer?.pictures?.length ? messages.findIndex(message =>
+        message.source?.kind === 'asuna' && message.source.form === 'notice'
+        && message.source.operation === answer.token && message.source.phase === answer.phase) : -1;
+      const pictures = at >= 0 ? await picturesMessage(scope.reflect.get('attachments'), answer) : null;
+      if (pictures) messages = [...messages.slice(0, at), pictures, ...messages.slice(at)];
       // A compaction (this step's, or one since her notice) may have taken copies it relies on: they come back here.
       const restored = lane === 'character' ? this.restored(agent.session, messages) : null;
       if (restored) messages = [...messages, restored];
@@ -1716,8 +1737,6 @@ export class CognitionCore {
       // kept for its next answer rather than lost with this turn's refused step.
       if (stage.kind !== 'stage') keep();
       if (stage.error) throw new Error(stage.error);
-      // A group turn's pictures (role_tools.turn_pictures) become image parts of her turn's message.
-      if (stage.pictures?.length && attachments) stage.pictureParts = await pictureParts(attachments, stage.pictures);
       state.admitted = stage;
       if (stage.kind === 'stage') { state.current = stage; state.system = stage.system; }
     })();

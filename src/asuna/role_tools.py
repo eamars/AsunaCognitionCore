@@ -1295,17 +1295,19 @@ PICTURES_NOTE = ('这些图已经作为图片跟这一次一起给你了，不�
 
 
 def turn_pictures(store, ep):
-    """([(ref, payload)] to attach to her group turn, pictures_from_program or None). A picture that cannot be
-    pulled is left out (read_image still reaches it)."""
+    """([(ref, payload, head)] to bring with her group turn, pictures_from_program or None). `head` is the first line
+    her conversation shows for the line the picture came from (People.label_line). A picture that cannot be pulled is
+    left out (read_image still reaches it)."""
     from .blobs import BlobStore
+    from .people import People
     from .vision import attachments_of, read_image_for_task, vision_capability
-    scene = scene_records.get(store, ep['scene_id'], fields=['kind'])
+    scene = scene_records.get(store, ep['scene_id'])
     if (scene or {}).get('kind') != 'group' or not vision_capability(store.config, 'character')['supported']:
         return [], None
     source = message_records.get(store, 'in-' + ep['_id'], scene=ep['scene_id'])
     if not source:
         return [], None
-    chosen = [(entry, '触发这一次的那条') for entry in attachments_of(source, config=store.config)][:TURN_PICTURES]
+    chosen = [(entry, '触发这一次的那条', source) for entry in attachments_of(source, config=store.config)][:TURN_PICTURES]
     if len(chosen) < TURN_PICTURES:
         earlier = message_records.inbound(store, ep['scene_id'], ep['policy_epoch'],
                                           before=source.get('scene_seq', 0),
@@ -1314,17 +1316,19 @@ def turn_pictures(store, ep):
         for row in earlier:
             for entry in attachments_of(row, config=store.config):
                 if len(chosen) < TURN_PICTURES and not entry.get('sticker'):
-                    chosen.append((entry, '前面第 %d 条' % (source.get('scene_seq', 0) - row.get('scene_seq', 0))))
-    pulled, shown = [], []
+                    chosen.append((entry, '前面第 %d 条' % (source.get('scene_seq', 0) - row.get('scene_seq', 0)), row))
+    pulled, shown, heads, people = [], [], {}, People(store)
     where = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
-    for entry, line in chosen:
+    for entry, line, row in chosen:
         try:
             payload = read_image_for_task(store, BlobStore(store), where, store.config, {'ref': entry['ref']},
                                           route='character')
         except Exception:                                   # noqa: BLE001 an expired link: read_image says why
             continue
         if isinstance(payload, dict) and isinstance(payload.get('image'), dict):
-            pulled.append((entry['ref'], payload))
+            if row['_id'] not in heads:
+                heads[row['_id']] = people.label_line(scene, row)
+            pulled.append((entry['ref'], payload, heads[row['_id']]))
             shown.append({'ref': entry['ref'], 'line': line, **({'sticker': '表情包'} if entry.get('sticker') else {}),
                           **({'animated': payload['animated']} if payload.get('animated') else {})})
     if not shown:

@@ -142,6 +142,7 @@ Who is who in a scene, as the character reads it.
   - `thought_then` — Under a line of hers that someone else points at (a quote, a reaction, a recall, an essence): what she thought when she said it, as she wrote it (reasons.py, ADR-043), as an anchor, not the whole old thought: read in full it passes for a ju
   - `line_of` — The line she names by its number in this conversation (as shown, brackets or not) or by 这条 (the line that called her): (row, None), or (None, why, in words she can act on) (ADR-079 §9.4).
   - `transcript` — One platform message as it enters her conversation: the speaker's label line, then the message, indented.
+  - `label_line` — The first line `transcript` writes for a platform message: the speaker's label, when it was said, how they came in, its number, and the mark of a platform notice.
   - `identity_line` — The current speaker, in full: label, notes, names in quotes, and how the owner is known.
   - `scene_title` — A conversation as she reads it: 家里·私聊, 群聊「name」 or 私聊 with the person's label; never an id.
   - `relabel` — Turn the author ids in her context blocks into the labels her conversation uses.

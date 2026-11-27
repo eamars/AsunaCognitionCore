@@ -425,7 +425,7 @@ class Coordinator:
         context=block_guide.strip(context)
         if pulled:
             fresh=episode_records.get(self.store, ep['_id'])
-            self._update(fresh,looked=[*dict.fromkeys([*(fresh.get('looked') or []),*(ref for ref,_ in pulled)])])
+            self._update(fresh,looked=[*dict.fromkeys([*(fresh.get('looked') or []),*(ref for ref,_,_ in pulled)])])
         # A native role session composes the notice itself: what it still shows verbatim is not repeated, and the
         # turn's ceiling applies to what it then sends. A context sent whole is held to the ceiling here.
         from . import context_budget
@@ -439,7 +439,8 @@ class Coordinator:
                 self.store.audit(ep['_id'],'context.trimmed',{'left_out':trimmed,'chars':context_budget.size(context)},
                                  ep['scope_key'])
         if pulled:
-            delivery['pictures']=[{'ref':ref,**payload['image']} for ref,payload in pulled]
+            # Each under the first line of the line it came from, in a message of their own before her notice.
+            delivery['pictures']=[{'ref':ref,**payload['image'],'head':head} for ref,payload,head in pulled]
         body=(json.dumps(context,ensure_ascii=False,default=str)+('\n'+text if text else '')) if first and 'context' not in delivery else text
         value=self.character.generate(self._binding(ep),operation,'TURN' if first else 'REPAIR',body,
                                       episode_system(self.store,ep),tools=names,handler=handler,

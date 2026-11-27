@@ -279,7 +279,7 @@ test('a picture that cannot become an attachment says why, in a result the tool 
   }
 });
 
-test('pictures of a group turn become image parts; one that cannot be saved is left out', async () => {
+test('pictures of a group turn become image parts under their line\'s head; one that cannot be saved is left out', async () => {
   const saved = [];
   const attachments = { saveImage: async ({ name, mediaType }) => {
     if (name === 'att-bad') throw new Error('unsupported');
@@ -290,10 +290,16 @@ test('pictures of a group turn become image parts; one that cannot be saved is l
     { ref: 'att-bad', media_type: 'image/png', data }, { ref: 'att-2' }]);
   assert.deepEqual(parts, [{ type: 'image', attachment: { attachmentId: 'a-att-1', mediaType: 'image/png' } }]);
   assert.deepEqual(saved, ['att-1']);
+  // Pictures of one line share its head; a line whose every picture was left out shows no head.
+  const image = name => ({ type: 'image', attachment: { attachmentId: 'a-' + name, mediaType: 'image/png' } });
+  const headed = await pictureParts(attachments, [{ ref: 'att-bad', media_type: 'image/png', data, head: 'A' },
+    { ref: 'att-3', media_type: 'image/png', data, head: 'B' }, { ref: 'att-4', media_type: 'image/png', data, head: 'B' },
+    { ref: 'att-5', media_type: 'image/png', data, head: 'C' }]);
+  assert.deepEqual(headed, [{ type: 'text', text: 'B' }, image('att-3'), image('att-4'), { type: 'text', text: 'C' }, image('att-5')]);
 });
 
-// ADR-137 D2: the program's message carries no person's words. Through DSH's loop, a platform line's turn.
-test('a platform line\'s turn reads its line, then the notice naming the line', async t => {
+// ADR-137 D2: the program's message carries no person's words or pictures. Through DSH's loop, a platform line's turn.
+test('a group turn reads its line, then its pictures in a message of their own, then the notice naming the line', async t => {
   const h = await harness(t);
   const core = h.core;
   const role = await h.create('group-g');
@@ -302,21 +308,31 @@ test('a platform line\'s turn reads its line, then the notice naming the line', 
   const host = { sessionPersistence: { stat: async () => true }, workspaceRegistry: { unarchiveSession: async () => {} },
     sessionController: { list: async () => ({ items: [] }) } };
   core.ctx = new Proxy(h.ctx, { get: (target, key) => key in host ? host[key] : target[key] });
+  h.ctx.provide('attachments', { saveImage: async ({ name, mediaType }) => ({ attachmentId: 'a-' + name, mediaType }) });
+  const data = Buffer.from('png').toString('base64');
   const binding = { scene_id: 'qq:group:1', cwd: '/data' };
-  const head = '[某人 #4] 11/26 23:52 〔12〕';
+  const head = '[某人 #4] 11/26 23:52 〔12〕', earlier = '[某人 #2] 11/26 23:50 〔10〕';
   await core.onEvent({ kind: 'stage', session_id: 'group-g', token: 'turn-1', phase: 'TURN', lane: 'character',
     scene_kind: 'group', system: 'persona', text: 'tail', tail: '你的回合', episode_id: 'ep-1', binding,
     context: { scene: '群', event: { event_id: 'evt-1', text: '看图', line: '〔12〕', trusted_context_events: [] } },
     channel_input: { session_id: 'group-g', binding, input: { id: 'in-ep-1', text: head + '\n  看图', sender: '10001',
-      received_at: '2026-11-26T10:52:00Z', state: 'ACCEPTED' } } });
+      received_at: '2026-11-26T10:52:00Z', state: 'ACCEPTED' } },
+    pictures: [{ ref: 'att-1', media_type: 'image/png', data, head }, { ref: 'att-2', media_type: 'image/png', data, head: earlier }] });
   await role.whenIdle();
   const users = role.session.snapshotEvents().filter(event => event.type === 'user/message').map(event => event.data);
-  assert.deepEqual(users.map(message => message.source.form ?? message.source.kind), ['user', 'notice'],
-    'the line, then the notice: the program\'s own words stay last before her turn');
-  const [line, notice] = users;
+  assert.deepEqual(users.map(message => message.source.form ?? message.source.kind), ['user', 'pictures', 'notice'],
+    'the line, its pictures, then the notice: the program\'s own words stay last before her turn');
+  const [line, pictures, notice] = users;
   assert.equal(line.source.receipt, 'in-ep-1');
+  assert.deepEqual(pictures.source, { kind: 'asuna', form: 'pictures', lane: 'character', operation: 'turn-1' },
+    'not a line: no user source, no receipt');
+  assert.deepEqual(pictures.content.map(part => part.type === 'text' ? part.text : part.attachment.attachmentId),
+    [head, 'a-att-1', earlier, 'a-att-2']);
+  assert.deepEqual(notice.content.map(part => part.type), ['text'], 'the notice carries no image part');
   const sent = JSON.parse(notice.content[0].text.split('\n')[1]);
   assert.deepEqual(sent.event, { event_id: 'evt-1', line: '〔12〕', trusted_context_events: [] }, 'named, not copied');
+  // Both pictures reach the model in the request, in the message before the notice.
+  assert.equal(JSON.stringify(h.requests[0].messages).split('a-att-').length - 1, 2);
 });
 
 // ADR-098: what the model reads in her lanes holds no local root of this computer; the action brain's requests and

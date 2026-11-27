@@ -551,6 +551,19 @@ BODY_WORDING = [
 ]
 
 
+# 11-27 补缺那一趟：底模默认＋例外点名、图槽数、造遮罩的 PNG、姿势库视角值与族名（都押整份正文）。
+GAP_FILL = [
+    ("gap_default_base_all_plus_exceptions", "默认全部、例外点名，不是白名单"),
+    ("gap_role_lora_means_switch_route", "要角色 LoRA 是换路线名，不是加参数"),
+    ("gap_parameter_schema_unread", "服务端 `parameter_schema` 没读"),
+    ("gap_required_slots_five", "有必填图槽的路线 5 条"),
+    ("gap_mask_png_how", "遮罩 PNG 怎么造"),
+    ("gap_grow_mask_reading_no_receipt", "回执没有 `applied_parameters` 可对"),
+    ("gap_poses_json_five_view_keys", "`views` 的键全库只有"),
+    ("gap_poses_family_names_literal", "族名只照抄每条的 `category`"),
+]
+
+
 PROSE = re.compile(r'`[^`]*`', re.S)
 # 黑边这一族只报现象、别当机制（口径正本在 asuna-image-upscale 第五节）：全称句一律禁掉。
 BB_UNIVERSAL = ("两枪都有", "都会加")
@@ -1059,6 +1072,9 @@ def main():
         check(name, token in body_wording,
               "「%s」不在「身体与特写的措辞」这一节里（切片 %d 字）" % (token, len(body_wording)))
 
+
+    for name, token in GAP_FILL:
+        check(name, token in body, token)
 
     # 群聊生图上限（2026-10-16 v8）：节标题在 SECTIONS 里查（section_18），这里查节内硬指标与措辞版本。
     # 标题被删 → 切片为空 → 下面几条一起红：切片为空不等于查过，不会绿着放过。

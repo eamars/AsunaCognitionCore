@@ -292,6 +292,33 @@ test('pictures of a group turn become image parts; one that cannot be saved is l
   assert.deepEqual(saved, ['att-1']);
 });
 
+// ADR-137 D2: the program's message carries no person's words. Through DSH's loop, a platform line's turn.
+test('a platform line\'s turn reads its line, then the notice naming the line', async t => {
+  const h = await harness(t);
+  const core = h.core;
+  const role = await h.create('group-g');
+  core.channels.set('qq', { kind: 'qq', title: 'QQ' });
+  // The Host services navigation.js reads to write a line into a conversation that exists.
+  const host = { sessionPersistence: { stat: async () => true }, workspaceRegistry: { unarchiveSession: async () => {} },
+    sessionController: { list: async () => ({ items: [] }) } };
+  core.ctx = new Proxy(h.ctx, { get: (target, key) => key in host ? host[key] : target[key] });
+  const binding = { scene_id: 'qq:group:1', cwd: '/data' };
+  const head = '[某人 #4] 11/26 23:52 〔12〕';
+  await core.onEvent({ kind: 'stage', session_id: 'group-g', token: 'turn-1', phase: 'TURN', lane: 'character',
+    scene_kind: 'group', system: 'persona', text: 'tail', tail: '你的回合', episode_id: 'ep-1', binding,
+    context: { scene: '群', event: { event_id: 'evt-1', text: '看图', line: '〔12〕', trusted_context_events: [] } },
+    channel_input: { session_id: 'group-g', binding, input: { id: 'in-ep-1', text: head + '\n  看图', sender: '10001',
+      received_at: '2026-11-26T10:52:00Z', state: 'ACCEPTED' } } });
+  await role.whenIdle();
+  const users = role.session.snapshotEvents().filter(event => event.type === 'user/message').map(event => event.data);
+  assert.deepEqual(users.map(message => message.source.form ?? message.source.kind), ['user', 'notice'],
+    'the line, then the notice: the program\'s own words stay last before her turn');
+  const [line, notice] = users;
+  assert.equal(line.source.receipt, 'in-ep-1');
+  const sent = JSON.parse(notice.content[0].text.split('\n')[1]);
+  assert.deepEqual(sent.event, { event_id: 'evt-1', line: '〔12〕', trusted_context_events: [] }, 'named, not copied');
+});
+
 // ADR-098: what the model reads in her lanes holds no local root of this computer; the action brain's requests and
 // every stored message stay as they were.
 const PATHS = JSON.parse(readFileSync(new URL('../../../tests/fixtures/path_placeholders.json', import.meta.url), 'utf8'));

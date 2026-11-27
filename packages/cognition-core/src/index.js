@@ -193,6 +193,9 @@ export async function pictureParts(attachments, pictures) {
   return parts;
 }
 
+/** The input row of the platform line a stage answers (the receipt navigation.js wrote it with), when one called her. */
+const calledBy = stage => stage.channel_input?.input?.id;
+
 export function stageView(events, token, turn) {
   const marks = events.filter(event => event.type === 'asuna/stage' && event.data.operation === token);
   const first = marks[0]?.seq ?? Infinity, lastRequest = marks.at(-1)?.seq ?? -1;
@@ -876,14 +879,16 @@ export class CognitionCore {
     let text = stage.text, carried;
     if (stage.context && session) {
       // Composed when the notice is created: only what the session no longer shows verbatim.
-      const composed = composeContext(stage.context, visibleCarried(session, pending));
+      const composed = composeContext(stage.context, visibleCarried(session, pending), calledBy(stage));
       // The turn's ceiling holds for what this notice sends (context_budget.ceiling).
       trimTurn(composed, stage.ceiling);
       text = JSON.stringify(composed.context) + (stage.tail ? '\n' + stage.tail : '');
       carried = { ...composed.carried, episode: stage.episode_id };
       stage.delivery = composed.omitted;
-      // What a compaction takes off the surface after this is sent again at the next step (restored).
-      this.state(session.id).notice = { stage, from: session.seq };
+      // What a compaction takes off the surface after this is sent again at the next step (restored); whether the
+      // notice named the line that called her rather than copying it.
+      const named = typeof stage.context.event?.text === 'string' && !('text' in (composed.context.event ?? {}));
+      this.state(session.id).notice = { stage, from: session.seq, named };
     }
     // Her notices begin with the program's mark (marks.js, ADR-108 D3); the action brain's are not hers to read.
     if (stage.lane === 'character') text = marked(text);
@@ -904,8 +909,11 @@ export class CognitionCore {
     notice.from = session.seq;
     if (!session.snapshotEvents(since).some(event => event.type === 'compaction/summary')) return null;
     const { stage } = notice;
-    const composed = restoreContext(stage.context, visibleCarried(session, pending), stage.episode_id);
+    const composed = restoreContext(stage.context, visibleCarried(session, pending), stage.episode_id, calledBy(stage),
+      notice.named);
     if (!composed) return null;
+    // The calling line's text is now this restore's to carry: a later restore sends it only if this one is gone too.
+    if (typeof composed.context.event?.text === 'string') notice.named = false;
     trimTurn(composed, stage.ceiling);
     return createUserMessage({ content: [{ type: 'text', text: marked(JSON.stringify(composed.context)) }],
       source: { kind: 'asuna', form: 'notice', summary: 'asuna:' + stage.lane + ':restore',
@@ -1041,7 +1049,10 @@ export class CognitionCore {
     // of hers stepped aside, which does not take the next one) come after this stage's turn, never into it.
     const hers = agent.inbox.nextTurn.filter(message => message.source?.kind === 'user' && !message.source.channel);
     for (const message of hers) agent.inbox.remove(message.id);
-    agent.followup(this.message(event, agent.session, agent.inbox.nextStep));
+    // What joins before the notice: the lines waiting for the next step, and her handed-back messages when this stage
+    // answers one of hers (pre-step puts them first).
+    const before = [...agent.inbox.nextStep, ...(event.inputs?.length ? state.handed.values() : [])];
+    agent.followup(this.message(event, agent.session, before));
     for (const message of hers) agent.inbox.append('next-turn', message);
   }
 
@@ -1558,7 +1569,7 @@ export class CognitionCore {
       if (decision.kind !== 'enter') return decision;
       const stage = state.admitted; state.admitted = null;
       if (stage && stage.kind !== 'stage') return { kind: 'reject' };
-      let messages = stage ? [...decision.messages, this.message(stage, agent.session)] : decision.messages;
+      let messages = decision.messages;
       // ADR-127 S3: her Web messages handed to the worker by a turn that did not carry them come first in the first
       // step whose stage answers a Web input of hers (admitted with her input, or started on its own: state.current).
       const answer = stage ?? state.current;
@@ -1567,6 +1578,8 @@ export class CognitionCore {
         agent.session.append('asuna/input-returned', { operation: answer.token, messages: back.length });
         messages = [...back, ...messages];
       }
+      // Her notice comes last, composed with what this step adds before it (the line it answers among them).
+      if (stage) messages = [...messages, this.message(stage, agent.session, messages)];
       // A compaction (this step's, or one since her notice) may have taken copies it relies on: they come back here.
       const restored = lane === 'character' ? this.restored(agent.session, messages) : null;
       if (restored) messages = [...messages, restored];

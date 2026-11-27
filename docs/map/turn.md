@@ -55,7 +55,7 @@ One character turn per episode (ADR-011 §3).
 
 Builds what her turn shows her: `ContextBuilder.prepare` reads one event's scene, persona, relationship, memories, history, tasks and other state, and returns the system text, the context blocks and a manifest of them.
 
-- def `local_line` — The number of the line that called her when that line has no label line to carry it, else None (ADR-108 D2, A3).
+- def `calling_line` — The number of the line that called her, in the form of a label line's, else None (ADR-108 D2, A3; ADR-137 D2): the notice names that line by it, a platform line and a line from the local chat alike.
 - def `landing_lost` — The parts of her delivered line the platform did not store, in words; None when it stored what was sent.
 - def `refs` — Every id she may cite in this turn: the turn's own event, ref_index, the document sections, and the memories and tasks shown in their own blocks.
 - def `catch_up` — A group's history for her turn (newest first): the last 12 lines, plus every line since she last spoke there, reaching back at least 10 and at most 60 minutes (attend.py's window), at most 40 lines.

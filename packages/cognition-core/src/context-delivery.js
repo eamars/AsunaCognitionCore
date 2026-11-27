@@ -7,7 +7,8 @@
  * checkpoint). A recalled memory (not one of her thoughts) whose every source line is visible is left out too. Within
  * one notice a line (by its message id) is sent once, in its primary block: `delivered_history` (the conversation)
  * first, then the group's thread lines, then her recent experience; a task's original input that is such a line is
- * named by its id (`original_input_id`) instead of its text. Each
+ * named by its id (`original_input_id`) instead of its text, and so is the line that called her: while it is in front
+ * of her, `event` names it by its number (`line`) and leaves out its `text`. Each
  * notice records what it carries in its own `source.carried`, so the session log is the only state; nothing is cached
  * in the worker or Mongo.
  *
@@ -81,7 +82,10 @@ export function visibleCarried(session, pending = []) {
     if (event.type === 'user/message' && !event.data?.source?.channel && message?.id) visible.native.add(message.id);
     take(message?.content ?? '', event.type === 'user/message' ? event.data?.source : undefined);
   }
-  for (const message of pending) take(message.content, message.source);
+  for (const message of pending) {
+    if (message.source?.kind === 'user' && !message.source.channel && message.id) visible.native.add(message.id);
+    take(message.content, message.source);
+  }
   for (const [key, { block, list }] of newest) {
     if (block !== undefined) visible.blocks.add(key + ':' + block);
     if (list !== undefined) visible.lists.add(key + ':' + list);
@@ -107,13 +111,16 @@ export function withoutVisibleAnswers(value, visible) {
 const ANSWER_IN_VIEW = '这句就在这个对话里，往上看';
 
 /** After a compaction, what of a notice's context is no longer visible: the blocks, rows, memories and items to send
- * again (the turn's own orientation and trigger only when the notice itself is gone), with `restored_from_program`
- * naming the blocks; null when nothing fell out. */
-export function restoreContext(context, visible, episode) {
-  const composed = composeContext(context, visible);
+ * again (the turn's own orientation and trigger only when the notice itself is gone; the trigger also when it named
+ * the line that called her, `named`, and that line is gone), with `restored_from_program` naming the blocks; null when
+ * nothing fell out. `line` as for composeContext. */
+export function restoreContext(context, visible, episode, line, named = false) {
+  const composed = composeContext(context, visible, line);
   const gone = !visible.episodes.has(episode);
+  const unnamed = named && typeof composed.context.event?.text === 'string';
   const entries = Object.entries(composed.context).filter(([key, value]) => !NOTES.has(key)
-    && !composed.empty.has(key) && !(Array.isArray(value) && !value.length) && (gone || !ALWAYS.has(key)));
+    && !composed.empty.has(key) && !(Array.isArray(value) && !value.length)
+    && (gone || !ALWAYS.has(key) || key === 'event' && unnamed));
   if (!entries.length) return null;
   composed.context = { restored_from_program: entries.map(([key]) => key), ...Object.fromEntries(entries) };
   return composed;
@@ -176,8 +183,9 @@ function sameAsBefore(folded) {
   return '其余 ' + folded.length + ' 条同前' + (tally ? '（' + tally + '）' : '') + (handles.length ? '：' + handles.join('、') : '');
 }
 
-/** The context this notice sends, what it carries, and what it left out (for the audit). */
-export function composeContext(context, visible) {
+/** The context this notice sends, what it carries, and what it left out (for the audit). `line`: the input row id of
+ * the platform line that called her (the stage's `channel_input`), when one did. */
+export function composeContext(context, visible, line) {
   const entries = [], carried = { blocks: {}, items: {}, handles: {}, lists: {}, rows: [], memories: [] }, unchanged = [];
   const empty = new Set();
   let rows = 0, memories = 0, thoughts = 0, items = 0;
@@ -216,6 +224,13 @@ export function composeContext(context, visible) {
       const kept = value.messages.filter(row => !inView(row?._id));
       rows += value.messages.length - kept.length;
       value = { ...value, messages: kept };
+    }
+    // The line that called her in front of her (a platform line by its input row, a Web line by its message id): the
+    // notice names it by its number, not by its words.
+    if (key === 'event' && value?.line && typeof value.text === 'string'
+        && (line ? inView(line) : (visible.native ?? new Set()).has(value.event_id))) {
+      const { text: _text, ...named } = value;
+      value = named;
     }
     if (key === 'event' && Array.isArray(value?.trusted_context_events)) {
       // A task's original input that is a line in front of her is named by its id, not sent again.

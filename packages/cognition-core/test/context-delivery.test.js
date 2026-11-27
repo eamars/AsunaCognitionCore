@@ -350,6 +350,52 @@ test('a line is sent once in a notice, in the conversation itself', () => {
   assert.equal(composed.omitted.history_rows, 3);
 });
 
+// ADR-137 D2: the notice names the line that called her; it copies the line only when the line is not in front of her.
+test('the line that called her is named by its number while it is in view, and copied only when it is not', () => {
+  const called = (extra = {}) => context([], { event: { event_id: 'evt-1', text: '叫她的话', line: '〔12〕',
+    trusted_context_events: [], ...extra } });
+  const platform = { type: 'user/message', data: { content: [{ type: 'text', text: '[某人 #4] 11/26 23:52 〔12〕\n  叫她的话' }],
+    source: { kind: 'user', channel: 'qq', receipt: 'in-ep-1' } } };
+  const web = { type: 'user/message', data: { id: 'evt-1', content: [{ type: 'text', text: '叫她的话' }], source: { kind: 'user' } } };
+  const webSession = events => ({ ...surface(events), deriveEventMessage: event => event.data });
+  const event = composed => composed.context.event;
+  // A platform line, by its input row: on the surface, or joining it in this step.
+  assert.deepEqual(event(composeContext(called(), visibleCarried(surface([platform])), 'in-ep-1')),
+    { event_id: 'evt-1', line: '〔12〕', trusted_context_events: [] });
+  assert.equal(event(composeContext(called(), visibleCarried(surface([]), [platform.data]), 'in-ep-1')).text, undefined);
+  // A Web line, by its message id (the line's event id): on the surface, or joining it in this step.
+  assert.equal(event(composeContext(called(), visibleCarried(webSession([web])))).text, undefined);
+  assert.equal(event(composeContext(called(), visibleCarried(surface([]), [web.data]))).text, undefined);
+  // Not in view: the copy stays.
+  assert.equal(event(composeContext(called(), visibleCarried(surface([])), 'in-ep-1')).text, '叫她的话');
+  assert.equal(event(composeContext(called(), visibleCarried(surface([platform])), 'in-ep-2')).text, '叫她的话',
+    'another line in view does not name this one');
+  assert.equal(event(composeContext(called({ event_id: 'evt-2' }), visibleCarried(webSession([web])))).text, '叫她的话');
+  // A turn the program opened has no calling line: its words are the program's or the action brain's, and stay.
+  const { line: _line, ...woken } = called().event;
+  assert.equal(event(composeContext(context([], { event: woken }), visibleCarried(surface([platform])), 'in-ep-1')).text,
+    '叫她的话');
+});
+
+test('after a compaction took the line her notice named, the notice\'s event comes back with the line\'s text', () => {
+  const prepared = context([], { event: { event_id: 'evt-1', text: '叫她的话', line: '〔12〕' } });
+  const line = { type: 'user/message', data: { content: [{ type: 'text', text: '[某人 #4]\n  叫她的话' }],
+    source: { kind: 'user', channel: 'qq', receipt: 'in-ep-1' } } };
+  const first = composeContext(prepared, visibleCarried(surface([line])), 'in-ep-1');
+  assert.equal(first.context.event.text, undefined, 'named, not copied');
+  const checkpoint = { type: 'user/message', data: { content: [{ type: 'text', text: '<compacted-summary>…' }],
+    source: { kind: 'compact-checkpoint' } } };
+  const after = visibleCarried(surface([checkpoint, notice(first, 'ep-1')]));
+  const restored = restoreContext(prepared, after, 'ep-1', 'in-ep-1', true);
+  assert.deepEqual(restored.context.event, { event_id: 'evt-1', text: '叫她的话', line: '〔12〕' });
+  assert.ok(restored.context.restored_from_program.includes('event'));
+  assert.equal(restored.context.scene, undefined, 'the notice is still there: its orientation is not sent again');
+  // A notice that copied the line (it was not in view then) still carries the words: nothing to bring back.
+  assert.equal(restoreContext(prepared, after, 'ep-1', 'in-ep-1', false)?.context.event, undefined);
+  // The line still in view: the notice's naming still holds.
+  assert.equal(restoreContext(prepared, visibleCarried(surface([checkpoint, line, notice(first, 'ep-1')])), 'ep-1',
+    'in-ep-1', true)?.context.event, undefined);
+});
 
 test('her questions block folds: unchanged it is named, one changed question is the only one sent again (ADR-061)', () => {
   const question = (id, state) => ({ id, question: '问题' + id, asked_at: '2026-10-13T01:00:00Z', state,

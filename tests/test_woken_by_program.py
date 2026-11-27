@@ -1,7 +1,7 @@
-"""ADR-108 D5, A3 and A2: a turn the program opened says what woke her and carries no `speaker`; a line from the local
-chat is numbered in its notice; every line shows its number, whatever its channel can quote."""
+"""ADR-108 D5, A3 and A2, ADR-137 D2: a turn the program opened says what woke her and carries no `speaker`; the line
+that called her is numbered in its notice; every line shows its number, whatever its channel can quote."""
 from asuna import capabilities, wake_words
-from asuna.context import CONTEXT_HEAD, local_line, order_context
+from asuna.context import CONTEXT_HEAD, calling_line, order_context
 from asuna.ingress import CORE_NOTICE_KINDS, INTERNAL_KINDS
 from asuna.people import People
 from asuna.wake_words import GENERIC, WAKE_WORDS, woken_by
@@ -51,13 +51,15 @@ def test_woken_by_program_takes_the_head_slot_speaker_had():
     assert CONTEXT_HEAD.index('woken_by_program') == CONTEXT_HEAD.index('speaker') + 1
 
 
-def test_a_local_chat_line_is_numbered_in_its_notice_and_nothing_else_is():
+def test_the_line_that_called_her_is_numbered_in_its_notice_and_nothing_else_is():
+    # ADR-137 D2: the notice names its calling line by number, a platform line as a local chat line.
     local = {'scene_seq': 12, 'event': {}}
-    assert local_line(local, {'episode_kind': 'external'}) == '〔12〕'
-    assert local_line(local, {}) == '〔12〕'
-    assert local_line({'scene_seq': 12, 'event': {'channel': {'id': 'qq'}}}, {}) is None, 'a channel line has its label line'
-    assert local_line(local, {'episode_kind': 'task_feedback'}) is None, 'a program-woken turn has no calling line'
-    assert local_line(None, {}) is None and local_line({'event': {}}, {}) is None
+    assert calling_line(local, {'episode_kind': 'external'}) == '〔12〕'
+    assert calling_line(local, {}) == '〔12〕'
+    assert calling_line({'scene_seq': 12, 'event': {'channel': {'id': 'qq'}}}, {}) == '〔12〕', 'a platform line too'
+    assert calling_line(local, {'episode_kind': 'task_feedback'}) is None, 'a program-woken turn has no calling line'
+    assert calling_line({'scene_seq': 12, 'event': {'channel': {'id': 'qq'}}}, {'episode_kind': 'heartbeat'}) is None
+    assert calling_line(None, {}) is None and calling_line({'event': {}}, {}) is None
 
 
 def test_every_line_shows_its_number_though_its_channel_cannot_quote(store):

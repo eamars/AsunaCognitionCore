@@ -98,12 +98,11 @@ CONTEXT_HEAD = ('scene', 'speaker', 'woken_by_program', 'session_class')
 SEGMENT_WORDS = {'face': '小黄脸', 'reply': '引用', 'at': '@', 'image': '图', 'record': '语音', 'mface': '表情包'}
 
 
-def local_line(source, event):
-    """The number of the line that called her when that line has no label line to carry it, else None (ADR-108 D2, A3). A
-    line from the local chat is DSH's own message, so the notice that follows it carries the number, in the form of a
-    label line's. A channel line carries its own; a turn the program opened has no calling line."""
-    if (source and source.get('scene_seq') and (event.get('episode_kind') or 'external')=='external'
-            and not (source.get('event') or {}).get('channel')):
+def calling_line(source, event):
+    """The number of the line that called her, in the form of a label line's, else None (ADR-108 D2, A3; ADR-137 D2):
+    the notice names that line by it, a platform line and a line from the local chat alike. A turn the program opened
+    has no calling line."""
+    if source and source.get('scene_seq') and (event.get('episode_kind') or 'external')=='external':
         return '〔%d〕'%source['scene_seq']
     return None
 
@@ -841,7 +840,7 @@ class ContextBuilder:
                  # session that already holds it is not sent it again (context-delivery.js).
                  'clock_from_program':schedule_rules.local_clock(schedule_zone,moment),
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
-        line=local_line(source,event)
+        line=calling_line(source,event)
         if line:
             context['event']['line']=line
         # ADR-111 §3.6: a result says whose work it is, here in her context and never in the stored event, which the

@@ -2,6 +2,9 @@
 
 体例：这本每次发布记一笔，一行一条：发布号＋改了哪一处字面；最新在顶，下面的旧条目一条没重排。
 
+- 11-28（本笔，发布号以发布回执里的 candidate 为准，正文不自引）：`SKILL.md` 并入四格。① 「直路速查」里底模默认那条改成「画小满本人一律走 anima turbo，例外只点名两类（静物／写实照片感走 qwen-image；现成图上局部改走带遮罩的 inpaint，不换底模）」，保留「默认全部、例外点名，不是白名单」「服务端 `parameter_schema` 没读」两句原字面；② 其后新增一条：ai 娘那颗 LoRA 也挂在 anima turbo 上（主人 11-27 00:45 本机钟面的更正），同时如实写「这两处没对上」：`list_routes=yes` 11-28 现读 22 条里 `anima-turbo-v1-1` 不声明 `loras`，LoRA 在 8 条 `*-girl-anima-turbo` 上，并写现读方法；③ 「步骤 1」末尾那条 CFG 1 负面词并入「硬要求正面写进 prompt 的正面词组」，没新开节；④ 「步骤 2」小价签那条扩到「小价签／小标签」，群聊四道里「无乱码」那道改成除大招牌外要逐个数小价签。`check_skill.py` 不动；③④ 两格现有自检没钉住，没假装。
+- 11-27（补记，据发布回执归纳、11-28 写入；“上一批欠的两行”是我按最近两枚发布对出来的推断）：`d487755d6a2c` 清掉上一枚误带进包的废脚本 `_edit_v21.py`，两本技能正文与自检字节不变（主 SKILL.md 153,965 B／check_skill.py 81,355 B，自检 345/345／upscale 103/103）。
+- 11-27（补记，据发布回执归纳、11-28 写入）：`0f45f39a9bfb` `SKILL.md` 补四格（底模默认走 anima-turbo-v1-1，默认全部＋例外点名并注 v1-1 不声明 loras；图槽数；造遮罩 PNG 与 grow_mask_by 读法；姿势库视角五键与族名照抄 category 字面），`check_skill.py` 加 8 枚字面钉，自检主 337→345/345、upscale 103/103；这枚的 changed_files 误带了 `_edit_v21.py`。
 - 11-26（第四笔，本趟；发布号以发布回执里的 candidate 为准，正文不自引，免得为回填号再发一笔）：`SKILL.md` 在「离线自检」节前新增「派腿画图那张纸：身份、路径、留档、围栏（六条＋一条通则）」一节（身份只认 sha 前 12 位＋字节数、引路径两种写法、沙箱 `/task` 可能是空目录、库内字段路径现读、prompt 逐字进表、围栏按本不按节，加文件名时间戳与 mtime 不同源一条通则），既有节一字未动；`check_skill.py` 加 `DISPATCH_SHEET` 一组 12 枚钉＋节存在一枚。
 - 11-26（a9670ebb49f5）：「官方定妆」节完整提示词形状代码块里那一行形象词，在 `calm face` 之后插入 `warm tanned skin, healthy wheat tone`；`check_skill.py` 加 `SELF_SKIN` 组一枚钉 `self_skin_warm_wheat_tone`。
 - 11-26（b15a554ed3da）：「失败怎么读」表里 `ATTACHMENT_NOT_AN_IMAGE` 那行「（包括超上限的图）」换成两闸划分的括注（`web_fetch` 带 `save` 的公网图超 8 MiB 在落库时被降成 `file` 撞这句，`kind=image` 而超上限撞 `ATTACHMENT_OVER_LIMIT`）；`check_skill.py` 的 `ATTACH` 名单加 `attach_err_not_an_image_literal` 一枚钉。

@@ -66,7 +66,8 @@ scene_kinds: [home, group]
 每条路线多两格，都是服务端 parameter_schema 现读，不是写死的表：
 - `loras`：`{id: 默认强度}`，带一句 `loras_note`。id 以这格为准，**别默认写 `character`**：11-23 现读八条角色路线的 id 都叫 `character`，但默认强度不同（deepseek／gemini 0.9、chatgpt 0.8、claude／qwen／glm／grok／kimi 1.0）；animagine-xl-3.1-nsfw 的 id 是 `concept`（默认 0.9）和 `rapi`（默认 0.0＝默认关）。没有这格＝这条路线不收 loras。
 - `pose`：true／false。true 的再看有没有 `pose_strength`：有＝能调强度、给默认值；没有＝只能传 pose、不能调强度（11-23 现读 `qwen-image-2.1-t2i` 与 `moody-desire-v30` 是这种）。
-- **底模默认走 `anima-turbo-v1-1`（11-27 立；默认全部、例外点名，不是白名单）**：画图单没有特别理由，一律点名这一条；例外只有两条——① 写实静物走 `qwen-image-2.1-t2i`；② 拿现成图改走 `source_image`＋`pictures.mask_image` 那一族（edit／inpaint，见「改图与 `generate_image`」）。**角色类、ai 娘不算例外**，也不是「在 v1-1 上自己挂 LoRA」：11-27 当拍 `list_routes=yes` 22 条，`anima-turbo-v1-1` **不声明 `loras`**（没有 `loras`、没有 `loras_note`，也没有第二条同名）；带 `loras` 的是 8 条 `*-girl-anima-turbo`（键名 `character`，默认 0.8–1.0）和 `animagine-xl-3.1-nsfw`（`concept` 默认 0.9、`rapi` 默认 0）⇒ **要角色 LoRA 是换路线名，不是加参数**。这一条只讲 `list_routes` 清单这一格；服务端 `parameter_schema` 没读，别升级成「v1-1 服务端不挂 LoRA」。例外写不出为什么，就按默认走。
+- **底模默认走 `anima-turbo-v1-1`（11-27 立；默认全部、例外点名，不是白名单）**：画小满本人一律点名这一条，别的单没有特别理由也照此。例外只点名两类——① 要静物／写实照片感，走 `qwen-image-2.1-t2i`；② 在一张现成图上做局部改，走 `source_image`＋`pictures.mask_image` 那条带遮罩的 inpaint 路（`anima-turbo-inpaint`，见「改图与 `generate_image`」），**不换底模**。例外写不出为什么，就按默认走。来路：主人 11-27 00:44（本机钟面）原话「行，下次能默认用anima turbo么？」。
+- **ai 娘那颗 LoRA 也挂在 anima turbo 上（同一底模＋那颗 LoRA）**：主人 11-27 00:45（本机钟面）原话「其实ai娘也是anima turbo，不过附带了ai娘的lora」。ai 娘不属于例外。**这两处没对上，没圆**：主人说同底模加 LoRA；而 `list_routes=yes` 11-28 本趟现读 22 条，`anima-turbo-v1-1` **不声明 `loras`**（没有 `loras`、没有 `loras_note`），带 `loras` 的是 8 条 `*-girl-anima-turbo`（键名 `character`，默认 0.8–1.0，它们的 description 自述 official Anima Turbo v1.1 加 LoRA）和 `animagine-xl-3.1-nsfw`（`concept` 默认 0.9、`rapi` 默认 0）→ 调用上**要角色 LoRA 是换路线名，不是加参数**（底模不变，换的是路线名）。现读方法：每次画角色前先 `list_routes=yes`，看 `anima-turbo-v1-1` 有没有 `loras` 格、再看目标角色那条路线的 description 写的底模与它的 `loras` 键。这一条只讲 `list_routes` 清单这一格；服务端 `parameter_schema` 没读，别升级成「v1-1 服务端不挂 LoRA」，也别写成「v1-1 能直接传 loras」。
 
 **② 角色点名要 LoRA：完整调用形状**
 
@@ -255,7 +256,7 @@ for x in (res.get("matches") or [])[:3]:
 - 旧「没有 photoreal 专用路由」是 resolve 行为的旧实测，11-20 没重测；字面层面 photo 词已归 qwen 条（上面 11-20 读数）。
   想要照片感仍写进 prompt；「偏插画」是旧 resolve 行为的预期，未重测。
 - 提示词跟着选中 workflow 的 prompting 口径写（`prompting` / `prompt_granularity`），多数要英文。
-- **CFG 1 的路由不吃 `negative_prompt`**：「不要什么」必须写进正向提示词（如 `no text, no watermark`），
+- **CFG 1 的路线（anima-turbo 系、qwen-image）负面提示词不参与采样**：硬要求（体型、表情、别胖这类）必须正面写进 prompt 的正面词组，写成要的样子，不写成不要的样子。「不要什么」同样写进正向提示词（如 `no text, no watermark`），
   单开 negative 字段等于没说。
 
 ## 步骤 2：提示词按服务口径写，日常、不露骨
@@ -263,7 +264,7 @@ for x in (res.get("matches") or [])[:3]:
 - 方言与粒度跟着选中 workflow 的 `prompting.granularity.recommended`；不要把别的模型族的触发词抄过来。
 - 角色、服装、姿势、光线这些细节留在 `parameters.prompt` 里（`routing_boundary`：不为一个角色或一套衣服造路由）。
 - 明确写 SFW 约束与不要的东西：`fully clothed` / `modest` / `no nsfw`，加 `watermark, text, extra fingers, deformed hands`。
-- **店招／货架那一族：小价签是乱码高发位**。`every label blank`、`no letters` 这种整体约束压不住货架上那些小价签。
+- **动漫场景的小价签／小标签是乱码高发位**（店招、货架那一族最重）。`every label blank`、`no letters` 这种整体约束压不住货架上那些小价签。
   实测两种写法有效：① 把价签本身要求写成 `blank white tag`，并且**整条提示词里不要再出现 `shelf label` 这个词**；
   ② 让镜头离开货架特写，价签根本不出现在画面里。撞出这条的是 anime 那条 fallback 路线（`anima-turbo-v1-1`），
   别的路线没重测。
@@ -905,7 +906,7 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
 
 1. 手和手指数量对，脸没崩；
 2. 画面里没有乱码文字——要带字就得字对，对不了就宁可无字；
-   判这一格要专门盯**小价签**：大招牌干净不等于没乱码，货架那些小价签最容易冒 `ON`／`VK` 这种小字母
+   判这一格除大招牌外，要逐个数**小价签／小标签**（数几个、几个有字母）：大招牌干净不等于没乱码，货架那些小价签最容易冒 `ON`／`VK` 这种小字母
    （有效写法见「步骤 2」里店招／货架那一条）。人物身上的小平面（胸口图案、手机背面、墙上画框）同族，
    判完整张还要按局部裁开放大看（做法见「人像实测」那一节）。
 3. 构图没跑：改图不能把人重画成另一个人、另一套衣服、另一个姿势；

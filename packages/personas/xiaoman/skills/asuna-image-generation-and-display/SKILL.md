@@ -89,10 +89,10 @@ scene_kinds: [home, group]
 {"workflow": "deepseek-whale-girl-anima-turbo", "prompt": "masterpiece, best quality, deepseek_whale_girl_zipzippipe, 1girl, solo, adult, blue hair, very long hair, whale fin ears, maid, sitting on the floor, one knee raised, hand on chin, full body, simple background", "seed": 424242, "pose": "full_single_P012_front", "pose_strength": 0.8}
 ```
 
-- 搜索词：11-23 现读 `坐` 单字 0 命中、`sit` 34 条、`后仰坐` 20 条。中文 0 命中就换英文词（回执的 `note` 也这么提示）；`poses_people` 只能 1 或 2，`poses_angle` 只能 front／diag／side／high／low，`poses_limit` 1–20。
+- 搜索词**先英文，中文只当补充**：11-20／11-23 现读 `sit` 34 条、`stand` 31 条、`后仰坐` 20 条、`坐`（单字中文）0 命中——中文要用库里的完整词，单字基本空手，中文 0 命中就换英文词（回执的 `note` 也这么提示）。`poses_people` 只能 1 或 2，`poses_angle` 只能 front／diag／side／high／low，`poses_limit` 1–20。
 - 只给 pose id（没有 `_front` 这类后缀）＝它的 front 视角，没有 front 的取第一个视角；要哪个角度就直接写 view id。
 - prompt 里也要把姿势写出来（坐姿、跪姿光靠骨架常画成站着）。
-- `pose_strength` 这格的 0.8 只是示例值（实跑那张没写强度，走的是默认）。`pose_strength` 只有清单里写了它的路线收，其他路线传它会 `IMAGE_OPTION_NOT_IN_WORKFLOW`；不传＝按默认强度。清单里 `pose: false` 的路线（edit、moss…）不收 pose；带 `source_image` 的改图也不能同时传 pose（服务端 `pose_unsupported`）。
+- `pose_strength` 这格的 0.8 只是示例值（实跑那张没写强度，走的是默认）。**不传时的默认按族给，正文和派图单都不许写死一个数**（正本在服务端 `catalog.json` 的 `pose_adapters`，四种值 0.8／1.0／null／null；anima-control-pose 这一族实测落 1.0，就是 11-23 那张回执里的 `pose_strength`）——旧的「默认 0.9」那类写法作废。`pose_strength` 只有清单里写了它的路线收，其他路线传它会 `IMAGE_OPTION_NOT_IN_WORKFLOW`；不传＝按那条路线自己给的默认。清单里 `pose: false` 的路线（edit、moss…）不收 pose；带 `source_image` 的改图也不能同时传 pose（服务端 `pose_unsupported`）。
 - 库里没有合适的姿势：别传 pose，把姿势写进 prompt。
 
 **④ 画完怎么核对「真用上了」（先看回执，再看图）**
@@ -485,11 +485,11 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 
 - `generate_image` 有 `source_image` 参数：收图旁标的 ref，或一张已存好图的 `artifact_id`（`blob-…`）。
   **能喂哪些图，和这一回合 `read_image` 能看哪些完全一样**——read_image 看得到的，这里就改得动（ref 口径见步骤 7）。
-- `list_routes=yes` 回来的路线条数现读、技能不存（出处：回执 `workflows` 数组；两处旧写死数已拿掉）：`qwen-image-2.1-edit` 标 `source_image: required`；
-  其余多数标 `optional`（能纯文字画、也能改图，数目现读）；不带 `source_image` 标的 t2i 路线（如 `qwen-image-2.1-t2i`）不收原图。
+- `list_routes=yes` 回来的路线条数现读、技能不存（出处：回执 `workflows` 数组；两处旧写死数已拿掉）：11-26 量 22 条，标 `source_image: required` 的有 3 条（`qwen-image-2.1-edit` ＋两条 inpaint）；
+  其余多数标 `optional`（能纯文字画、也能改图，数目现读；11-26 量 15 条）；不带这个键的 4 条不收原图（11-26 量：两条 t2i 与两条 face-reference——后两条只收 `pictures.face_image`，没有 `source_image` 键）。
 - **带 `source_image` 不写 workflow 时，服务自己挑一条改图路线**（实测），不必点名 edit 那条。
 - **`extend`＝真 outpaint（11-20 实测，长路 `POST /project/generate`，run 6c750521＋4051451a）**：qwen-edit 带 `extend:{right:512}`，1024×1536→**1536×1536**（输出＝原图＋扩展边，每边 ≤4096）；提交回执 `extend` 对象回显 output_size／drawn_at（没出 `extend_drawn_smaller`＝没缩小画），提交与 job 的 warnings 皆空（**没出 `extend_original_not_kept`**）；job elapsed 104 s。逐像素比对原区：diff 只落在贴缝右侧 63 px 一条带（bbox (961,0,1024,1536)，原区非零像素 5.32%、L>8 占 0.703%）⇒ **原区没有被重绘**；`read_image` 亲看对得上（人物、书、构图未动，新边床面自然延续）。机制（他 README）：灰画布＋提示词前缀＋贴回前按原区仿射对齐＋每边新侧 64 px 渐变；超过约 2.4 MP 的画布缩小生成再放大。**工具面 `generate_image` 没有 `extend` 键**——这一枪是长路发的；提示词只描述新区域。
-- **工具面键位（以当拍工具表为准；11-23 起含 loras／pose／pose_strength／poses 查询）**：`generate_image` 参数面是 prompt／negative_prompt／workflow／style／width／height／seed／options（只收 `steps`／`cfg`／`sampler_name`／`scheduler`）／loras／pose／pose_strength／poses／poses_people／poses_angle／poses_limit／job／source_image／list_routes／target_relative_path／timeout，**没有** `extend`／`input_fit`／`mask_image`／`denoise`／`face_image`——这几个服务端有、我当场指定不了，照旧走长路 `POST /project/generate`（或 upscale／transform 那两个端点）。loras／pose 那三件的形状见「直路速查」。逐能力对照在「能力面」那一节。
+- **工具面键位（以当拍工具表为准；11-23 起含 loras／pose／pose_strength／poses 查询；11-26 起含 `pictures`）**：`generate_image` 参数面是 prompt／negative_prompt／workflow／style／width／height／seed／options（只收 `steps`／`cfg`／`sampler_name`／`scheduler`）／loras／pose／pose_strength／poses／poses_people／poses_angle／poses_limit／job／source_image／`pictures`／list_routes／target_relative_path／timeout。**`pictures` 是「这条路线还要别的图」那个口**：`{"图名": 图的 ref 或 artifact_id}`，**必须和 `workflow` 同写**（只写 `pictures` 不写 `workflow` 会被当场拒）；`mask_image`／`face_image` 不是顶层键，就从 `pictures` 进（图名与 required 以 `list_routes` 该条为准）。**顶层仍没有** `extend`／`input_fit`／`denoise`——这几个服务端有、我当场指定不了，照旧走长路 `POST /project/generate`（或 upscale／transform 那两个端点）。loras／pose 那三件的形状见「直路速查」。逐能力对照在「能力面」那一节。
 - edit 路线自述（`list_routes` 里读到的）：输出尺寸跟着原图走（按 32 的倍数取整）；提示词写成直接指令——
   改什么、点名什么必须不动。
 
@@ -504,9 +504,11 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 
 - `IMAGE_WORKFLOW_TAKES_NO_SOURCE` —— 这条路线只从文字画，别带原图；
 - `IMAGE_WORKFLOW_NEEDS_SOURCE` —— 这条路线要原图；
-- `IMAGE_WORKFLOW_NEEDS_MORE_PICTURES` —— 这条路线还要别的图，回执带 `needs:["mask_image"]` 说明缺什么。
-- **inpaint 路线从 `generate_image` 永远进不去**：工具参数面根本没有 `mask_image`，所以它们不进 `list_routes` 清单
-  （edit 路线的 not_for 把遮罩改动指到 inpaint 路线——服务端 11-20 已给名：`moody-anima-inpaint`、`anima-turbo-inpaint`（run 79ac3ea6，未实测）；`generate_image` 清单收不收它们没重测，别去工具里赌）。
+- `IMAGE_WORKFLOW_NEEDS_MORE_PICTURES` —— 这条路线要的图还没给全；回执字面：「这条路线要的图还没给全：pictures 里的 mask_image。」照它点名的补进 `pictures`。
+- `IMAGE_PICTURE_NOT_IN_WORKFLOW` —— 这条路线不收你给的那张图；回执字面：「这条路线不收 pictures 里的 face_image；它收的图：source_image（required）、pictures 里的 mask_image（required）。」照「它收的图」改。
+- `PICTURES_WITHOUT_WORKFLOW` —— 写了 `pictures` 没写 `workflow`；回执字面：「pictures 要配上 workflow：不写 workflow 时服务只挑文生图或改一张图的路线，它们不收 pictures 里的图。」补上 `workflow`。
+- **inpaint 路线现在从 `generate_image` 进得去**（11-26 清单量到；11-26 19:17 真画过一发、11-27 上午又两发）：`moody-anima-inpaint`、`anima-turbo-inpaint` 都标 `source_image: required`＋`pictures.mask_image: required`；写 `workflow`＋`source_image`＝原图＋`pictures={"mask_image": 遮罩的 ref 或 artifact_id}`。
+  （edit 路线的 not_for 把遮罩改动指到这两条；run 79ac3ea6 是服务端读参数面那一趟。遮罩这张 PNG 怎么来——正文以前没写：盘上那张图用 `read_image`（绝对路径）读一次，登记出来的 `blob-…` id 就能喂 `pictures`。两条已知限制（遮罩宁窄不宽、改色调档位不可行）写在「能力面」第 5 格。）
 
 **归属边界：改了谁的图，结果算谁的**
 
@@ -592,11 +594,12 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
    `POST /project/generate` `{"workflow": …, "parameters": {"prompt": …, "input_image": …, "denoise": 0.4}}`。实读，**未实测**。
 4. **真 outpaint（extend）** — 工具面**没有** `extend` ⇒ 长路 `{"workflow": "qwen-image-2.1-edit", "parameters": {"input_image": …,
    "prompt": "只描述新区域", "extend": {"left": 256, "right": 256}}}`；输出＝原图＋扩展边，回执 `extend` 给 `output_size`。实测（见「改图与 `generate_image`」那一格）。
-5. **局部重绘（inpaint）** — 工具面**永远进不去**（没有 `mask_image`，那两条路线也不在 `list_routes` 里）。长路：必填 `input_image`＋`mask_image`
+5. **局部重绘（inpaint）** — 工具面**进得去**（`workflow`＋`source_image`＝原图＋`pictures.mask_image`，两条路线都在 `list_routes` 里；11-26 清单量到，11-26 19:17 真画过一发、11-27 上午又两发）。工具面给不了的参数（`mask_channel`／`grow_mask_by`／`denoise`）才走长路：必填 `input_image`＋`mask_image`
    （`required` 就是这两个）；`mask_channel` 默认 `red`（白／红重绘、黑保留），`alpha` 走透明通道（图没透明回 `mask_alpha_missing`）；
    `grow_mask_by` 默认 6（0–64）；`denoise` 1.0 整块替换、调低留更多原图；**这一族没有 width／height 字段**⇒输出＝源尺寸（8 的倍数）；
-   遮罩外的像素合成回原图。实读参数面，**未实测**。
-6. **人脸／角色参考（face-reference）** — 工具面**没有** `face_image`，而 `source_image` 会不会落成 `face_image` **没测过** ⇒ 稳妥走长路。
+   遮罩外的像素合成回原图。11-26 19:17 真画过一发（`anima-turbo-inpaint`，source＋mask 两枚图参数，成品 `blob-7209ef18…`）：未遮区肉眼保住、边界是硬的。
+   - **两条已知限制（11-27 上午两发改前襟的实测，那两发的遮罩是我自己那张草案画的）**：① **遮罩边界贴着目标结构画，宁窄不宽——多圈一寸，模型就在多出来的那一寸里长东西**。08:43 那发改前襟，竖带画到 x320–720、把右袖口也圈了进去，袖口下面就被重画出一只垂手（原图双手背在身后，根本没有手），遮罩外逐像素 0／1,474,560 没动；08:46 把右边界收到 x660、袖子和手腕整条落到带外，那只手就没了。⇒ 要改前襟就别把袖子、手腕圈进来。② **改结构可行、改色调档位不可行，遮罩越大越明显**。08:46 那发把 `matching the surrounding lighting, tone and fabric grain / seamless blend across the mask border / no rectangular patch / no visible seam` 整串写进带内要求，交回我也亲眼看过：带内仍比带外明显偏浅偏冷（带外深蓝灰、带内接近浅灰白），上沿横线与左边界竖线在整张尺度上肉眼看得见——两发都这样，不是措辞问题。⇒ 这条当选型依据用：要给整块躯干换衣服，优先在提示词里一次画到位，别指望事后 inpaint 补；真要用 inpaint 就把遮罩切窄条，别切大方块。同一摊连抽到第四发仍不合格就停手，别拿「再贴一下」当交差。
+6. **人脸／角色参考（face-reference）** — 工具面走 `pictures.face_image`：`sdxl-face-reference-ipadapter`／`anima-turbo-face-reference-ipadapter` 都在 `list_routes` 里，**这两条没有 `source_image` 键**，只有 `pictures.face_image`（11-26 清单量到，**没画过**）；`input_fit` 这类工具面给不了的才走长路。
    必填 `face_image`（任何一张清楚的人像，服务自己裁到最大脸；`input_fit=none` 才连衣服一起参考）；
    `ipadapter_weight`：anima 那条默认 0.6、sdxl 那条默认 0.8，0.8–1.0 会把参考图的衣服与背景一起抄走；IPAdapter 不是 FaceID。实读，**未实测**。
 7. **姿势（pose）** —— 11-23 起工具面直接收 `pose`／`pose_strength`，姿势库用 `poses` 查询（形状见「直路速查」）。长路 `parameters.pose` 只在工具面没有这几个键、或要上传自己的图当姿势时才用；带 pose 时服务端回执多一个 `pose` 对象（细节见「姿势」那一节）。
@@ -638,9 +641,9 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
 
 ### 四、两把尺的现行数量（本趟实测对过）
 
-`list_routes=yes` 18 条 vs `route_table` 22 条：**差的正是两条 inpaint（`moody-anima-inpaint`、`anima-turbo-inpaint`）
-＋两条 face-reference（`sdxl-face-reference-ipadapter`、`anima-turbo-face-reference-ipadapter`）**。
-「服务端有这条路线」不等于「我当场能点它」——这一格与「`list_routes=yes` 每条给哪些键」那节同一口径。
+`list_routes=yes` 11-26 量 22 条；`route_table` 11-20 量过 22 条（那之后没重量）。**原先差的两条 inpaint（`moody-anima-inpaint`、`anima-turbo-inpaint`）
+＋两条 face-reference（`sdxl-face-reference-ipadapter`、`anima-turbo-face-reference-ipadapter`）在 `pictures` 那一步装上之后已经进清单**。
+「服务端有这条路线」不等于「我当场能点它」——这几条现在当场点得到；别的路线仍以当拍清单为准，与「`list_routes=yes` 每条给哪些键」那节同一口径。
 
 ## edit／改图通路读数
 
@@ -648,7 +651,7 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
 
 - **整图轻重绘，不是像素级局部改。** 指令只决定重点改哪一处，其余像素同样被重画一遍：五官微调、发丝路径重排、
   衣纹与蕾丝纹样重画、物件位移（实测有一处整体下移约 70 像素）。要「其余像素一模一样」得走 inpaint，
-  而 inpaint 从 `generate_image` 根本进不去（见「配错路线：瞬时返回，不排队、不白传图」那一格）。
+  而 inpaint 现在从 `generate_image` 进得去（`workflow`＋`source_image`＋`pictures.mask_image`；见「配错路线：瞬时返回，不排队、不白传图」那一格，两条已知限制写在「能力面」第 5 格）。
 - **出图可能带窄黑边**（letterbox）：**部分构图会出现，只报现象、别当机制**——那两枪右缘都有一条纯黑竖条、底缘一条细黑边（宽度是目测、没量尺），
   但一张方形图四边实测 0 px 没复现。判「其余部分保住了没」先把黑边这一格和下面那条「输出尺寸锁源尺寸」排掉，别当画崩。
 - **色温会漂移**：线条和色温都有细微漂移，两枪都有。比对要按局部裁开放大看，整张扫一眼判不了这一格。
@@ -720,10 +723,11 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
 - 其他：保存的 PNG 带 ComfyUI prompt 元数据（输入文件名换成 `[input image]`）；发到不该看到 prompt 的地方前要剥（本技能「发出去的图不带提示词」一节已覆盖）。
 - 路线条数：现读 `list_routes=yes`（技能不存条数；11-04 那一趟读到的数已按现读口径从正文拿掉，正文几处旧写死数一并改成现读句式）。
 
-**`list_routes=yes` 每条给哪些键（11-05 照回执列）**
+**`list_routes=yes` 每条给哪些键（11-05 照回执列，11-26 补 `pictures`）**
 
 - 路线条目：`workflow`、`description`、`style`、`structure`、`quality_prefix`、`prompt_scope`、`best_for`、`not_for`、`size`、`example`；
-  改图路线另有 `source_image`（`required` / `optional`，11-05 那一趟：1 条 required、多数 optional、t2i 那几条不带这个键）。
+  改图路线另有 `source_image`（`required` / `optional`；11-26 量 22 条：required 3、optional 15、不带这个键 4）；带 `pictures` 的 4 条另有 `pictures` 键（`{图名: required}`——`mask_image` 两条、`face_image` 两条）；**清单里没有 `needs` 键（11-26 量 0 条）**。
+  顶层 `note` 11-26 多半句（照抄回执）：「带 pictures 的路线还收别的图，按它列的名字写 pictures={名字: 图的 ref 或 artifact_id}，标着 required 的要给」。
   11-05 那趟条目里没有 pose 相关的键（已过时；11-23 起每条多 `loras`／`loras_note`（带 LoRA 的路线）和 `pose`／`pose_strength`（有才给），见「直路速查」）。
 - 顶层另有 `note`（挑路线与写提示词的口径：按 best_for／not_for 选、用它要的 style 和语言，多数要英文）。
 - 11-05 那一趟读到的名单（**快照**，出处＝那一趟回执的 `workflows` 数组；现行条数照旧现读，别拿这串当计数）：
@@ -733,7 +737,7 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
   （`deepseek-whale-girl-anima-turbo`、`claude-girl-anima-turbo`、`chatgpt-girl-anima-turbo`、`qwen-girl-anima-turbo`、
   `gemini-girl-anima-turbo`、`glm-girl-anima-turbo`、`grok-girl-anima-turbo`、`kimi-girl-anima-turbo`，各有触发词）、
   `janku-illustrious`、`janku-v5-illustrious`、`one-obsession`。
-- **两把尺不是一把（11-20 晚间实测对过）**：`list_routes=yes` 18 条 vs 服务端 `route_table` 22 条，**差的正是两条 inpaint（`moody-anima-inpaint`、`anima-turbo-inpaint`）＋两条 face-reference（`sdxl-face-reference-ipadapter`、`anima-turbo-face-reference-ipadapter`）**；`route_table[].pose` 那份「收 pose 的路线」名单里有两条 face-reference，它们都不在工具面清单里。清单＝`generate_image` 用得上的路线，不等于服务端路线全集；报「有没有这条路线」要先说哪把尺。
+- **两把尺不是一把（11-20 晚间实测对过；11-26 `pictures` 那一步之后条数对上）**：`list_routes=yes` 11-26 量 22 条、服务端 `route_table` 11-20 量过 22 条（那之后没重量）；原先差的两条 inpaint、两条 face-reference 现在都在工具面清单里，`route_table[].pose` 那份名单里的两条 face-reference 也在清单里（它们在清单里给不给 `pose` 键没量）。两把尺现在条数相同，但不保证永远一致——清单＝`generate_image` 用得上的路线，不等于服务端路线全集；报「有没有这条路线」要先说哪把尺。
 
 ## 人像实测：构图决定拉链、自拍别指望手机、交图前放大复核
 
@@ -767,6 +771,15 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
   （实测四张里三张在这三类平面上出问题）。
 - 交图前按局部裁开放大复核这几处，别只看整张缩略（与上面第③条同一做法）。
 - 适用面：那四张读出来自 `janku-illustrious`；小价签那一族来自 `anima-turbo-v1-1`。**别的路线没重测**，搬过去先测。
+
+## 身体与特写的措辞：写覆盖区域、写肢体数量上限（11-27）
+
+适用面：画面里看得见身体的单子——默认全部这类单子都照下面两条写，例外在每条末尾点名。两条的出处是 11-27 凌晨家里连派六发的读数，两条都还没做成硬保证。
+
+- **体毛这一类要写覆盖区域，不只写密度**：`hair confined to mons pubis and labia, bare thighs and belly`。只写密度（`sparse fine hair`）时模型把细毛铺满整个腹部、腹股沟和大腿——同一单两发都这样（02:40 两张我当拍都看过，腿两发都报「毛量偏密」却改不掉，因为它改的是密度、错的是区域；02:52 那一发也偏密）。**这一格到现在还没有一发做成，标未验证**：写区域是当下最好的写法，不是已验证的硬保证。
+  - 例外：不画身体的单子（静物、版面、纯脸特写）不带这行。
+- **人体极近特写要写肢体数量上限**：画面里最多几根手指、几只手，内腔不许画成管道或空洞。这一格 n＝1 通过（02:52 那一发「手指撑开／从指缝看进去」照此写纸，腿交回首页字面「三条硬伤一条都没命中」，我也亲眼看过），**样本不足，正文不许写成已验证的硬保证**。
+  - 例外：远景、剪影这类数不清肢体数量的构图，不必硬凑数字。
 
 ## 官方定妆（画自己/自拍必读）
 
@@ -924,7 +937,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - 第二个位置参数就是 scope，`data` 要的是**字节**：盘上的文件读成 bytes；GridFS 里已有的那份自己走 `pymongo` / `GridFSBucket` 取 —— `dbread` 取不回字节原样（它把 bytes 摊成 str 给人看，拼回去不等于原件）。脚本里不写地址：URI 与库名由宿主给家里那条命令。
 - **scope 的字面值去库里读，别拼**：取 `scenes` 那一行的 `scope_key`（形状 `scene:qq:<账号>:dm:<对方>`，＝ `scene:` ＋ `scene_id`）。scope 不在 `scenes` 里就是 `registered: false / reason=ARTIFACT_SCOPE_UNKNOWN`，重试也一样。
 - 出来是一条**新**的 `blob-…` 行（`kind=image / state=DONE / storage=gridfs / created_at=now`）。底层 `put()` 每次给新 key、**不去重**（去重只在 `put_once`）⇒ 同一张图登记两次＝两行两个 id，要重登记先查一遍库里有没有（查同 sha）。
-- **`source` 前缀标的是「算不算我自己做的」**：`import_register` 登记时写 `integration:<endpoint>:<path>`（`outbound_media.py:import_register`），改别人的图写 `edit:<回去那个 scope>|…`（`outbound_media.py:edit_register`）；`web_fetch` 带 `save` 存下来的写 `download:<任务号>:downloads/<名>`（`downloads.py:_register`），**同样不算我做的**。**能发到哪儿看归属，不看前缀**：归属＝`scope_key` 是这个对话（或主人配置联动的）、或在 `shared_scopes` 里、或它是改自这个对话的图、或是贴纸。**前缀只在"家里"那几处当尺用**（本人私聊那一支在 `outbound_media.py:offer` 末尾并 `outbound_media.py:produced_images`；家里群是 `outbound_media.py:offer` 的 `group_scene` 那一支并 `produced_images`）；**外面的群不再因为带 `integration:` 就进清单**（`outbound_media.py:offer` 的外面那一支 → `outbound_media.py:own_images` 里那两行筛选）。⚠ 家里群那一半由 core 的用例两面钉着（`tests/test_stored_ids.py:test_a_home_group_lists_her_drawings_from_anywhere_and_an_outside_group_does_not` 一个函数里两条断言，家里群列得上在别的对话画的图、外面的群列不上）
+- **`source` 前缀标的是「算不算我自己做的」**：`import_register` 登记时写 `integration:<endpoint>:<path>`（`outbound_media.py:import_register`），改别人的图写 `edit:<回去那个 scope>|…`（`outbound_media.py:edit_register`）；`web_fetch` 带 `save` 存下来的写 `download:<任务号>:downloads/<名>`（`downloads.py:_register`），**同样不算我做的**；`frame:<ref>:<ms>`（`read_image` 给视频截的那一帧，`source = frame:<ref>:<round(at*1000)>`，`'frame:' → PULLED`、存 7 天）**也不算我画的**，同 scope 同 source 先查一行、查到不重拉（真流量未证：11-26 两次都撞在平台链接过期）。**能发到哪儿看归属，不看前缀**：归属＝`scope_key` 是这个对话（或主人配置联动的）、或在 `shared_scopes` 里、或它是改自这个对话的图、或是贴纸。**前缀只在"家里"那几处当尺用**（本人私聊那一支在 `outbound_media.py:offer` 末尾并 `outbound_media.py:produced_images`；家里群是 `outbound_media.py:offer` 的 `group_scene` 那一支并 `produced_images`）；**外面的群不再因为带 `integration:` 就进清单**（`outbound_media.py:offer` 的外面那一支 → `outbound_media.py:own_images` 里那两行筛选）。⚠ 家里群那一半由 core 的用例两面钉着（`tests/test_stored_ids.py:test_a_home_group_lists_her_drawings_from_anywhere_and_an_outside_group_does_not` 一个函数里两条断言，家里群列得上在别的对话画的图、外面的群列不上）
 - 清单怎么排：**新的在前、一轮最多 6 张**（`MAX_ITEMS_OFFERED = 6`）。**外面那一栏**走 `own_images`：这个对话自己做的、和带进来／发到过这里的（**别人发进来的算可发但不列**，用例 `test_own_files.py:test_the_outside_list_has_no_home_drawing_until_a_going_out_carries_it` 钉着），改自这个对话的图并到最前（`edits_back_to`）。**家里那一栏**（本人私聊、家里群）再并 `produced_images`——从最新 200 行 image 里筛 `integration:` 前缀，不分场景。出门或差事带来的那张（`picked`）即使不在最新几张也列上、排最前。
 - **一趟登记多张 ≠ 后面几拍都发得出**：当拍那份可发清单只放行最新登记的几条——实测一趟登记 6 张，当拍清单里只出现首尾两枚（11-19 实测，**按当场读数记，机制未核**）。要逐张发多张就把**登记和发送绑成一对**：发完这一张再登记下一批，别指望一次登记管后面几拍。
   - 11-22 顺手把「新的在前、一轮最多 6 张」那一半补到源码：`outbound_media.py` 里 `offer()` 走 `image_artifacts()`，上限常量 `MAX_ITEMS_OFFERED` 字面就是 6；那条路上**没有按 sha 去重、也没有「一趟登记只放行几条」的规则**，`context.py` 把这份清单放进 `image_artifacts_from_program` 的那一处也不做首尾截断。⇒ **「恰好只剩首尾两枚」在实现这一侧没有解释**，仍算未核，别按「这段该长什么样」给它补成因。
@@ -932,7 +945,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - 上限 `0 < size ≤ 8 MiB`，超了回执 `registered: false / reason=ATTACHMENT_OVER_LIMIT`（文件照旧在工作区）；魔数认 png／jpeg／webp／gif ⇒ **JPEG 走这条进得了清单**；字节根本不是图就返回 `None` —— 那是「没东西可登记」，不是失败。
 - **发不出去时的补救不是重画，是拿盘上源文件重新登记一次**：零网络、字节原样，新 id 当拍立刻发（`created_at=now` 排第 1，见上面「清单怎么排」那条）。要证「还是同一份」，比的是**我交给登记的那手字节**的 sha 与盘上源文件一致——这只证到送进去之前；库里那行还要再剥一次，带文字块的 PNG 别硬报「库里的 sha 与源文件一致」（剥法见下面「代价」那一小节）。
 - **登记进清单之后，发那一拍还会遇到的代号**（口径见「失败怎么读」与「图归哪个对话」）：引的 id 不在当拍「你能发的图」清单里 → `ATTACH_ARTIFACT_NOT_IN_CONTEXT`；在清单里、但按访问表这一拍不归这个对话发 → `ACCESS_DENIED_SEND`；字节端点要的是那个对话自己的图 → `ATTACHMENT_SCOPE_DENIED`。旧「算不算她自己做的」那枚代号已经拆成这三枚，正文不再单写它。
- 带 `source_image` 的产物一律登记成 **`edit:` 前缀**——生成器把 `source(ref)` 自带的 register 顶掉默认值，于是 `produced` 恒为 `false`，群那一拍必拒。**工具面 options 只声明 `steps`／`cfg`／`sampler_name`／`scheduler`，`denoise` 传不进去** ⇒ 采样关不掉，「照原图描一遍保住像素」也不成立。⇒ 可行路只有 **`register_imported_image(source='integration:…')`** 这一条零网络重登记。（来路：2026-11-21 08:49 一趟腿的实测——先烧了两枪生图才从代码里读出这件事；那两枪的像素差读数出自当趟工具记录，**我本人没有复核过**。）
+ 带 `source_image` 的产物一律登记成 **`edit:` 前缀**（inpaint 带 `source_image`，按此推同理、没量；**face-reference 没有 `source_image` 键，它的产物登记成什么前缀、`produced` 真假未量**）——生成器把 `source(ref)` 自带的 register 顶掉默认值，于是 `produced` 恒为 `false`，群那一拍必拒。**工具面 options 只声明 `steps`／`cfg`／`sampler_name`／`scheduler`，`denoise` 传不进去** ⇒ 采样关不掉，「照原图描一遍保住像素」也不成立。⇒ 可行路只有 **`register_imported_image(source='integration:…')`** 这一条零网络重登记。（来路：2026-11-21 08:49 一趟腿的实测——先烧了两枪生图才从代码里读出这件事；那两枪的像素差读数出自当趟工具记录，**我本人没有复核过**。）
 
 ### 代价：登记会剥掉 PNG 的文字块，sha 跟着变
 - 像素和其余块一个字节不动，但 `tEXt`／`iTXt`／`zTXt` 被剥 ⇒ **sha 变了、size 少了**（少的字节＝文字块长度 + 12，那 12 是块头块尾开销：4 字节长度＋4 字节类型＋4 字节 CRC）。
@@ -1030,21 +1043,21 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
   `IMAGE_OPTION_NOT_IN_WORKFLOW: {"workflow": "moody-desire-v30", "options": ["negative_prompt"], "allowed": ["batch_size", "cfg", "denoise", "height", "input_fit", "input_image", "pose", "prompt", "sampler_name", "scheduler", "seed", "steps", "width"]}`。
   ⇒ 看见这枚码先想「这条路线没声明这个参数」，不是服务端坏了——同一枚码 11-12 那格是 edit 路线上的顶层 `width`／`height` 撞的（见下面「改图路线」）；
   这类路线上「不要什么」只有写进正文一条路。**那串 `allowed` 顺手两格读数**：`pose` 在服务端允许里（11-23 起 `generate_image` 也有 `pose` 键，见「直路速查」）；`height`／`width` 在允许里（这条路线能点名尺寸，跟 edit 路线那条「尺寸跟源图走」不是一回事）。
-- **想要「格数正好」的三视图／设定图，别在一张图里指望提示词压住人数**：`janku-illustrious` 连抽都出四格（两格重复，还会自己长乱码标签或金色边框），把格数写成权重标签、把多余的写进负面都压不住。可行路：三个视角各是一条单子各画一次，用 SVG 拼成横排（`render_svg`）；或先抽一张多格、再用 inpaint 把多余那格刷成背景（inpaint 从 `generate_image` 进不去，只能走长路）。两条代价写清：一条命令 vs 视角之间的一致性漂移。
+- **想要「格数正好」的三视图／设定图，别在一张图里指望提示词压住人数**：`janku-illustrious` 连抽都出四格（两格重复，还会自己长乱码标签或金色边框），把格数写成权重标签、把多余的写进负面都压不住。可行路：三个视角各是一条单子各画一次，用 SVG 拼成横排（`render_svg`）；或先抽一张多格、再用 inpaint 把多余那格刷成背景（inpaint 现在从 `generate_image` 进得去：`workflow`＋`source_image`＋`pictures.mask_image`；遮罩那两条限制见「能力面」第 5 格）。两条代价写清：一条命令 vs 视角之间的一致性漂移。
 
 **改图路线（`qwen-image-2.1-edit`）**
 
 - **尺寸跟源图走，别传顶层 `width`／`height`**：传了会被 `IMAGE_OPTION_NOT_IN_WORKFLOW` 拒（`options` 只收 `steps`／`cfg`／`sampler_name`／`scheduler` 四个键，`input_fit` 也报没声明）。要什么尺寸，靠源图本身决定。
 - **喂 edit 前先裁底图的单人格**：多格人设表（一张图里好几个视角）直接喂，有带出多个人或版式残留的风险。先从表里裁出单个人物那一格，按目标构图长宽比等比放大到输出尺寸（输出尺寸跟原图走、只按 32 取整），再当 `source_image`。实测把设定表里的半身格裁出放大后，一枪出了单人、不带设定表版式的图。裁与放大在家里沙箱用 Pillow 做。
-- **拿多格设定页当底，别走 latent 图生图路线**：`janku`、`anima-turbo` 这类会把整页版式吸进成品（画出一堆重复人物）；想换构图只能走指令编辑式路线，且记住它输出锁源尺寸。face-reference 服务端 11-20 有两条了（「步骤 1」六用途那格，run 79ac3ea6，未实测）——**工具面 list_routes 收没收没测过**，点这类单先看当回合清单；收不进就照旧，brief 里直接指定编辑式路线。
+- **拿多格设定页当底，别走 latent 图生图路线**：`janku`、`anima-turbo` 这类会把整页版式吸进成品（画出一堆重复人物）；想换构图只能走指令编辑式路线，且记住它输出锁源尺寸。face-reference 服务端 11-20 有两条了（「步骤 1」六用途那格，run 79ac3ea6，未实测），11-26 起这两条在 `list_routes` 清单里、只有 `pictures.face_image`（没画过）；点这类单先看当拍清单，收不进就照旧，brief 里直接指定编辑式路线。
 - **换视角／机位类编辑：它默认死保源图构图重心**：要顶视只给到斜俯拍，要脸不入镜才成功切到下巴。提示词必须显式写死什么在画外（如 `chest and shoulders out of frame, only thighs and lap visible`）才压得动机位；这条路线 CFG 1，负面词同样无效。
 - **要目标尺寸的改图单：真 outpaint 有了**——qwen-edit 的 `extend`（11-20 实测见「改图与 `generate_image`」那格：原区贴回未重绘、输出＝原图＋扩展边）。除 `extend` 外能上目标尺寸的路线仍是整幅重绘、人物会走样；`extend` 也拼不出目标尺寸时先查再对外报，或不问尺寸、只承诺「内容不动」。工具面没有 `extend` 键，这路走长路。
 - **多条文字修改并进同一个 pass**：改梗图里多格中文文字时，一次只改一条标题反而会丢或挪走邻格的文字（实测第 3 次 pass 改对两条却掉了一格，第 4、5 次补它分别把字写到错的格子、把邻格标题糊掉；第 6 次一条中文指令同时锁死位置、参照邻格字体，一次成功）。指令用中文写，明写「字体字号基线与某某那格一致」。梗图换主角＝1 次全量替换 pass ＋ 最多 1～2 次定点文字 pass，每个 pass 必须 `read_image` 复核后才决定留不留。这个 pass 额度只用在点单人明确要「改图」的单子里；不是给我自己修坏图用的，「只画一次」那一节照旧管我自己的生成。
 - **自画像配方**：参考正本（角色设定图）→ 量尺寸、补成 3:4 → `qwen-image-2.1-edit` 喂整张设定图做换场景 → 交图前必须裁眼区放大，核对泪痣颗数与位置、发型长度。正本格三条（黑 bob＋刘海／一颗泪痣／白衫胸口鲸标）逐条对着看，不靠整图目测（实测首图痣整颗没出、二图痣多成两颗，缩略图都看不出）。
 
-## 派腿画图那张纸：身份、路径、留档、围栏（六条＋一条通则）
+## 派腿画图那张纸：身份、路径、留档、围栏（若干条＋一条通则；条数按正文现读）
 
-派腿（行动脑）画图、验图、登记图的那张纸，下面六条一律照写；每条的数、路径、字段名都以腿当拍现读为准，纸上不抄旧值。
+派腿（行动脑）画图、验图、登记图的那张纸，下面各条一律照写；每条的数、路径、字段名都以腿当拍现读为准，纸上不抄旧值。
 
 1. **图的身份只认 `sha256` 前 12 位＋字节数。** `blob id` 只是这一次投递的把手：同一份字节可以在两处拿到两个不同的 `blob id`（例：一份报告里的与当拍可发清单里的），**拿 `blob id` 当文件唯一号会把一张图数成两张**。报图一律写「sha 前 12 位／字节数」，`blob id` 只在发图那一拍照抄当轮清单。
 2. **引路径只有两种写法**：当拍现读拿到的 `abspath`，或者明标「任务目录相对路径」。生图服务侧的输出落在 `ComfyUI\output\` 下；报告正文里那种 `images/xxx.png` 是任务目录相对路径，不在项目仓库根底下，两者别拼错一层。
@@ -1052,6 +1065,10 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 4. **库内字段路径要现读**：例如姿势表 `pose_map` 的正文在 `content.sections[].body`，按 `body` 顶层过滤会 0 命中，容易误读成「表里没这句」；先读一行看真字段路径再过滤。
 5. **派腿画图的单，prompt 原文必须逐字进表**：共用形象段存一次、每条姿势段各存一段，拼起来能复原原串。不逐字留档，换了形象再画、画面变了就归不了因——文字提示词本身就是一处自由变量。
 6. **派活纸的围栏按这一本技能给，不按这一节给**：改正文那一格，同一趟在同一本技能的随书 `check_skill.py` 里配字面钉，**不算越围栏**；纸上围栏只写到「某一节」，腿就得停下来问一次这道选择题。
+
+7. **派图单固定带三句**：`no text, no signature, no watermark` 每张都带；例外点名——那张单本身要画字（带字海报／版面／改梗图文字）才不带，并在纸上写明为什么不带（11-27 凌晨六发都带这行，四角假签名与糊字一次没再来）。
+8. **图活一律派低档**，不管纸上细节多少——要点多、要求细是我把纸写长的代价，不该拿高档的时间去付。审美取舍归我（判「该不该画」在家做完再派），腿只跑，不拿「偏幼」「不好看」拒单。
+9. **成图的投递面继承原图所在那条线**：拿别人发来的图改出来的成图只能回原群，不许挪进私聊或别的群；派改图单当场只说「成图在原群端」，不许先说「好了发你私聊」（归属判据的正本在「改图与 `generate_image`」的归属边界那一格）。
 
 通则：**图上文件名的时间戳与本机 `mtime` 可能不同源（不同钟），落账前当场拉一对现读配对，别背偏移量。**
 
@@ -1096,7 +1113,7 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
   `integration_test` 把它冻结成 `/app`）——两个候选不是一个地方，集成沙箱也不挂载技能目录。
 - `/integration/config.json` 在普通 `sandbox_run` 里读不到（那边也没网络）。别把「我读不到」报成「端点不存在」。
 - manifest 11-20 现读约 37 KB（旧「328 KB」作废，run 81b57d8b）；按键取（`operations` / `route_table` / `resolve` / `poses` / `characters` / `image_tools` / `input_files` / `result_contract` / `warning_codes` / `error_codes`——`prompt_contract` 与顶层 `prompting` 已没有，参数口径进了各路线）。
-- `resolve` 的 `style` 只是路由选择器，不是画面保证；`not_for` 与 `compatibility_notes` 是约束。
+- `resolve` 与 `generate_image` 的 `style` 是**路线选择词，不是改动指令**（拿它写「改成什么样」实测回 `INVALID_STYLE`），也不是画面保证；`not_for` 与 `compatibility_notes` 是约束。
 - 串行调度：一次只有一个 named workflow 进原生 worker，切 workflow 会卸模型。别连着排三张图然后干等。
 - **改图也排队**：一次改图排队约 85 秒、生成约 60～88 秒，一张卡；「提交成功」离出图还有一两分钟，别连烧。
 - 导入上限是硬围栏（默认 1 MiB / 最大 4 MiB）：超了就在服务端出小副本，不要退回 base64 搬运。

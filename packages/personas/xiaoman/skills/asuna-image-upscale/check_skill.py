@@ -73,6 +73,7 @@ PINS = [
     # edit 那一枪
     ("pin_edit_only_for_corner", "只在要修缺角／局部时开"),
     ("pin_edit_no_mask", "**没有 mask 参数**"),
+    ("pin_edit_no_mask_pictures_entry", "不带 `pictures`"),
     ("pin_edit_is_full_redraw", "**整图重描**"),
     ("pin_edit_diff_readings", "目标区 meanAbsDiff **10.85**"),
     ("pin_edit_non_target", "非目标区 **4.99**"),

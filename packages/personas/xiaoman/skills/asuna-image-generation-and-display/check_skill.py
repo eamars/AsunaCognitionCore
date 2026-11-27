@@ -9,6 +9,10 @@
 「唯一的例外」是不是 10:59 更正版、10:57 旧措辞有没有被抄回这一节）在不在、
 「往群里发图之前的自检」一节在不在且四条要点（全年龄底线、看群笔记／最近聊天、只发自己做的图、
 不为试功能发图）齐不齐、示例图路径是不是相对的、
+2026-11-27 起加三组口径钉：pictures 那一步（两枚新拒词代号＋「进得去」那句＋清单里没 `needs` 键）、
+inpaint 两条已知限制、「身体与特写的措辞」那一节；派图纸／直路速查／已有图进清单三组各加本趟新格的字面钉；
+另加一枚 stale 钉——「永远进不去」「根本进不去」写回散文就红（那是 `pictures` 装上之前的旧说法）。
+
 同目录脚本能不能编译、SKILL.md 与同目录脚本的换行是不是 LF（读字节数 CR，文本模式那把尺看不见 CR）。
 
 2026-10-05 起改口径：QQ 私聊发图是那一轮调用 `attach_image` 工具（DECIDE 阶段与它的 `attach`
@@ -255,8 +259,8 @@ EDIT = [
     ("edit_err_takes_no_source", "IMAGE_WORKFLOW_TAKES_NO_SOURCE"),
     ("edit_err_needs_source", "IMAGE_WORKFLOW_NEEDS_SOURCE"),
     ("edit_err_needs_more_pictures", "IMAGE_WORKFLOW_NEEDS_MORE_PICTURES"),
-    ("edit_mask_absent", "mask_image"),
-    ("edit_inpaint_unreachable", "永远进不去"),
+    ("edit_pictures_without_workflow", "PICTURES_WITHOUT_WORKFLOW"),
+    ("edit_picture_not_in_workflow", "IMAGE_PICTURE_NOT_IN_WORKFLOW"),
     # 归属：改自己的还是我的；改别人的 produced: false、只能发回原图所在对话
     ("edit_own_result_mine", "改我自己画的图，结果还是我的"),
     ("edit_others_result_produced_false", "produced: false"),
@@ -436,6 +440,8 @@ QUICK = [
     ("quick_edit_cannot_take_pose", "pose_unsupported"),
     ("quick_receipt_people_detected", "people_detected"),
     ("quick_job_pickup_has_no_pose", "续取只取图"),
+    ("quick_pose_search_english_first", "先英文，中文只当补充"),
+    ("quick_pose_strength_no_hardcoded_default", "不传时的默认按族给"),
 ]
 
 
@@ -515,6 +521,36 @@ def portrait_section_slice(body):
 
 
 # 反引号里的字面量是引用（示例、错误码、历史段与被改坏副本里引用的旧句子），只在散文里判红。
+# 11-27 这一趟新写的口径（`pictures` 那一步、inpaint 两条已知限制、「身体与特写的措辞」那一节）。
+# 各组钉各自那一段：拆掉哪一段红哪一组。钉数与组数从当拍脚本输出读，正文不写死。
+PICTURES_STEP = [
+    ("pictures_step_key", "`pictures` 是「这条路线还要别的图」那个口"),
+    ("pictures_step_with_workflow", "必须和 `workflow` 同写"),
+    ("pictures_step_inpaint_reachable", "inpaint 路线现在从 `generate_image` 进得去"),
+    ("pictures_step_face_no_source", "**这两条没有 `source_image` 键**"),
+    ("pictures_step_no_needs_key", "**清单里没有 `needs` 键"),
+]
+
+# 作废说法（反引号外裸写回散文才红，与 STALE_CLAIMS 同一口径，只是本趟新加的两串）
+PICTURES_STEP_STALE = ["永远进不去", "根本进不去"]
+
+PAINT_LIMITS = [
+    ("inpaint_mask_narrow_rule", "遮罩边界贴着目标结构画，宁窄不宽"),
+    ("inpaint_mask_extra_grows", "多圈一寸，模型就在多出来的那一寸里长东西"),
+    ("inpaint_tone_grade_limit", "改结构可行、改色调档位不可行"),
+    ("inpaint_stop_after_fourth", "连抽到第四发仍不合格就停手"),
+    ("inpaint_mask_png_how", "`blob-…` id 就能喂 `pictures`"),
+]
+
+BODY_WORDING_HEADING = "## 身体与特写的措辞：写覆盖区域、写肢体数量上限（11-27）"
+BODY_WORDING = [
+    ("body_wording_region_not_density", "写覆盖区域，不只写密度"),
+    ("body_wording_unverified", "还没有一发做成"),
+    ("body_wording_limb_cap", "要写肢体数量上限"),
+    ("body_wording_n1_sample", "样本不足"),
+]
+
+
 PROSE = re.compile(r'`[^`]*`', re.S)
 # 黑边这一族只报现象、别当机制（口径正本在 asuna-image-upscale 第五节）：全称句一律禁掉。
 BB_UNIVERSAL = ("两枪都有", "都会加")
@@ -645,6 +681,9 @@ REGISTER_SECTION = [
     # 「恰好只剩首尾两枚在实现侧无解释」「未在 11-19 那批复现」与另一枚子项的 EDITS_OFFERED／
     # 两处过滤都不在这枚钉的面上——删掉那半句不红，代价写在 CHANGELOG。
     ("reg_offer_cap_constant", "MAX_ITEMS_OFFERED"),
+    # 11-27：read_image 视频取帧那一支（PULLED、存 7 天、不算我画的）
+    ("reg_frame_prefix", "frame:<ref>:<ms>"),
+    ("reg_frame_not_hers", "也不算我画的"),
 ]
 
 
@@ -704,6 +743,9 @@ DISPATCH_SHEET = [
     ("dispatch_fence_per_book_not_section", "围栏按这一本技能给，不按这一节给"),
     ("dispatch_pin_in_same_book_not_over_fence", "不算越围栏"),
     ("dispatch_clock_pair_not_offset", "当场拉一对现读配对"),
+    ("dispatch_no_text_watermark_band", "no text, no signature, no watermark"),
+    ("dispatch_low_tier_for_image_jobs", "图活一律派低档"),
+    ("dispatch_delivery_inherits_origin", "成图的投递面继承原图所在那条线"),
 ]
 
 
@@ -985,6 +1027,11 @@ def main():
            and "IMAGE_WORKFLOW_NEEDS_SOURCE" in edit_slice
            and "IMAGE_WORKFLOW_NEEDS_MORE_PICTURES" in edit_slice),
           "改图一节没把 source_image 入口与三条 IMAGE_WORKFLOW_* 即时拒绝码教全")
+    # 11-27：pictures 那两枚即时拒绝码也押在改图一节的切片里（同一口径：码在别处出现不算数）。
+    check("edit_section_teaches_picture_rejects",
+          ("PICTURES_WITHOUT_WORKFLOW" in edit_slice
+           and "IMAGE_PICTURE_NOT_IN_WORKFLOW" in edit_slice),
+          "改图一节没把 pictures 那两枚即时拒绝码教全")
 
     # 三处同步（2026-10-24 v12）：图从哪来的数、失败码表按机制的措辞、归属节的指向。
     # 前两条只查步骤 8 那一节，第三条只查改图那一节（归属边界是它的子节）：正文别处提到不算数。
@@ -997,6 +1044,20 @@ def main():
           ("来源前缀决定这行算谁的" in edit_slice
            and "本机已有那张图怎么进可发清单" in edit_slice),
           "改图一节的归属边界没指向「本机已有那张图怎么进可发清单」里 source 那一条")
+
+    # 11-27 三组新钉：pictures 那一步、inpaint 两条限制、身体与特写的措辞——各钉各的，拆哪段红哪组。
+    for name, token in PICTURES_STEP:
+        check(name, token in body, token)
+    stale_pictures = [item for item in PICTURES_STEP_STALE if item in prose]
+    check("no_stale_inpaint_unreachable_claim", not stale_pictures, ",".join(stale_pictures))
+    for name, token in PAINT_LIMITS:
+        check(name, token in body, token)
+    body_wording = section_slice(body, BODY_WORDING_HEADING)
+    check("body_wording_section_present", bool(body_wording),
+          "「身体与特写的措辞」一节切不出正文（标题被改或删）")
+    for name, token in BODY_WORDING:
+        check(name, token in body_wording,
+              "「%s」不在「身体与特写的措辞」这一节里（切片 %d 字）" % (token, len(body_wording)))
 
 
     # 群聊生图上限（2026-10-16 v8）：节标题在 SECTIONS 里查（section_18），这里查节内硬指标与措辞版本。

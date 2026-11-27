@@ -50,7 +50,7 @@ scene_kinds: [home, group, dm]
 
 只在要修缺角／局部时开，且知道它必然这样：
 
-- **没有 mask 参数**（参数面没有 `mask_image`，`list_routes` 清单里也没有 inpaint——服务端有两族 inpaint 路线，但画图工具根本没有 `mask_image` 那个键，从工具面进不去；正本在 `asuna-image-generation-and-display`）⇒ 它是**整图重描**，不是像素级局部改。实测逐像素 abs diff（亮度）：目标区 meanAbsDiff **10.85**、偏移>8 占 **33.01%**；非目标区 **4.99**。⇒ **「只补角」不成立**，对外不许那么讲。
+- **没有 mask 参数**（这一枪 `qwen-image-2.1-edit` 不带 `pictures`，所以没有 mask；带 mask 的是另外两条 inpaint 路线——它们从 `generate_image` 的 `source_image`＋`pictures.mask_image` 进得去，清单量到、真画过；正本在 `asuna-image-generation-and-display`，遮罩那两条已知限制也记在那本）⇒ 它是**整图重描**，不是像素级局部改。实测逐像素 abs diff（亮度）：目标区 meanAbsDiff **10.85**、偏移>8 占 **33.01%**；非目标区 **4.99**。⇒ **「只补角」不成立**，对外不许那么讲。
 - **输出锁源尺寸**：不传 width/height 也一样，别指望它顺手放大或改幅面。例外只有一格：服务端 `extend` 往画外添画布（输出＝原图＋扩展边）——那是添画不是改幅面，归生图那本。
 - **手型和线条会漂**，色温也跟着漂；手指数量写死在正向指令里也照样可能多一根（细节见生图那本）。
 - **CFG 1 这条路线 `negative_prompt` 无效**（服务端自己回警告）⇒ 禁令一律写成正向指令，逐项点名「保持原样不动」。

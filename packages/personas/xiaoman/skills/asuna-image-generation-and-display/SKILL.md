@@ -66,6 +66,7 @@ scene_kinds: [home, group]
 每条路线多两格，都是服务端 parameter_schema 现读，不是写死的表：
 - `loras`：`{id: 默认强度}`，带一句 `loras_note`。id 以这格为准，**别默认写 `character`**：11-23 现读八条角色路线的 id 都叫 `character`，但默认强度不同（deepseek／gemini 0.9、chatgpt 0.8、claude／qwen／glm／grok／kimi 1.0）；animagine-xl-3.1-nsfw 的 id 是 `concept`（默认 0.9）和 `rapi`（默认 0.0＝默认关）。没有这格＝这条路线不收 loras。
 - `pose`：true／false。true 的再看有没有 `pose_strength`：有＝能调强度、给默认值；没有＝只能传 pose、不能调强度（11-23 现读 `qwen-image-2.1-t2i` 与 `moody-desire-v30` 是这种）。
+- **底模默认走 `anima-turbo-v1-1`（11-27 立；默认全部、例外点名，不是白名单）**：画图单没有特别理由，一律点名这一条；例外只有两条——① 写实静物走 `qwen-image-2.1-t2i`；② 拿现成图改走 `source_image`＋`pictures.mask_image` 那一族（edit／inpaint，见「改图与 `generate_image`」）。**角色类、ai 娘不算例外**，也不是「在 v1-1 上自己挂 LoRA」：11-27 当拍 `list_routes=yes` 22 条，`anima-turbo-v1-1` **不声明 `loras`**（没有 `loras`、没有 `loras_note`，也没有第二条同名）；带 `loras` 的是 8 条 `*-girl-anima-turbo`（键名 `character`，默认 0.8–1.0）和 `animagine-xl-3.1-nsfw`（`concept` 默认 0.9、`rapi` 默认 0）⇒ **要角色 LoRA 是换路线名，不是加参数**。这一条只讲 `list_routes` 清单这一格；服务端 `parameter_schema` 没读，别升级成「v1-1 服务端不挂 LoRA」。例外写不出为什么，就按默认走。
 
 **② 角色点名要 LoRA：完整调用形状**
 
@@ -90,6 +91,7 @@ scene_kinds: [home, group]
 ```
 
 - 搜索词**先英文，中文只当补充**：11-20／11-23 现读 `sit` 34 条、`stand` 31 条、`后仰坐` 20 条、`坐`（单字中文）0 命中——中文要用库里的完整词，单字基本空手，中文 0 命中就换英文词（回执的 `note` 也这么提示）。`poses_people` 只能 1 或 2，`poses_angle` 只能 front／diag／side／high／low，`poses_limit` 1–20。
+- **视角值与族名现读 `poses.json` 再写，不凭印象**：姿势库文件在图服务项目的 `workflows` 目录里（路径由 `pose.py` 的 `LIBRARY_PATH` 拼出；技能 frozen 目录里没有它）；11-27 现读 184,116 字节／sha 前 12 `16c02cc90797`、288 条，`views` 的键全库只有 `front`／`diag`／`side`／`high`／`low` 五个（顶层 `angles` 标签：diag＝three-quarter、high＝from above、low＝from below）。族名只照抄每条的 `category`／`category_zh` 字面（例：`standing`／`站姿`、`sitting`／`坐姿`、`leaning back, arched back`／`后仰・挺背`），不拿语义组当字段值。
 - 只给 pose id（没有 `_front` 这类后缀）＝它的 front 视角，没有 front 的取第一个视角；要哪个角度就直接写 view id。
 - prompt 里也要把姿势写出来（坐姿、跪姿光靠骨架常画成站着）。
 - `pose_strength` 这格的 0.8 只是示例值（实跑那张没写强度，走的是默认）。**不传时的默认按族给，正文和派图单都不许写死一个数**（正本在服务端 `catalog.json` 的 `pose_adapters`，四种值 0.8／1.0／null／null；anima-control-pose 这一族实测落 1.0，就是 11-23 那张回执里的 `pose_strength`）——旧的「默认 0.9」那类写法作废。`pose_strength` 只有清单里写了它的路线收，其他路线传它会 `IMAGE_OPTION_NOT_IN_WORKFLOW`；不传＝按那条路线自己给的默认。清单里 `pose: false` 的路线（edit、moss…）不收 pose；带 `source_image` 的改图也不能同时传 pose（服务端 `pose_unsupported`）。
@@ -598,6 +600,7 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
    （`required` 就是这两个）；`mask_channel` 默认 `red`（白／红重绘、黑保留），`alpha` 走透明通道（图没透明回 `mask_alpha_missing`）；
    `grow_mask_by` 默认 6（0–64）；`denoise` 1.0 整块替换、调低留更多原图；**这一族没有 width／height 字段**⇒输出＝源尺寸（8 的倍数）；
    遮罩外的像素合成回原图。11-26 19:17 真画过一发（`anima-turbo-inpaint`，source＋mask 两枚图参数，成品 `blob-7209ef18…`）：未遮区肉眼保住、边界是硬的。
+   - **遮罩 PNG 怎么造（零依赖，只要 Pillow）**：黑底、白＝要改的地方（`mask_channel` 默认 `red`：白／红重绘、黑保留），尺寸与源图一致（宽高比须同原图）：`m = Image.new("L", 源图.size, 0)` → `ImageDraw.Draw(m).rectangle([x0, y0, x1, y1], fill=255)` → `m.save("mask.png")`；再用 `read_image`（绝对路径）读一次登记出 `blob-…` id 喂 `pictures.mask_image`。**画完先 `read_image` 看遮罩本身**：白块贴不贴目标结构，比下面「宁窄不宽」更早能验。`grow_mask_by` 默认 6、带一圈羽化——实际重绘区会比画的白块外扩一圈；**这一条是看图读法，回执没有 `applied_parameters` 可对**，工具面也调不了它（要调走长路）。
    - **两条已知限制（11-27 上午两发改前襟的实测，那两发的遮罩是我自己那张草案画的）**：① **遮罩边界贴着目标结构画，宁窄不宽——多圈一寸，模型就在多出来的那一寸里长东西**。08:43 那发改前襟，竖带画到 x320–720、把右袖口也圈了进去，袖口下面就被重画出一只垂手（原图双手背在身后，根本没有手），遮罩外逐像素 0／1,474,560 没动；08:46 把右边界收到 x660、袖子和手腕整条落到带外，那只手就没了。⇒ 要改前襟就别把袖子、手腕圈进来。② **改结构可行、改色调档位不可行，遮罩越大越明显**。08:46 那发把 `matching the surrounding lighting, tone and fabric grain / seamless blend across the mask border / no rectangular patch / no visible seam` 整串写进带内要求，交回我也亲眼看过：带内仍比带外明显偏浅偏冷（带外深蓝灰、带内接近浅灰白），上沿横线与左边界竖线在整张尺度上肉眼看得见——两发都这样，不是措辞问题。⇒ 这条当选型依据用：要给整块躯干换衣服，优先在提示词里一次画到位，别指望事后 inpaint 补；真要用 inpaint 就把遮罩切窄条，别切大方块。同一摊连抽到第四发仍不合格就停手，别拿「再贴一下」当交差。
 6. **人脸／角色参考（face-reference）** — 工具面走 `pictures.face_image`：`sdxl-face-reference-ipadapter`／`anima-turbo-face-reference-ipadapter` 都在 `list_routes` 里，**这两条没有 `source_image` 键**，只有 `pictures.face_image`（11-26 清单量到，**没画过**）；`input_fit` 这类工具面给不了的才走长路。
    必填 `face_image`（任何一张清楚的人像，服务自己裁到最大脸；`input_fit=none` 才连衣服一起参考）；
@@ -728,6 +731,7 @@ print(json.loads(urllib.request.urlopen(BASE + "/project/resources", timeout=30)
 - 路线条目：`workflow`、`description`、`style`、`structure`、`quality_prefix`、`prompt_scope`、`best_for`、`not_for`、`size`、`example`；
   改图路线另有 `source_image`（`required` / `optional`；11-26 量 22 条：required 3、optional 15、不带这个键 4）；带 `pictures` 的 4 条另有 `pictures` 键（`{图名: required}`——`mask_image` 两条、`face_image` 两条）；**清单里没有 `needs` 键（11-26 量 0 条）**。
   顶层 `note` 11-26 多半句（照抄回执）：「带 pictures 的路线还收别的图，按它列的名字写 pictures={名字: 图的 ref 或 artifact_id}，标着 required 的要给」。
+- **图槽数（11-27 当拍 22 条的清单账，条数不是常量，用时现读）**：有必填图槽的路线 5 条——`source_image: required` 3 条（`qwen-image-2.1-edit`、`moody-anima-inpaint`、`anima-turbo-inpaint`）加 `pictures.face_image: required` 2 条（两条 face-reference）；声明两个图参数（`source_image`＋`pictures.mask_image`）的 2 条就是 `moody-anima-inpaint`、`anima-turbo-inpaint`。
   11-05 那趟条目里没有 pose 相关的键（已过时；11-23 起每条多 `loras`／`loras_note`（带 LoRA 的路线）和 `pose`／`pose_strength`（有才给），见「直路速查」）。
 - 顶层另有 `note`（挑路线与写提示词的口径：按 best_for／not_for 选、用它要的 style 和语言，多数要英文）。
 - 11-05 那一趟读到的名单（**快照**，出处＝那一趟回执的 `workflows` 数组；现行条数照旧现读，别拿这串当计数）：

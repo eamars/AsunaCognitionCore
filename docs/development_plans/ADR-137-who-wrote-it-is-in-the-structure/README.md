@@ -373,15 +373,21 @@ that carry the verdict.
 ## 10. Closes when
 
 - **D2a:** built, installed, and read the day it is installed: no notice's `event` carries the text of a line that
-  is in the conversation (a count, numbers only). **Met 2026-11-27.** Installed at 19:48:36 (`fb14805c09ad`) and
-  counted at 21:59 (`scripts/d2a_count.py`, `.runtime/private/adr137/`). There were 4 turn notices:
-  - 2 name their calling line (`event.line`) and carry no `text`;
-  - 2 are turns the program opened. They have no calling line and keep `text`, and that text is in no person's message
+  is in the conversation (a count, numbers only). **Met 2026-11-27.** Installed at 19:48:36 (`fb14805c09ad`); the
+  count's window runs to 22:09 (`scripts/d2a_count.py`, `.runtime/private/adr137/`). There were 6 turn notices:
+  - 3 name their calling line (`event.line`) and carry no `text`. The person's words are still in view: the line is
+    its own message, right before the notice;
+  - 3 are turns the program opened. They have no calling line and keep `text`, and that text is in no person's message
     of their conversation;
   - 0 carry the text of a line in view.
 
-  The count is small because nobody called her after 19:58. All 377 lines up to 22:00 arrived without a wake reason,
-  which is normal for these groups (the same hours on 11-26 had 511 lines and 0 wakes).
+  Checked from her side over the same window, the notices match one by one. The count is small because the groups
+  were quiet: between 19:58 and 22:00 none of the 377 lines that arrived called her, which is normal there (the same
+  hours on 11-26 had 511 lines and 0 wakes).
+
+  What is met is the copy within one turn: the program's message no longer repeats the words of the line that called
+  her. A program receipt that a later turn's delivered history lists again is that history's job, and D2a does not
+  touch it.
 - **D2b:** built after the staged look at a group page and the owner's word, installed, and read the day it is
   installed: group turns that announce pictures carry them, in their own message before the notice, and no notice
   carries an image part (counts).
